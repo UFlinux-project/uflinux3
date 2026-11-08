@@ -154,3 +154,31 @@ used as a persistent-key release or to validate public updates. The repository's
 release workflow uses the configured persistent signing secrets after a version
 tag passes every architecture gate. See [GitHub setup](github-setup.md) and
 [physical hardware validation](hardware-validation.md).
+
+## Live VM root-space correction, 8 November 2026
+
+The GitHub BIOS and UEFI tests failed after live APK installation exhausted the
+2 GiB VM's tmpfs root. The console recorded `failed to write database: No space
+left on device`; the later package lookup therefore failed against an incomplete
+APK database. The current Papirus/artwork/theme package set uses about 993 MiB in
+the live root. A successful 4 GiB live guest reported a 1.9 GiB tmpfs, 967 MiB
+available and 129,923 used inodes out of 501,739.
+
+Live tests now allocate 4 GiB, with 3 GiB for armv7's QEMU highmem restriction.
+The installed x86_64 acceptance budget remains 512 MiB, one display and no swap.
+The runner rejects boot-time APK database/kernel memory failures explicitly,
+logs byte/inode capacity, and separates package checks from Ironbar validation.
+
+A new local development ISO including the original artwork and adw-gtk3 theme
+was built and tested through both BIOS and UEFI XFS installation/reboot. Both
+runs preserved the unrelated partition and passed installed Settings/flyout,
+GTK authorization, TLP profiles and ACPI power-button tests without OOM. This
+image is 990,904,320 bytes, SHA-256
+`b076b82340114a3c902a0b4411d2846a232be87db1a0597a959332eaaa80ce9f`. It is separate from the historical ISO results above.
+
+Machine-readable results and complete consoles are retained under
+`.cache/live-memory-vm/x86_64/{native,uefi}/`; the development image is
+`.cache/adw-out/images/x86_64/uflinux-0.1.0-x86_64.iso`. All 43 Python checks,
+actionlint and whitespace checks passed. Other architectures and execution of
+the updated GitHub workflow remain unverified for this correction. The real
+hwsim network/clock fixture was not repeated in these two VM runs.

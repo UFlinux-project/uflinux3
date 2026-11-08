@@ -16,7 +16,7 @@ import time
 
 import pexpect
 from builder import sha, download
-from vm_control import qmp
+from vm_control import qmp, memory_mib, check_boot_errors
 
 ROOT = Path(__file__).resolve().parents[1]
 ARCHES = json.loads((ROOT / "config/architectures.json").read_text())
@@ -47,7 +47,7 @@ def command(args, state, installed=False):
     machine = ARCHES[arch]["machine"]
     if arch == "armv7":
         machine += ",highmem=off"
-    memory = "512" if installed and arch == "x86_64" else "2048"
+    memory = str(memory_mib(arch, installed))
     cmd = [emulator, "-machine", machine, "-m", memory, "-smp", "2", "-nographic", "-no-reboot",
            "-qmp", f"unix:{state / 'qmp.sock'},server=on,wait=off"]
     if arch in {"aarch64", "armv7"}:
@@ -162,8 +162,12 @@ def main():
             child = start(args, state, log)
             login(child, "live", "live")
             boot_seconds = time.monotonic() - began
+            log.flush()
+            check_boot_errors(Path(log.name).read_text())
+            guest(child, "df -h /; df -i /")
             guest(child, "test -e /run/uflinux-live; test $(id -un) = root; ! rc-service sshd status")
-            guest(child, "apk info -e uflinux ironbar labwc; ironbar -c /etc/xdg/ironbar/config.toml -t /etc/xdg/ironbar/style.css --validate-config")
+            guest(child, "apk info -e uflinux ironbar labwc")
+            guest(child, "ironbar -c /etc/xdg/ironbar/config.toml -t /etc/xdg/ironbar/style.css --validate-config")
             guest(child, "apk info -e connman iwd busybox-openrc uflinux-settings uflinux-settings-daemon uflinux-settings-system; connmanctl state; connmanctl services; rc-service ntpd status; ! pgrep -x NetworkManager; ! pgrep -x chronyd; ! pgrep -x openntpd; ! pgrep -x wpa_supplicant")
             if args.arch in {"x86", "x86_64", "aarch64"}:
                 guest(child, "for n in $(seq 1 30); do pgrep -x labwc >/dev/null && pgrep -x ironbar >/dev/null && break; sleep 1; done; if ! pgrep -x labwc || ! pgrep -x ironbar; then rc-status; cat /var/log/messages; exit 1; fi")
@@ -275,6 +279,8 @@ def main():
         (out / "verified.json").write_text(json.dumps({"arch": args.arch, "mode": args.mode,
             "boot_seconds": round(boot_seconds, 2), "iso_bytes": iso_bytes,
             "iso_sha256": iso_digest,
+            "live_memory_mib": memory_mib(args.arch),
+            "installed_memory_mib": memory_mib(args.arch, installed=True),
             "firmware_lock": firmware_lock if args.arch in {"x86", "armv7"} else None,
             "iso_boot": True, "xfs_install_reboot": True, "unrelated_partition_preserved": True,
             "settings_512m": settings_metrics, "network_clock": network_clock, "power": power_report}, indent=2) + "\n")

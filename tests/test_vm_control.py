@@ -8,7 +8,7 @@ import threading
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from vm_control import qmp
+from vm_control import qmp, memory_mib, check_boot_errors
 
 
 class ControlTests(unittest.TestCase):
@@ -48,3 +48,21 @@ class ControlTests(unittest.TestCase):
                 worker.join(3)
                 self.assertFalse(worker.is_alive())
                 self.assertEqual(failures, [])
+
+
+class BootTests(unittest.TestCase):
+    def test_live_budget_does_not_change_installed_acceptance_budget(self):
+        for arch in ("x86", "x86_64", "armv7", "aarch64", "s390x", "ppc64le", "riscv64", "loongarch64"):
+            self.assertEqual(memory_mib(arch), 3072 if arch == "armv7" else 4096)
+            self.assertEqual(memory_mib(arch, installed=True), 512 if arch == "x86_64" else 2048)
+
+    def test_partial_apk_installation_fails_even_if_login_succeeds(self):
+        console = "100%\r\nERROR: System state may be inconsistent: failed to write database: No space left on device\r\nuflinux login: "
+        with self.assertRaisesRegex(RuntimeError, "Guest boot failed.*No space left on device"):
+            check_boot_errors(console)
+
+    def test_fatal_kernel_errors_fail_and_normal_boot_warnings_do_not(self):
+        for message in ("Out of memory: Killed process 42 (apk)", "Kernel panic - not syncing"):
+            with self.assertRaises(RuntimeError):
+                check_boot_errors(message)
+        check_boot_errors("WARNING: opening from cache https://example.org/APKINDEX.tar.gz: No such file or directory\nWelcome to Alpine Linux")

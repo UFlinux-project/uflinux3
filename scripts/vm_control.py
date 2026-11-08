@@ -27,3 +27,23 @@ def qmp(state):
             # can outlive this context; close the stream explicitly so QEMU can
             # accept the next control connection.
             stream.close()
+
+
+def memory_mib(arch, installed=False):
+    """Diskless live roots need RAM for unpacked APKs as well as the desktop."""
+    if not installed:
+        # The armv7 virt machine disables highmem and has a 3 GiB RAM limit.
+        return 3072 if arch == "armv7" else 4096
+    return 512 if arch == "x86_64" else 2048
+
+
+def check_boot_errors(console):
+    fatal = ("failed to write database:", "ERROR: System state may be inconsistent:",
+             "Out of memory:", "Kernel panic -")
+    errors = []
+    for line in console.splitlines():
+        positions = [line.index(message) for message in fatal if message in line]
+        if positions:
+            errors.append(line[min(positions):].strip())
+    if errors:
+        raise RuntimeError("Guest boot failed before validation: " + "\n".join(errors))

@@ -168,7 +168,14 @@ introduced in 1.9. Power packages are checked for all eight architectures. Tests
 run the actual BusyBox ACPI parser in a private chroot with synthetic input events;
 the installed x86_64 VM verifies real TLP transitions, shared Ironbar status and
 physical-key Do nothing/Shut down behavior. TLP is never executed on the build
-host. The 512 MiB VM uses an interpreter installed from signed media solely for
+host. Live VM tests allocate 4096 MiB (3072 MiB for armv7, whose QEMU machine
+disables highmem and limits RAM to 3 GiB). The diskless root unpacks the desktop and
+full Papirus icon theme into tmpfs, whose default capacity is half of RAM. This
+is separate from the installed reference target; a 2048 MiB live VM exhausted
+its root filesystem during boot after the artwork/theme addition. The runner
+rejects boot-time APK database errors and logs root byte/inode capacity.
+The installed x86_64 test still uses 512 MiB, one display and no swap.
+The 512 MiB VM uses an interpreter installed from signed media solely for
 measurement; Python is not an installed-desktop dependency.
 
 To preserve an older development ISO, choose a separate `--outdir out-settings`
