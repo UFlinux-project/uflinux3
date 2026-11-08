@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
-  <defs><linearGradient id="sky" x2="1" y2="1"><stop stop-color="#0a172a"/><stop offset="1" stop-color="#075a88"/></linearGradient></defs>
-  <path fill="url(#sky)" d="M0 0h1920v1080H0z"/>
-  <path fill="#1687bd" opacity=".35" d="M900 150h190v390H900zM1110 150h190v390h-190zM900 560h190v190H900zM1110 560h190v190h-190z"/>
-  <path fill="none" stroke="#73c6ec" stroke-width="3" d="m870 800 230-580 230 580M930 650h340"/>
-  <text x="100" y="920" fill="#fff" font-family="sans-serif" font-size="68">UFLinux</text>
-  <text x="104" y="970" fill="#b7d9e9" font-family="sans-serif" font-size="25">A small desktop. Room for your work.</text>
-</svg>

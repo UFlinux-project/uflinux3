@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <labwc_config>
   <core><gap>0</gap><decoration>server</decoration></core>
-  <theme><name>UFLinux</name><cornerRadius>0</cornerRadius><font place="ActiveWindow"><name>DejaVu Sans</name><size>10</size></font></theme>
+  <theme><name>UFLinux</name><icon>Papirus</icon><cornerRadius>0</cornerRadius><font place="ActiveWindow"><name>DejaVu Sans</name><size>10</size></font></theme>
   <keyboard>
     <default/>
     <keybind key="W-r"><action name="Execute" command="fuzzel"/></keybind>

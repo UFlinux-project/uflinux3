@@ -23,10 +23,14 @@ for path in [*ROOT.glob("scripts/*.sh"), *ROOT.glob("tests/*.sh"), *ROOT.glob("p
     subprocess.run(["sh", "-n", str(path)], check=True)
 for path in (ROOT / "aports/uflinux").glob("*.xml"):
     ET.parse(path)
-ET.parse(ROOT / "aports/uflinux/uflinux.svg")
+for path in (ROOT / "aports/uflinux").glob("*.svg"):
+    ET.parse(path)
 for path in (ROOT / "settings/data").iterdir():
     if path.suffix in {"svg", "policy", "conf"} and path.read_text().lstrip().startswith("<"):
         ET.parse(path)
+artwork = json.loads((ROOT / "config/artwork.lock.json").read_text())
+for name in artwork["logo"]["copies"]:
+    assert hashlib.sha512((ROOT / name).read_bytes()).hexdigest() == artwork["logo"]["sha512"], "Imported logo differs from its pinned original"
 assert (ROOT / "LICENSE").read_bytes() == (ROOT / "aports/uflinux/LICENSE").read_bytes()
 for name in ("ironbar.toml", "greetd-installed.toml", "greetd-live.toml"):
     tomllib.loads((ROOT / "aports/uflinux" / name).read_text())

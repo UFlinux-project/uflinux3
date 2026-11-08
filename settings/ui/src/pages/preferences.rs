@@ -289,7 +289,7 @@ pub fn appearance(app: &Rc<App>, parent: &gtk::Box) {
         .wallpapers
         .first()
         .map(|w| w.file.clone())
-        .unwrap_or_else(|| "/usr/share/backgrounds/uflinux.svg".into());
+        .unwrap_or_else(|| "/usr/share/backgrounds/uflinux/Dark_Ivy.jpg".into());
     let selected = Rc::new(RefCell::new(initial.clone()));
     let name = description(&initial);
     parent.append(&name);
@@ -320,6 +320,8 @@ pub fn appearance(app: &Rc<App>, parent: &gtk::Box) {
                 filter.add_mime_type(mime);
             }
             chooser.set_default_filter(Some(&filter));
+            chooser
+                .set_initial_folder(Some(&gio::File::for_path("/usr/share/backgrounds/uflinux")));
             if let Ok(file) = chooser.open_future(app.parent().as_ref()).await {
                 if let Some(chosen) = file.path() {
                     let source = chosen.clone();
@@ -398,6 +400,11 @@ pub fn appearance(app: &Rc<App>, parent: &gtk::Box) {
     }));
 }
 pub fn about(app: &Rc<App>, parent: &gtk::Box) {
+    let logo = gtk::Image::from_icon_name("org.uflinux.Settings");
+    logo.set_pixel_size(48);
+    logo.set_halign(gtk::Align::Start);
+    logo.update_property(&[gtk::accessible::Property::Label("UFLinux leaf logo")]);
+    parent.append(&logo);
     let summary = gtk::Label::new(None);
     summary.set_xalign(0.);
     summary.set_yalign(0.);

@@ -28,7 +28,7 @@ def wallpaper_children():
         except OSError:pass
     return found
 previous=call('GetState')['appearance']
-wallpaper={'wallpapers':[{'output':'*','file':'/usr/share/backgrounds/uflinux.svg','fit':'fit'}],'color':'#153658'}
+wallpaper={'wallpapers':[{'output':'*','file':'/usr/share/backgrounds/uflinux/Dark_Ivy.jpg','fit':'fit'}],'color':'#153658'}
 foreign=subprocess.Popen(['swaybg','-c','#202020'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 try:
     assert foreign.poll() is None

@@ -1,15 +1,29 @@
 #!/usr/bin/env python3
 """Refresh only the checksums of the local UFLinux package's declared sources."""
 import hashlib
+import json
 from pathlib import Path
 import re
 import shlex
 import sys
+from urllib.parse import urlsplit
 
 path = Path(__file__).resolve().parents[1] / "aports/uflinux/APKBUILD"
 text = path.read_text()
 sources = shlex.split(re.search(r'^source="([^"]+)"', text, re.M).group(1))
-sums = "\n" + "\n".join(hashlib.sha512((path.parent / name).read_bytes()).hexdigest() + "  " + name for name in sources) + "\n"
+lock = json.loads((path.parents[2] / "config/sources.lock.json").read_text())
+checksums = []
+for source in sources:
+    if source.startswith("https://"):
+        spec = next((spec for spec in lock["sources"].values() if spec["url"] == source), None)
+        if not spec or "sha512" not in spec:
+            raise SystemExit("Remote package sources require a locked SHA-512: " + source)
+        name, digest = Path(urlsplit(source).path).name, spec["sha512"]
+    else:
+        name = source
+        digest = hashlib.sha512((path.parent / name).read_bytes()).hexdigest()
+    checksums.append(digest + "  " + name)
+sums = "\n" + "\n".join(checksums) + "\n"
 updated = re.sub(r'^sha512sums="[^"]*"', lambda _: 'sha512sums="' + sums + '"', text, flags=re.M)
 if "--check" in sys.argv:
     if text != updated:

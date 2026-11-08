@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "original_desktop": {
+    "repository": "https://github.com/UFlinux-project/main",
+    "commit": "067f3069b20f78995920d30795d48d36c96fcdf7",
+    "configuration": "config/includes.chroot_before_packages/etc/dconf/db/local.d/00_uflinux_defaults",
+    "wallpaper": "/usr/share/backgrounds/gnome/Dark_Ivy.jpg",
+    "icon_theme": "Papirus"
+  },
+  "logo": {
+    "repository": "https://github.com/UFlinux-project/uf-calamares-settings",
+    "commit": "53217a0b7edc494658a1dfcfee649365a19d0c79",
+    "path": "etc/calamares/branding/uflinux/uflinuxlogo-spaces.svg",
+    "url": "https://raw.githubusercontent.com/UFlinux-project/uf-calamares-settings/53217a0b7edc494658a1dfcfee649365a19d0c79/etc/calamares/branding/uflinux/uflinuxlogo-spaces.svg",
+    "sha512": "f1c52e9fb8613e71ef77817ffcfad4638be5fba1c606218562955ad6a0d75a087bce62ed514d8687af9fa25940d64513ba0b535f1de370c51a1db9b2ed399256",
+    "license": "GPL-3.0-only",
+    "copies": [
+      "aports/uflinux/uflinux-logo.svg",
+      "settings/data/org.uflinux.Settings.svg"
+    ],
+    "git_blob_sha1": "d2ec6551aac7e710e5f4e20321e1dc338f30ea53"
+  },
+  "wallpapers": {
+    "source": "gnome-backgrounds",
+    "version": "3.38.0",
+    "installed": [
+      "ColdWarm.jpg",
+      "Dark_Ivy.jpg",
+      "Endless-shapes.jpg",
+      "Road.jpg",
+      "Symbolics-1.jpg",
+      "Symbolics-2.jpg"
+    ],
+    "default": "Dark_Ivy.jpg",
+    "directory": "/usr/share/backgrounds/uflinux",
+    "maximum_pixels": 16777216,
+    "selection": "Unmodified images with explicit upstream attribution and dimensions within the Settings memory limit",
+    "checksum_url": "https://download.gnome.org/sources/gnome-backgrounds/3.38/gnome-backgrounds-3.38.0.sha256sum",
+    "source_sha256": "f7712a873a80c9a9fcf3952611effeb2d9aed23a3e8abfcda8afb15c427d1ee3"
+  }
+}

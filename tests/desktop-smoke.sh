@@ -46,7 +46,8 @@ done
 [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]
 wayland-info > "$results/wayland.txt"
 grep -q zwlr_foreign_toplevel_manager_v1 "$results/wayland.txt"
-swaybg -c '#102c46' -i /usr/share/backgrounds/uflinux.svg -m fill > "$results/background.log" 2>&1 &
+python3 /project/tests/artwork-smoke.py > "$results/artwork.txt"
+swaybg -c '#102c46' -i /usr/share/backgrounds/uflinux/Dark_Ivy.jpg -m fill > "$results/background.log" 2>&1 &
 background=$!; pids="$pids $background"
 mako > "$results/notifications.log" 2>&1 &
 notifications=$!; pids="$pids $notifications"

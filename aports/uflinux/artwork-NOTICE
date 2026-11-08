@@ -1,0 +1,28 @@
+Original UFLinux desktop artwork
+==============================
+
+The original UFLinux desktop configuration selected Papirus icons and
+/usr/share/backgrounds/gnome/Dark_Ivy.jpg. Reference:
+https://github.com/UFlinux-project/main/blob/067f3069b20f78995920d30795d48d36c96fcdf7/config/includes.chroot_before_packages/etc/dconf/db/local.d/00_uflinux_defaults
+
+Papirus is supplied by Alpine's signed papirus-icon-theme package. Its upstream
+source, copyright and GPL-3.0-only license are maintained by that package.
+https://github.com/PapirusDevelopmentTeam/papirus-icon-theme
+
+The UFLinux leaf logo is copied without alteration from:
+https://github.com/UFlinux-project/uf-calamares-settings/blob/53217a0b7edc494658a1dfcfee649365a19d0c79/etc/calamares/branding/uflinux/uflinuxlogo-spaces.svg
+That repository distributes it under GPL-3.0. A copy is in GPL-3.0 alongside this
+notice. The same unchanged logo is used for the Settings application icon.
+
+Wallpaper images are copied without alteration from gnome-backgrounds 3.38.0:
+https://download.gnome.org/sources/gnome-backgrounds/3.38/gnome-backgrounds-3.38.0.tar.xz
+Dark_Ivy.jpg: Copyright 2012 Garrett LeSage, CC BY-SA 3.0.
+Endless-shapes, Symbolics-1 and Symbolics-2: Copyright 2011-2020 Jakub Steiner,
+CC BY-SA 3.0.
+ColdWarm (invisiblepower) and Road (Joshua Welch): CC0.
+
+The exact upstream attribution and license notices are retained as
+backgrounds-AUTHORS and backgrounds-COPYING_CCBYSA3 alongside this file.
+CC BY-SA 3.0: https://creativecommons.org/licenses/by-sa/3.0/
+CC0: https://creativecommons.org/publicdomain/zero/1.0/
+These image licenses are separate from UFLinux's GPL-3.0-only program code.

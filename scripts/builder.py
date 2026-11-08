@@ -369,6 +369,9 @@ class Builder:
                 archive = download(LOCK["sources"][origin], self.cache / "downloads")
                 suffix = "tar.gz" if origin == "ironbar" else "tar.xz"
                 shutil.copy2(archive, self.root / "var/cache/distfiles" / f"{origin}-{LOCK[origin]['version']}.{suffix}")
+        if "uflinux" in selected:
+            artwork = download(LOCK["sources"]["gnome-backgrounds"], self.cache / "downloads")
+            shutil.copy2(artwork, self.root / "var/cache/distfiles/gnome-backgrounds-3.38.0.tar.xz")
         if "uflinux-settings" in selected:
             import importlib.util
             spec = importlib.util.spec_from_file_location("settings_source", PROJECT / "scripts/settings-source.py")

@@ -188,7 +188,7 @@ impl Default for Appearance {
         Self {
             wallpapers: vec![Wallpaper {
                 output: "*".into(),
-                file: "/usr/share/backgrounds/uflinux.svg".into(),
+                file: "/usr/share/backgrounds/uflinux/Dark_Ivy.jpg".into(),
                 fit: "fill".into(),
             }],
             color: "#102c46".into(),

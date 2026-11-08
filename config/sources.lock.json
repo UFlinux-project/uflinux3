@@ -21,6 +21,10 @@
     "connman": {
       "url": "https://www.kernel.org/pub/linux/network/connman/connman-2.0.tar.xz",
       "sha512": "c63e6097e5fcbfb49b427d3131e8e67f627461ec21ef5e46b5bb8a4c68fd1ac0cf7cbc332c322de0f9db1aa643832f42057bae9d40d0686077f43c1f593435d8"
+    },
+    "gnome-backgrounds": {
+      "url": "https://download.gnome.org/sources/gnome-backgrounds/3.38/gnome-backgrounds-3.38.0.tar.xz",
+      "sha512": "01000409d6d54af81e520b8b292c24bb64e763a493c69cf71cabb9f885c7feee5a1805db40e2d0544834c40b7866f889c106e9816fd8e8b8f5273b0a099f1488"
     }
   },
   "rootfs": {
@@ -73,7 +77,7 @@
   "source_date_epoch": 1794068657,
   "settings": {
     "version": "0.1.0",
-    "source_sha512": "2bf1c163f21fcc980b7785c6756bebe2bff002b244de434d714d4a5bd46db02b29b2d4a2290056f9b96ab61cc94d6fdc31ed34c6dfa3a308e844ea68bcf28a8c"
+    "source_sha512": "25103769374cc3ff221755c876b25b5d34ec51eabb210c51ba9b50c52b6fd19259ab379f7f7122328b8578e5f3eab19383e7e95f3aab8a290ed48fa9f8b88860"
   },
   "power": {
     "tlp_series": "1.10",

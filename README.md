@@ -27,7 +27,7 @@ which architectures have actually passed.
 The desktop includes Foot, Thunar, Fuzzel, Mako, ConnMan with iwd, PipeWire with
 pipewire-pulse, WirePlumber, and UFLinux Settings in Rust and plain GTK4. BusyBox
 ntpd handles time synchronization. The taskbar opens a combined quick-settings
-flyout. It has no browser or office suite by default.
+flyout. GTK3 and GTK4 apps use Alpine’s adw-gtk3 dark theme. It has no browser or office suite by default.
 Settings and Start offer TLP Power saver, Balanced and Performance modes. Physical
 power-button actions are configured in Settings and handled by BusyBox acpid.
 The live login is **live / live**, with passwordless local `doas`; root is locked
@@ -47,9 +47,11 @@ or format disks. Architecture boot requirements still apply.
 - [Settings architecture, controls and resource targets](docs/settings.md)
 - [Settings validation results](docs/settings-validation.md)
 - [Physical hardware validation and evidence](docs/hardware-validation.md)
+- [Original UFLinux artwork and attribution](docs/artwork.md)
 - [Maintenance, signing, and key rotation](docs/maintenance.md)
 
-Original UFLinux scripts, Settings, configuration, and artwork use GPL-3.0-only,
-matching this repository’s license. Vendored protocol files retain their own
-license notices. Distributed
-Alpine packages retain their upstream licenses; the ISO APK inventory records them.
+UFLinux scripts, Settings and configuration use GPL-3.0-only, matching this
+repository’s license. The original UFLinux leaf logo is reused under GPL-3.0-only.
+Wallpapers retain their CC BY-SA 3.0 or CC0 licenses; Papirus is supplied by Alpine.
+Vendored files and distributed packages retain their upstream licenses and
+attribution. See the artwork guide and the ISO APK inventory.

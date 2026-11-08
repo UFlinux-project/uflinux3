@@ -86,5 +86,5 @@ system_openrc() {
 	amove etc/init.d/uflinux-routes etc/init.d/uflinux-acpid
 }
 sha512sums="
-2bf1c163f21fcc980b7785c6756bebe2bff002b244de434d714d4a5bd46db02b29b2d4a2290056f9b96ab61cc94d6fdc31ed34c6dfa3a308e844ea68bcf28a8c  uflinux-settings-0.1.0.tar
+25103769374cc3ff221755c876b25b5d34ec51eabb210c51ba9b50c52b6fd19259ab379f7f7122328b8578e5f3eab19383e7e95f3aab8a290ed48fa9f8b88860  uflinux-settings-0.1.0.tar
 "
