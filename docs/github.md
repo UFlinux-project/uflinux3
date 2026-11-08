@@ -32,7 +32,13 @@ Only push events for valid version tags can publish. Manual runs never become
 release builds by supplying a private key. Protect the default branch and release
 tags according to the maintainer access you intend to grant.
 
-Packages, images, and VM tests are separate matrix jobs. Compilation is interrupted
+Compilation uses four independent package-origin jobs per architecture, with
+separate caches and development keys and a maximum of eight concurrent jobs.
+The image job checks completeness, build identity, archive hashes and native
+reproducibility reports before signing. It downloads compile artifacts directly
+to avoid an extra upload/download of the combined package and cache archives. Release input assets retain
+origin-specific cache archives. Images and VM tests remain separate matrix jobs.
+Compilation is interrupted
 before the six-hour job limit so caches can be saved. Emulated cold builds can be
 slow: an incomplete architecture fails the release instead of silently disappearing
 from the matrix. Rerun failed jobs after examining their logs.

@@ -25,6 +25,20 @@ import zlib
 PROJECT = Path(__file__).resolve().parents[1]
 LOCK = json.loads((PROJECT / "config/sources.lock.json").read_text())
 ARCHES = json.loads((PROJECT / "config/architectures.json").read_text())
+PACKAGE_NAMES = {
+    "connman": {"connman", "connman-dbg", "connman-dev", "connman-doc", "connman-openrc"},
+    "ironbar": {"ironbar", "ironbar-dbg", "ironbar-doc"},
+    "uflinux-settings": {"uflinux-settings", "uflinux-settings-daemon", "uflinux-settings-dbg",
+                         "uflinux-settings-doc", "uflinux-settings-system", "uflinux-settings-system-openrc"},
+    "uflinux": {"uflinux", "uflinux-defaults", "uflinux-desktop", "uflinux-installer",
+                "uflinux-live", "uflinux-live-openrc", "uflinux-release"},
+}
+
+
+def package_output(out, arch, package=None):
+    out = Path(out).resolve()
+    return out / "package-shards" / arch / package if package else out
+
 
 
 def run(args, **kwargs):
@@ -209,7 +223,7 @@ class Builder:
         self.args = args
         self.root = Path(args.workdir).resolve() / args.arch / "root"
         self.cache = Path(args.cache).resolve()
-        self.out = Path(args.outdir).resolve()
+        self.out = package_output(args.outdir, args.arch, getattr(args, "package", None))
         self.packages_dir = self.out / "packages" / args.arch
         self.epoch = str(os.environ.get("SOURCE_DATE_EPOCH", LOCK["source_date_epoch"]))
         self.url = repository_url(args.repository_url)
@@ -348,32 +362,34 @@ class Builder:
         self.put("home/builder/.abuild/abuild.conf", 'PACKAGER="UFLinux contributors <noreply@example.invalid>"\nPACKAGER_PRIVKEY="/var/lib/uflinux/keys/uflinux.rsa"\nPACKAGER_PUBKEY="/var/lib/uflinux/keys/uflinux.rsa.pub"\n')
         apkbuild = source / "uflinux/APKBUILD"
         apkbuild.write_text(re.sub(r"^pkgver=.*$", "pkgver=" + self.args.version, apkbuild.read_text(), flags=re.M))
-        # Preload the exact source used by APKBUILD, with the independent lock hash.
-        ironbar = download(LOCK["sources"]["ironbar"], self.cache / "downloads")
-        dest = self.root / "var/cache/distfiles" / f"ironbar-{LOCK['ironbar']['version']}.tar.gz"
-        shutil.copy2(ironbar, dest)
-        connman = download(LOCK["sources"]["connman"], self.cache / "downloads")
-        shutil.copy2(connman, self.root / "var/cache/distfiles" / f"connman-{LOCK['connman']['version']}.tar.xz")
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("settings_source", PROJECT / "scripts/settings-source.py")
-        source_builder = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(source_builder)
-        settings_version, settings_source = source_builder.bundle()
-        if settings_version != LOCK["settings"]["version"] or hashlib.sha512(settings_source).hexdigest() != LOCK["settings"]["source_sha512"]:
-            raise RuntimeError("Settings source changed; refresh its checked-in source checksum")
-        (self.root / "var/cache/distfiles" / f"uflinux-settings-{settings_version}.tar").write_bytes(settings_source)
-        # abuild treats a source without a URL as a file beside APKBUILD.
-        (source / "uflinux-settings" / f"uflinux-settings-{settings_version}.tar").write_bytes(settings_source)
-        retained_source = self.cache / "downloads" / (LOCK["settings"]["source_sha512"] + ".tar")
-        retained_source.write_bytes(settings_source)
+        # Only fetch the selected origin's sources in a package shard.
+        selected = (self.args.package,) if getattr(self.args, "package", None) else tuple(PACKAGE_NAMES)
+        for origin in ("ironbar", "connman"):
+            if origin in selected:
+                archive = download(LOCK["sources"][origin], self.cache / "downloads")
+                suffix = "tar.gz" if origin == "ironbar" else "tar.xz"
+                shutil.copy2(archive, self.root / "var/cache/distfiles" / f"{origin}-{LOCK[origin]['version']}.{suffix}")
+        if "uflinux-settings" in selected:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("settings_source", PROJECT / "scripts/settings-source.py")
+            source_builder = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(source_builder)
+            settings_version, settings_source = source_builder.bundle()
+            if settings_version != LOCK["settings"]["version"] or hashlib.sha512(settings_source).hexdigest() != LOCK["settings"]["source_sha512"]:
+                raise RuntimeError("Settings source changed; refresh its checked-in source checksum")
+            (self.root / "var/cache/distfiles" / f"uflinux-settings-{settings_version}.tar").write_bytes(settings_source)
+            (source / "uflinux-settings" / f"uflinux-settings-{settings_version}.tar").write_bytes(settings_source)
+            (self.cache / "downloads" / (LOCK["settings"]["source_sha512"] + ".tar")).write_bytes(settings_source)
         env = {"CARGO_HOME": "/cache/cargo", "CARGO_TARGET_DIR": "/cache/target",
                "CARGO_BUILD_JOBS": os.environ.get("CARGO_BUILD_JOBS", "1"),
                "VERGEN_GIT_SHA": LOCK["ironbar"]["commit"], "VERGEN_GIT_DESCRIBE": "v" + LOCK["ironbar"]["version"]}
-        for package in ("connman", "ironbar", "uflinux-settings", "uflinux"):
+        for package in selected:
             self.chroot("su", "-s", "/bin/sh", "builder", "-c", f"cd /project/aports/{package} && abuild -r", extra_env=env)
         from sbom import apk_metadata
         versions = {}
         for origin, version in (("connman",LOCK["connman"]["version"]),("ironbar", LOCK["ironbar"]["version"]), ("uflinux-settings", LOCK["settings"]["version"]), ("uflinux", self.args.version)):
+            if origin not in selected:
+                continue
             recipe = (source / origin / "APKBUILD").read_text()
             revision = re.search(r"^pkgrel=([0-9]+)$", recipe, re.M).group(1)
             versions[origin] = version + "-r" + revision
@@ -405,6 +421,10 @@ class Builder:
         self.tools()
         incoming = self.root / "incoming"
         incoming.mkdir(exist_ok=True)
+        key_manifest = self.packages_dir / "build-keys.json"
+        keys = json.loads(key_manifest.read_text()) if key_manifest.exists() else None
+        if keys is not None and set(keys) != {p.name for p in self.packages_dir.glob("*.apk")}:
+            raise ValueError("Build keys do not cover the complete package set")
         shutil.copy2(self.packages_dir / "build.rsa.pub", incoming / "build.rsa.pub")
         # The original signature names the key uflinux.rsa.pub.
         (incoming / "uflinux.rsa.pub").write_bytes((incoming / "build.rsa.pub").read_bytes())
@@ -414,6 +434,8 @@ class Builder:
             shutil.rmtree(repo)
         repo.mkdir(parents=True, exist_ok=True)
         for package in sorted(self.packages_dir.glob("*.apk")):
+            if keys is not None:
+                (incoming / "uflinux.rsa.pub").write_text(keys[package.name])
             copied = self.root / "incoming/package.apk"
             shutil.copy2(package, copied)
             self.chroot("apk", "--keys-dir", "/incoming", "verify", "/incoming/package.apk")
@@ -648,7 +670,7 @@ class Builder:
                 for path in base.glob("*.apk"):
                     files[str(path.relative_to(self.out))] = {"sha256": sha(path), "bytes": path.stat().st_size}
         metadata = {"schema": 1, "arch": self.args.arch, "version": self.args.version,
-                    "stage": stage, "source_date_epoch": int(self.epoch), "sources": LOCK,
+                    "stage": stage, "package": getattr(self.args, "package", None), "source_date_epoch": int(self.epoch), "sources": LOCK,
                     "repository_url": self.url, "signing": "release" if self.args.release else "development",
                     "files": files, "host": platform.platform(), "source_commit": os.environ.get("GITHUB_SHA", "local")}
         if stage == "image":
@@ -662,12 +684,17 @@ def main(argv=None):
     parser.add_argument("--arch", choices=ARCHES, required=True)
     parser.add_argument("--version", default=LOCK["distribution"]["version"])
     parser.add_argument("--outdir", default=str(PROJECT / "out"))
-    parser.add_argument("--workdir", default=str(PROJECT / ".state"))
-    parser.add_argument("--cache", default=str(PROJECT / ".cache/build"))
+    parser.add_argument("--package", choices=PACKAGE_NAMES, help="Compile one independent package origin (packages/bootstrap stages only)")
+    parser.add_argument("--workdir")
+    parser.add_argument("--cache")
     parser.add_argument("--repository-url", default=os.environ.get("APK_REPOSITORY_URL"))
     parser.add_argument("--stage", choices=["bootstrap", "packages", "sign", "image", "verify", "all"], default="all")
     parser.add_argument("--release", action="store_true")
     args = parser.parse_args(argv)
+    if args.package and (args.stage not in {"bootstrap", "packages"} or args.release):
+        parser.error("--package requires --stage packages or bootstrap, without --release")
+    args.workdir = args.workdir or str(PROJECT / ".state" / args.package if args.package else PROJECT / ".state")
+    args.cache = args.cache or str(PROJECT / ".cache/build" / args.package if args.package else PROJECT / ".cache/build")
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:_(?:alpha|beta|rc)[0-9]+)?", args.version):
         parser.error("Use an Alpine-compatible version, e.g. 0.1.0 or 0.1.0_rc1")
     if os.geteuid() != 0:

@@ -16,9 +16,11 @@ def configuration(event, ref):
         raise ValueError("Tag must be v followed by an Alpine-compatible version")
     selected = list(arches) if release or event == "workflow_dispatch" else ["x86_64"]
     matrix = {"include": [{"arch": arch, "runner": arches[arch]["runner"]} for arch in selected]}
+    packages = {"include": [{"arch": arch, "runner": arches[arch]["runner"], "package": package}
+                             for arch in selected for package in ("connman", "ironbar", "uflinux-settings", "uflinux")]}
     vm = {"include": [{"arch": arch, "mode": mode} for arch in selected for mode in (
         ["native", "uefi"] if arch in {"x86", "x86_64"} else ["native" if arch in {"ppc64le", "s390x"} else "uefi"])]}
-    return {"matrix": matrix, "vm": vm, "version": version, "release": str(release).lower()}
+    return {"matrix": matrix, "packages": packages, "vm": vm, "version": version, "release": str(release).lower()}
 
 def main():
     epoch = subprocess.check_output(["git", "log", "-1", "--format=%ct"], text=True).strip()

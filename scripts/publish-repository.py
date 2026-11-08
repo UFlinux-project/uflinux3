@@ -9,14 +9,10 @@ import sys
 import tarfile
 import tempfile
 
-from builder import ARCHES, Builder, LOCK, PROJECT, sha, unsigned_digest
+from builder import ARCHES, Builder, LOCK, PROJECT, sha, unsigned_digest, PACKAGE_NAMES
 from sbom import apk_metadata
 
-ALLOWED = {"ironbar", "ironbar-dbg", "ironbar-doc", "uflinux", "uflinux-release", "uflinux-defaults",
-           "uflinux-desktop", "uflinux-live", "uflinux-live-openrc", "uflinux-installer",
-           "uflinux-settings", "uflinux-settings-daemon", "uflinux-settings-system",
-           "uflinux-settings-system-openrc", "uflinux-settings-doc", "uflinux-settings-dbg"}
-ALLOWED.update({"connman", "connman-dbg", "connman-doc", "connman-dev", "connman-openrc"})
+ALLOWED = set().union(*PACKAGE_NAMES.values())
 
 
 def safe_extract(archive, target):

@@ -60,12 +60,29 @@ with temporary_tree(prefix="signing-smoke-", dir=PROJECT / ".cache") as temporar
         raise RuntimeError("A mismatched signing keypair was not explicitly rejected")
     if staged_key.exists():
         raise RuntimeError("The failed signing command retained its private key")
+    shard_keys_verified = False
+    key_manifest = scratch / "packages" / args.arch / "build-keys.json"
+    if key_manifest.exists():
+        keys = json.loads(key_manifest.read_text())
+        if len(set(keys.values())) < 2:
+            raise RuntimeError("Independent package jobs must not share a development key")
+        name = sorted(keys)[0]
+        keys[name] = next(value for value in keys.values() if value != keys[name])
+        key_manifest.write_text(json.dumps(keys))
+        env["APK_SIGNING_PUBLIC_KEY"] = public
+        wrong_shard = subprocess.run(command, env=env, text=True, capture_output=True)
+        if not wrong_shard.returncode or not any(word in (wrong_shard.stdout + wrong_shard.stderr).lower() for word in ("signature", "untrusted")):
+            raise RuntimeError("An APK was accepted with another package job's signing key")
+        if staged_key.exists():
+            raise RuntimeError("Rejected shard signature retained the release signing key")
+        shard_keys_verified = True
     if private_text in (temporary / "sign.log").read_text() + rejected.stdout + rejected.stderr:
         raise RuntimeError("The signing log disclosed private key contents")
 report = out / "checks" / args.arch / "signing-smoke.json"
 report.parent.mkdir(parents=True, exist_ok=True)
 report.write_text(json.dumps({"arch": args.arch, "packages": len(before), "disposable_key": True,
                               "payloads_preserved": True, "mismatched_keys_rejected": True,
+                              "independent_shard_keys_verified": shard_keys_verified,
                               "stale_packages_removed": True,
                               "private_keys_removed_on_success_and_failure": True}, indent=2) + "\n")
 print(f"Release signing input path passed for {len(before)} packages using a disposable key")

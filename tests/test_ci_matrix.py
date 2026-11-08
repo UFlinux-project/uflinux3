@@ -21,3 +21,13 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual(result['release'],'true')
         for tag in ('vlatest','v0.1.0;id','v0.1.0\nmalformed'):
             with self.assertRaises(ValueError):ci.configuration('push','refs/tags/'+tag)
+
+    def test_each_architecture_has_four_independent_jobs(self):
+        for event,ref,count in [('pull_request','refs/heads/main',4),('workflow_dispatch','refs/heads/main',32)]:
+            result=ci.configuration(event,ref)
+            jobs=result['packages']['include']
+            self.assertEqual(len(jobs),count)
+            for architecture in result['matrix']['include']:
+                selected=[job for job in jobs if job['arch']==architecture['arch']]
+                self.assertEqual({job['package'] for job in selected},{'connman','ironbar','uflinux-settings','uflinux'})
+                self.assertTrue(all(job['runner']==architecture['runner'] for job in selected))

@@ -28,6 +28,44 @@ Stages share `--workdir` (default `.state`) and `--outdir` (default `out`). Down
 APK, Cargo, and compiler caches use `--cache` (default `.cache/build`). A lockfile
 change requires a fresh work directory, but verified downloads can be reused.
 
+GitHub compiles four independent origins per architecture: `connman`, `ironbar`,
+`uflinux-settings` and `uflinux`. PR/main builds schedule four compile jobs;
+manual/tag runs schedule 32, with at most eight compile jobs running together.
+Each origin has its own VM, development signing key, timeout and cache. Heavy Rust
+builds and their native clean-rebuild comparisons run independently. Signing and
+ISO assembly wait for a complete validated set of 21 APKs.
+
+For an individual package build, use the same entry point:
+
+```sh
+sudo --preserve-env=APK_REPOSITORY_URL bash scripts/build.sh --arch x86_64 \
+  --stage packages --package ironbar
+sudo --preserve-env=APK_REPOSITORY_URL python3 scripts/reproducibility.py \
+  --arch x86_64 --version 0.1.0 --package ironbar
+```
+
+Repeat independently for the other three origins. `--package` automatically uses
+`.state/ORIGIN` and `.cache/build/ORIGIN`, writing below
+`out/package-shards/ARCH/ORIGIN`. Explicit work/cache directory overrides must
+remain distinct for concurrent builds. Shards support only `packages`/`bootstrap`
+and never receive release keys. The ordinary `--stage all` command retains its
+existing sequential local-build behavior.
+
+After every origin succeeds, collect their outputs before running `sign`, `image`
+and `verify` as usual:
+
+```sh
+python3 scripts/merge-packages.py --arch x86_64 --version 0.1.0
+```
+
+Collection rejects missing APKs, stale hashes, mixed source commits, different
+build settings and incomplete native reproducibility proofs. It retains a public
+key per APK; the signing stage verifies each original signature against that key
+before replacing its signature stream. Development private keys are not uploaded.
+Each native origin must have its clean-rebuild report before collection succeeds.
+See [local parallel-build validation](parallel-build-validation.md) for completed
+checks and their scope.
+
 Twenty-one custom APKs are built: patched ConnMan (runtime/OpenRC/dev/docs/debug),
 Ironbar, Settings components and the distribution packages. ConnMan's pinned
 upstream source and Alpine compatibility patches are retained with build inputs.
@@ -51,6 +89,7 @@ Outputs:
 | Directory | Contents |
 | --- | --- |
 | `out/images/ARCH` | ISO and SHA-256/SHA-512 sidecars |
+| `out/package-shards/ARCH/ORIGIN` | Isolated compile outputs before collection |
 | `out/packages/ARCH` | Build-signed APKs and their public key |
 | `out/repository/ARCH` | Final signed APKs and APKINDEX |
 | `out/metadata/ARCH` | Source/build records, hashes, package lists, SPDX inventory |
@@ -60,7 +99,13 @@ Outputs:
 
 Release input archives retain build APK caches, Cargo registry sources/indexes,
 verified upstream source archives, and image APK caches. Compiler targets are
-cached in Actions rather than distributed. To reconstruct an older build, use
+cached in Actions rather than distributed. Parallel builds retain build APKs,
+Cargo inputs and sources separately under `out/inputs/ARCH/ORIGIN`; release asset
+names include that origin (for example `uflinux-0.1.0-x86_64-ironbar-sources.tar.gz`).
+Restore each archive into that origin's cache namespace; image APK inputs remain
+shared at architecture level. This keeps exact input sets from independent jobs
+without overwriting indexes or Cargo metadata. Sequential builds retain the
+original four-archive format. To reconstruct an older build, use
 its source commit and recorded epoch, unpack the input caches, and resolve the
 recorded APK revisions from those saved packages. If mirrors have removed those
 revisions, create a local signed repository from the retained APKs and explicitly
@@ -77,7 +122,7 @@ Original APK license annotations are retained in SPDX `licenseComments`.
 contain non-SPDX strings or omit boolean operators, and this inventory does not
 guess how to reinterpret them.
 
-The native CI job also rebuilds with a fresh compiler target directory and compares
+The native CI jobs also rebuild each origin with a fresh compiler target directory and compare
 every custom APK's control and data streams, excluding signature streams. Publication
 requires that report to match the exact native package set being published.
 
