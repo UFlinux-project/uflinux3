@@ -1,0 +1,13 @@
+.uflinux-settings .sidebar { background: alpha(@theme_fg_color, 0.04); padding: 12px 6px; }
+.uflinux-settings .page-title { font-size: 1.55em; font-weight: bold; margin-bottom: 12px; }
+.uflinux-settings .section-title { font-weight: bold; margin-top: 16px; margin-bottom: 6px; }
+.uflinux-settings .settings-row { padding: 10px 12px; border-bottom: 1px solid alpha(@theme_fg_color, 0.08); }
+.uflinux-settings .settings-group { border: 1px solid alpha(@theme_fg_color, 0.14); border-radius: 8px; }
+.uflinux-settings .description { opacity: 0.75; }
+.uflinux-settings .error { color: #c01c28; padding: 8px; }
+.uflinux-settings .quick { padding: 16px; }
+.uflinux-settings .quick .settings-row { padding: 5px 0; }
+.uflinux-settings .quick .section-title { margin-top: 6px; }
+.uflinux-settings .display-box { background: #1a5b8c; color: white; padding: 20px; border: 2px solid #3584e4; }
+.uflinux-settings .suggested-action { background: #1c71d8; color: white; }
+.uflinux-settings .network-name { font-weight: bold; }

@@ -1,0 +1,11 @@
+border.width: 1
+padding.width: 5
+padding.height: 4
+window.active.title.bg.color: #ffffff
+window.active.label.text.color: #101010
+window.active.border.color: #0078d7
+window.inactive.title.bg.color: #eeeeee
+window.inactive.label.text.color: #606060
+window.inactive.border.color: #777777
+window.active.button.unpressed.image.color: #202020
+window.inactive.button.unpressed.image.color: #606060

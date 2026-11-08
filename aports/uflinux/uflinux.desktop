@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=UFLinux
+Comment=labwc with the UFLinux desktop
+Exec=/usr/bin/uflinux-session
+TryExec=/usr/bin/uflinux-session
+Type=Application
+DesktopNames=labwc;

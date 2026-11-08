@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.uflinux.Settings.System1
+Exec=/usr/libexec/uflinux-settings-system
+User=root

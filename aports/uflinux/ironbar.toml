@@ -1,0 +1,55 @@
+name = "uflinux-taskbar"
+position = "bottom"
+height = 40
+anchor_to_edges = true
+exclusive_zone = true
+popup_gap = 0
+popup_autohide = true
+
+[[start]]
+type = "custom"
+name = "start-menu"
+bar = [{ type = "button", name = "start-button", label = "▦", on_click = "popup:toggle", tooltip = "Start" }]
+popup = [{ type = "box", name = "start-popup", orientation = "vertical", widgets = [
+  { type = "label", label = "UFLinux" },
+  { type = "button", label = "All applications", on_click = "!fuzzel" },
+  { type = "button", label = "Settings", on_click = "!uflinux-settings" },
+  { type = "label", label = "Power mode · #uflinux_power" },
+  { type = "button", label = "#uflinux_power_saver", on_click = "!uflinux-settingsctl power-profile power-saver" },
+  { type = "button", label = "#uflinux_power_balanced", on_click = "!uflinux-settingsctl power-profile balanced" },
+  { type = "button", label = "#uflinux_power_performance", on_click = "!uflinux-settingsctl power-profile performance" },
+  { type = "button", label = "Power settings…", on_click = "!uflinux-settings --page power" },
+  { type = "label", label = "⏻ Power" },
+  { type = "button", label = "Suspend", on_click = "!loginctl suspend" },
+  { type = "button", label = "Log out", on_click = "!labwc --exit" },
+  { type = "button", label = "Restart", on_click = "!loginctl reboot" },
+  { type = "button", label = "Shut down", on_click = "!loginctl poweroff" }
+] }]
+
+[[start]]
+type = "launcher"
+favorites = ["foot", "thunar"]
+show_names = false
+show_icons = true
+icon_size = 24
+
+[[end]]
+type = "tray"
+icon_size = 18
+
+[[end]]
+type = "custom"
+name = "quick-settings"
+bar = [{ type = "button", label = "#uflinux_network · #uflinux_volume", on_click = '!uflinux-settings --quick-settings --output "$IRONBAR_OUTPUT"', tooltip = "Network, sound and brightness" }]
+
+# battery-start
+[[end]]
+type = "battery"
+format = "{percentage}%"
+# battery-end
+
+[[end]]
+type = "clock"
+format = "%H:%M\n%d/%m/%Y"
+format_popup = "%A, %d %B %Y"
+locale = "en_US"

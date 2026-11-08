@@ -1,0 +1,29 @@
+#!/bin/sh
+set -eu
+: "${XDG_RUNTIME_DIR:?A login session is required}"
+if [ -n "${WLR_RENDERER:-}" ]; then
+	export UFLINUX_RENDERER=$WLR_RENDERER
+	exec labwc --merge-config
+fi
+selected=$(uflinux-settingsctl renderer)
+case "$selected" in
+	explicit:*) export UFLINUX_RENDERER=${selected#explicit:}; exec labwc --merge-config ;;
+	vulkan) candidates='vulkan gles2 pixman' ;;
+	gles2) candidates='gles2 pixman' ;;
+	*) candidates=pixman ;;
+esac
+for renderer in $candidates; do
+	rm -f "$XDG_RUNTIME_DIR/uflinux-compositor-ready"
+	export WLR_RENDERER=$renderer UFLINUX_RENDERER=$renderer
+	if [ "$renderer" = pixman ] && [ -z "${GSK_RENDERER:-}" ]; then
+		export GSK_RENDERER=cairo
+	fi
+	if labwc --merge-config; then
+		exit 0
+	else
+		status=$?
+	fi
+	# Once a desktop started, a crash must not silently restart it with lost state.
+	[ ! -f "$XDG_RUNTIME_DIR/uflinux-compositor-ready" ] || exit "$status"
+done
+exit 1

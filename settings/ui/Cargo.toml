@@ -1,0 +1,21 @@
+[package]
+name = "uflinux-settings"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[dependencies]
+settings-core.workspace = true
+glib.workspace = true
+gio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+libc.workspace = true
+gtk = { package = "gtk4", version = "=0.10.1", features = ["v4_12"] }
+gtk4-layer-shell = "=0.6.3"
+gdk-pixbuf = "=0.21.2"
+
+[build-dependencies]
+cc = "1"
+pkg-config = "0.3"

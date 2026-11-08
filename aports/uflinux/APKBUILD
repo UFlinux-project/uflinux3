@@ -1,0 +1,144 @@
+# Maintainer: UFLinux contributors <noreply@example.invalid>
+pkgname=uflinux
+pkgver=0.1.0
+pkgrel=0
+pkgdesc="Minimal Alpine desktop with labwc and Ironbar"
+url="${UFLINUX_PROJECT_URL:-https://github.com}"
+arch="noarch"
+license="GPL-3.0-only"
+depends="uflinux-desktop=$pkgver-r$pkgrel"
+subpackages="uflinux-release:release uflinux-defaults:defaults uflinux-desktop:desktop
+	uflinux-live:live uflinux-live-openrc:live_openrc uflinux-installer:installer"
+# Configuration and installer checks are run by scripts/check.py and verify.
+options="!check"
+source="LICENSE uflinux-session uflinux-compositor uflinux-autostart uflinux-start-panel uflinux-install
+	uflinux-live.initd uflinux.desktop uflinux.svg labwc-rc.xml labwc-menu.xml
+	labwc-autostart labwc-environment ironbar.toml ironbar.css fuzzel.ini mako.conf
+	gtk-settings.ini themerc greetd-installed.toml greetd-live.toml greetd.pam
+	connman.conf connman.confd iwd.conf ntpd.confd uflinux-network-init uflinux-connman-clock.conf"
+
+package() {
+	install -d "$pkgdir/usr/share/uflinux"
+	install -Dm644 "$srcdir/LICENSE" "$pkgdir/usr/share/licenses/uflinux/LICENSE"
+	printf '%s\n' "$pkgver" > "$pkgdir/usr/share/uflinux/version"
+	cat > "$pkgdir/usr/share/uflinux/os-release" <<-EOF
+	NAME="UFLinux"
+	ID=uflinux
+	ID_LIKE=alpine
+	VERSION_ID=$pkgver
+	PRETTY_NAME="UFLinux $pkgver"
+	EOF
+	# The builder validates this URL and supplies it without shell evaluation.
+	: "${UFLINUX_REPOSITORY_URL:?Set the HTTPS URL of the custom APK repository}"
+	printf '%s\n' "$UFLINUX_REPOSITORY_URL" \
+		'https://dl-cdn.alpinelinux.org/alpine/v3.24/main' \
+		'https://dl-cdn.alpinelinux.org/alpine/v3.24/community' \
+		> "$pkgdir/usr/share/uflinux/repositories"
+	install -Dm644 "$pkgdir/usr/share/uflinux/os-release" "$pkgdir/etc/os-release"
+	install -Dm755 "$srcdir/uflinux-session" "$pkgdir/usr/bin/uflinux-session"
+	install -Dm755 "$srcdir/uflinux-autostart" "$pkgdir/usr/libexec/uflinux-autostart"
+	install -Dm755 "$srcdir/uflinux-compositor" "$pkgdir/usr/libexec/uflinux-compositor"
+	install -Dm755 "$srcdir/uflinux-network-init" "$pkgdir/usr/libexec/uflinux-network-init"
+	install -Dm755 "$srcdir/uflinux-start-panel" "$pkgdir/usr/libexec/uflinux-start-panel"
+	install -Dm755 "$srcdir/uflinux-install" "$pkgdir/usr/sbin/uflinux-install"
+	install -Dm755 "$srcdir/uflinux-live.initd" "$pkgdir/etc/init.d/uflinux-live"
+	install -Dm644 "$srcdir/greetd-live.toml" "$pkgdir/usr/share/uflinux/greetd-live.toml"
+	install -Dm644 "$srcdir/uflinux.desktop" "$pkgdir/usr/share/wayland-sessions/uflinux.desktop"
+	install -Dm644 "$srcdir/uflinux.svg" "$pkgdir/usr/share/backgrounds/uflinux.svg"
+	install -Dm644 "$srcdir/themerc" "$pkgdir/usr/share/themes/UFLinux/openbox-3/themerc"
+	install -Dm644 "$srcdir/labwc-rc.xml" "$pkgdir/etc/xdg/labwc/rc.xml"
+	install -Dm644 "$srcdir/labwc-menu.xml" "$pkgdir/etc/xdg/labwc/menu.xml"
+	install -Dm644 "$srcdir/labwc-autostart" "$pkgdir/etc/xdg/labwc/autostart"
+	install -Dm644 "$srcdir/labwc-environment" "$pkgdir/etc/xdg/labwc/environment"
+	install -Dm644 "$srcdir/ironbar.toml" "$pkgdir/etc/xdg/ironbar/config.toml"
+	install -Dm644 "$srcdir/ironbar.css" "$pkgdir/etc/xdg/ironbar/style.css"
+	install -Dm644 "$srcdir/fuzzel.ini" "$pkgdir/etc/xdg/fuzzel/fuzzel.ini"
+	install -Dm644 "$srcdir/mako.conf" "$pkgdir/etc/xdg/mako/config"
+	install -Dm644 "$srcdir/gtk-settings.ini" "$pkgdir/etc/xdg/gtk-3.0/settings.ini"
+	install -Dm644 "$srcdir/gtk-settings.ini" "$pkgdir/etc/xdg/gtk-4.0/settings.ini"
+	install -Dm644 "$srcdir/greetd-installed.toml" "$pkgdir/etc/greetd/config.toml"
+	install -Dm644 "$srcdir/greetd.pam" "$pkgdir/etc/pam.d/greetd"
+	install -Dm644 "$srcdir/connman.conf" "$pkgdir/etc/connman/main.conf"
+	install -Dm644 "$srcdir/connman.confd" "$pkgdir/etc/conf.d/connman"
+	install -Dm644 "$srcdir/iwd.conf" "$pkgdir/etc/iwd/main.conf"
+	install -Dm644 "$srcdir/ntpd.confd" "$pkgdir/etc/conf.d/ntpd"
+	install -Dm644 "$srcdir/uflinux-connman-clock.conf" "$pkgdir/usr/share/dbus-1/system.d/uflinux-connman-clock.conf"
+}
+
+release() {
+	pkgdesc="UFLinux identity and repository configuration"
+	depends="alpine-release"
+	replaces="alpine-release"
+	amove etc/os-release usr/share/uflinux/version usr/share/uflinux/os-release usr/share/uflinux/repositories
+}
+
+defaults() {
+	pkgdesc="UFLinux labwc and Windows 10-inspired Ironbar defaults"
+	depends=""
+	replaces="greetd greetd-agreety-config fuzzel connman connman-openrc iwd busybox-openrc"
+	replaces_priority=100
+	amove etc/xdg etc/greetd etc/pam.d etc/connman etc/iwd etc/conf.d usr/bin usr/libexec \
+		usr/share/wayland-sessions usr/share/backgrounds usr/share/themes usr/share/dbus-1
+}
+
+desktop() {
+	pkgdesc="UFLinux minimal desktop dependencies"
+	depends="uflinux-release=$pkgver-r$pkgrel uflinux-defaults=$pkgver-r$pkgrel
+		labwc ironbar=0.19.1-r0 uflinux-settings foot thunar fuzzel mako swaybg
+		eudev eudev-openrc elogind elogind-openrc dbus dbus-openrc dbus-x11
+		greetd greetd-openrc greetd-agreety polkit-elogind
+		connman=2.0-r1 connman-openrc=2.0-r1 iwd iwd-openrc busybox-openrc tzdata
+		pipewire pipewire-pulse wireplumber upower font-dejavu adwaita-icon-theme
+		mesa-dri-gallium doas"
+	install -d "$subpkgdir"
+}
+
+live() {
+	pkgdesc="Ephemeral UFLinux live session setup; never install on disk"
+	depends="uflinux-desktop=$pkgver-r$pkgrel uflinux-live-openrc=$pkgver-r$pkgrel shadow"
+	amove usr/share/uflinux/greetd-live.toml
+}
+
+live_openrc() {
+	pkgdesc="OpenRC service for the UFLinux live session"
+	depends="openrc"
+	replaces="uflinux-live"
+	amove etc/init.d/uflinux-live
+}
+
+installer() {
+	pkgdesc="UFLinux mounted-partition XFS installer"
+	depends="uflinux-release=$pkgver-r$pkgrel python3 alpine-conf util-linux util-linux-misc sfdisk xfsprogs e2fsprogs dosfstools shadow"
+	amove usr/sbin/uflinux-install
+}
+
+sha512sums="
+d361e5e8201481c6346ee6a886592c51265112be550d5224f1a7a6e116255c2f1ab8788df579d9b8372ed7bfd19bac4b6e70e00b472642966ab5b319b99a2686  LICENSE
+e6615ecbcd59f124bdcc7175f596ed4ad1829c31f21f4999abf667401838a20c358cc9b946b74226e915f358b876e9e6a153994af4a090826c21ccb67fbd60d5  uflinux-session
+1e5eedf741904d0ebbab6f34aa3424683a87724d92d3e9dfbd2edc5e99645bd207185890807b6374ca02390cbe8dba64f32b609ac445e8f71a29edfef8939eec  uflinux-compositor
+e530b691671bc6965c698fcb394c16c609c0842b9a57b4041f7c4cea199298790dd097fcdff635a9da3e394430d7103f8a9ec3de09ba3d01e2550dd29ec54f5d  uflinux-autostart
+9cf0caf7163fbedd72f3da76febb0da1be63fd7ca636c688638e3e46c72a08469248ddf1da1a9ff1ca240ff583af18c40ef601ab9d8f1214ed9035423e0debfb  uflinux-start-panel
+6a610066ed07d2daad669a17b4e54e0629ba3397e858ee7c0e4f2e0e465af2d35430cdd532412bfc00558dfa8d0961da5f3694ddad8575a47ae3ffd606f97891  uflinux-install
+153f498b540da75c6398e7eb271d360ee2ced012d2cd5c77d11d8833c48bcd12fc51f2e46169f7351b38a8e8e7faa24c790776fe5d6537d78b6dafa497eec49f  uflinux-live.initd
+e6df4f4a610b45f3426de64299f2fcc0e53691cf4f62a571cc9a3a0c168628042f31ea328e202bcec79d0aa62204e370265b38ea131772c8c548a5b1a19a9d11  uflinux.desktop
+7f80384e5b96bd0cc1634f8158b4fce88d3f246b2596cea773e7dad4f5f9f2ae149b7a8166c089a11361386f01eb783e21cba8c981a84e57b4532ad72e15c2bb  uflinux.svg
+7caf7c85071690bddd4220a508a8025b44d4afd183a58ccaae97107f830a3178d5f1049b3b9827719ad3891a6e91297077c78989847c071836d7e59f4031ec70  labwc-rc.xml
+454f49f78008059ac7ff6080e5111f9c20fcd373e5cbf465fa7fb1f779417b790f46278fd04a21bf57639e4c6ae8081b0f7c87a0a439d447e735e371ab244a4a  labwc-menu.xml
+f25b2a1b852ea3519078d149f2ab86eedaddb811a2f4c6437a4e572072ddf7b758fa8b2570c9ba6f266ed2ac585a5e3f11e056a8e6e77df3de89c8814f9acb7e  labwc-autostart
+f635e02bd8f0b6b859571a578336b978585dc93baae7a6a9d4ee74aa038d29c813706cd72ae5c8a90391b0f05d37b33bcfb8c146c969ffbd6da5680dcd6dd9ed  labwc-environment
+3edda5bf17f6119198e79d3eb6d07cfe01bcf645d16002f304919a3564ec1359f705473832676557fb4d7e9357f72ff68f2b0dd8980ef2faaaa0ec76b95f543e  ironbar.toml
+fc75b14cf9df72e92904508b688077cec91e80bc9ec5d8e4e42b3f55233936fab62e91aebf518fca8ad5780103fdb58a48416c8b96229e97aa57a119105cea5b  ironbar.css
+5f6b3d8c5980ca78c1d00be32d4bcf4e6b355f5789514e7c73915f01598f8b7b0db8e2be7279dbf5a082d3091853196f93fb46add88d04000d49cedd889ab26c  fuzzel.ini
+3a49c15b1f8ee2a7eae01e4dbeb595d7ff00eabbb2f02003496cd781d2a9bacc38dcbb1e0d03a079a6cd61d6d39c756a52478dbd86f017515fde17f40f733e7d  mako.conf
+31e828590574bfcade6ecd8f7ccf2e26d0f9f118b9dab42f4b331b82ae4d59d2ab2a016e1a9799908535c4029939b339041960d594511575c215495c7320a5ce  gtk-settings.ini
+73f44a38244bf771dd0b5f2f7e4216e66a577ccf6fad33c53fd7cbd6fece35bc39d45b6ef0ebb8dea7c98a04c978b2bf4f6b9f34daaefe9d38cc7d1dc2da52eb  themerc
+14f0423a48c0ec3ff3e9cba1fcf9af903bd3fa8ac2d465c3ce753a2c2144b64f027efdde06940a2ea048bdb6659ec42cdcb2a9d60083c7cc0728f489b8378cb9  greetd-installed.toml
+7f133158d5868ebca7ca0461778fc3f31ca88b4fd50ed286a1addaa7fc055f65e19ea52a6de574b0fedd115637bd576d212320e3bbf7347934bafbf682c682af  greetd-live.toml
+94f09ef68e96f39dcf70b5e27c8fc959198b2ec8d9fbb35e7311d4cb50a2728316eaa8e8d3e2df7cf2f9f37b9c53ee9fa6550e0b37117d20382a95a393c3e2b1  greetd.pam
+1ad3c7197e9ba097a5f2a263d2fc4f1e475b0fdc349a511d297cbc271571db00e1e108360e20acdc83ebd785bf5ce64e22c795db868c5ac67efec048823cfd37  connman.conf
+809b1b6cf29b8ccc451c5c2cdd52602d656b5ce7318ee88b1792a433513be0296730ad082d13e74b4884c7f62be820c5f3f3903c6e75fe59ff3d883f70da540d  connman.confd
+985899525dba39fd733e3750aff1dbf5037d7e3558926d6030697fdb764356f247b2255b6f1548b3ff88a7974d18c56e93b91069e1d9d3e241d325432e1f590c  iwd.conf
+3af4475c9e0ac81c4f7d61d49da338ba56dbef6f0c3ebd400f6155e81c4098bf9b17d07f2261b884e1ec9778e1ebb463be55f6ebc3a58002dbd88b2870fc7d7d  ntpd.confd
+bdd713eb12b0ff9e0f0c86b6c07eaec217878d57040fd9b7f040c9823c6c96956dbb2938228e9a9edae4d9bba9605d9d3cf6982649d2e53d92550af676153a6e  uflinux-network-init
+b4e7d2ea049263641d16dcfc7b3fe7008b93793f40b488d8629d6caea64781828d94994bcb0dbae79bff42f14d4854a301990050db2818fd422badc8724cbd82  uflinux-connman-clock.conf
+"

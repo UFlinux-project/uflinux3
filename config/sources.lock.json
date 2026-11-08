@@ -1,0 +1,97 @@
+{
+  "schema": 1,
+  "distribution": {
+    "name": "UFLinux",
+    "version": "0.1.0"
+  },
+  "alpine": {
+    "version": "3.24.4",
+    "branch": "v3.24",
+    "mirror": "https://dl-cdn.alpinelinux.org/alpine"
+  },
+  "sources": {
+    "aports": {
+      "url": "https://codeload.github.com/alpinelinux/aports/tar.gz/3db0a46d5ef507f6faaa9c0c0fc52181a277e9b7",
+      "sha512": "e702e6178555f29d30fb7494cbc108d46b724f39684fbfb4751601e271170ce2ce4a602d0f0b96726b03baf7bd3032f12b75df164bbe594153d946aa0763486d"
+    },
+    "ironbar": {
+      "url": "https://codeload.github.com/JakeStanger/ironbar/tar.gz/cac7d684ddc7e26315b4e269b93143ab92c71757",
+      "sha512": "8ea1634af954c61b68fdcb450e7ffea4910abc40dc6f945d4d02708a373e89913a7647aab35c4925d35b25930c6014c6a9b45eea82c9dd71e5ad60ad9c6a3234"
+    },
+    "connman": {
+      "url": "https://www.kernel.org/pub/linux/network/connman/connman-2.0.tar.xz",
+      "sha512": "c63e6097e5fcbfb49b427d3131e8e67f627461ec21ef5e46b5bb8a4c68fd1ac0cf7cbc332c322de0f9db1aa643832f42057bae9d40d0686077f43c1f593435d8"
+    }
+  },
+  "rootfs": {
+    "x86": {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86/alpine-minirootfs-3.24.4-x86.tar.gz",
+      "sha256": "df793865bf166c10acaad3a4d5d40498f9ee3f89fa405d39c7f540464fb3b0c1"
+    },
+    "x86_64": {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/alpine-minirootfs-3.24.4-x86_64.tar.gz",
+      "sha256": "cdaa38cb8de3537967ee5b6c9b6cd00cc962da2b018e6eea48696bb274923012"
+    },
+    "aarch64": {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-minirootfs-3.24.4-aarch64.tar.gz",
+      "sha256": "4b14c18f7e90a063b61462ea1462a5732c154bf6adad594974fe6487cd98a8de"
+    },
+    "armv7": {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/armv7/alpine-minirootfs-3.24.4-armv7.tar.gz",
+      "sha256": "2054061dafea7fe4cd38015701ee77119e780dd0382d0c32fad56986fe31b699"
+    },
+    "ppc64le": {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/ppc64le/alpine-minirootfs-3.24.4-ppc64le.tar.gz",
+      "sha256": "1d3b4cf358653265f42e2b465fd2e3ab44966ab20eacda3dd6da4bcf5efe4f53"
+    },
+    "s390x": {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/s390x/alpine-minirootfs-3.24.4-s390x.tar.gz",
+      "sha256": "a9ca217e1f040091f12fe194f2571ba213b67b58df0bb97483ff67b7fb844a20"
+    },
+    "riscv64": {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/riscv64/alpine-minirootfs-3.24.4-riscv64.tar.gz",
+      "sha256": "010683db6c73b3ad1c334fc8f93f64ae748ef67ae6d69e964929aeaf8517bff3"
+    },
+    "loongarch64": {
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/loongarch64/alpine-minirootfs-3.24.4-loongarch64.tar.gz",
+      "sha256": "19b35a5f16364e553fea080c8829e8ee7f39d5082bae90a923138af2bac33626"
+    }
+  },
+  "ironbar": {
+    "version": "0.19.1",
+    "commit": "cac7d684ddc7e26315b4e269b93143ab92c71757",
+    "features": "battery,cli,clock,config+toml,custom,label,launcher,menu,script,tray",
+    "opt_level": "s",
+    "lto": "thin",
+    "codegen_units": 8,
+    "panic": "abort",
+    "patches": {
+      "ironbar-output-environment.patch": "7aeb5ad98107dee258c9f5df3dbc6a79181ee3d138753dfe607de033f3d3f8cbb916b9d6712d686a9696764c6b747bf8f655babb7a33cb239533460579b6c45d"
+    }
+  },
+  "aports_commit": "3db0a46d5ef507f6faaa9c0c0fc52181a277e9b7",
+  "source_date_epoch": 1794068657,
+  "settings": {
+    "version": "0.1.0",
+    "source_sha512": "2bf1c163f21fcc980b7785c6756bebe2bff002b244de434d714d4a5bd46db02b29b2d4a2290056f9b96ab61cc94d6fdc31ed34c6dfa3a308e844ea68bcf28a8c"
+  },
+  "power": {
+    "tlp_series": "1.10",
+    "profile_commands_since": "1.9",
+    "default_profile": "balanced",
+    "button_default": "poweroff",
+    "acpid": "busybox"
+  },
+  "connman": {
+    "version": "2.0",
+    "pkgrel": 1,
+    "wifi_backend": "iwd",
+    "patches": {
+      "dbus-rules.patch": "0223dba51be67c131c297d0e865fe1276e4800be5eee25c4f142df8e651318bf5dae98c1d559bb70c002cdfc3ce3c24d12128ddca5656192f962d91af6906caa",
+      "fix-implicit-basename.patch": "0b9eb3231e8fa5a858403b6e3e3e3c1e88caf92a3899606278b48c37c7b3780b8d0c69156b8b09ea14804bb6824bcf89549d71a3ab8bd9358d761d198b9a2d39",
+      "implicit.patch": "e4095b51de42b31da6bc892e70be6dbcb34451348e90f50f1779c31a11a6b69013f50bafe156aacdfce4b49c2abdbd56cea62ecec20427bf2f6f942777f3c270",
+      "iwd-external-credentials.patch": "19c2df18ceb4feda3bb3d261c8e82258765d1a42c481b572e3b35d2563e833d5f3750892ed2c97f9e00f25f7710dfd29a761b1da9184c1d02b28cf20ed0e496a",
+      "libresolv.patch": "122b48fc9e25354e25ba3a3e0864bdd84da84457fed94aeea726bcb189b2f05f2cc361ae15f44af5c49bcee572e91e4c0488ef3b0bc79d20f6efe15853fb6b3a"
+    }
+  }
+}

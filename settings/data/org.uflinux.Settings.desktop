@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Settings
+Comment=Manage UFLinux network, displays, sound and preferences
+Exec=uflinux-settings
+Icon=org.uflinux.Settings
+Type=Application
+Categories=Settings;DesktopSettings;
+Keywords=Wi-Fi;network;display;screen;audio;volume;brightness;wallpaper;time;power;battery;performance;
+StartupNotify=true
+DBusActivatable=true

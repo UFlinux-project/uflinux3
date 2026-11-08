@@ -1,0 +1,21 @@
+* { font-family: "DejaVu Sans", sans-serif; font-size: 12px; border-radius: 0; }
+.background { background: #1f1f1f; color: #ffffff; }
+button { background: transparent; color: #ffffff; border: none; box-shadow: none; padding: 0 10px; min-height: 38px; }
+button:hover { background: #414141; }
+button:active, button:checked { background: #505050; }
+#start-button { font-size: 26px; padding: 0 14px; }
+#start-button label { font-size: 26px; }
+#start-button:hover { color: #59b7ff; }
+#start-popup { min-width: 300px; }
+#start-popup button { padding: 5px 12px; border-radius: 0; }
+#start-popup button:hover { background: #414141; }
+.launcher .item { min-width: 40px; padding: 0 6px; border-bottom: 2px solid transparent; }
+.launcher .item.open { border-bottom-color: #76b9ed; }
+.launcher .item.focused { background: #414141; border-bottom-color: #76b9ed; }
+.clock { font-size: 11px; padding: 0 10px; }
+.tray { padding: 0 6px; }
+.popup { background: #292929; color: #ffffff; border: 1px solid #515151; padding: 12px; }
+calendar, label { color: inherit; }
+calendar:selected { background: #0078d7; color: #ffffff; }
+scale highlight { background: #0078d7; }
+tooltip { background: #292929; color: #ffffff; border: 1px solid #515151; }

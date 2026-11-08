@@ -1,0 +1,53 @@
+# Maintainer: UFLinux contributors <noreply@example.invalid>
+pkgname=ironbar
+pkgver=0.19.1
+pkgrel=0
+pkgdesc="Size-optimized GTK4 Wayland taskbar for UFLinux and labwc"
+url="https://github.com/JakeStanger/ironbar"
+arch="x86 x86_64 aarch64 armv7 ppc64le s390x riscv64 loongarch64"
+license="MIT"
+makedepends="cargo cargo-auditable gtk4.0-dev gtk4-layer-shell-dev openssl-dev"
+subpackages="$pkgname-dbg $pkgname-doc"
+source="$pkgname-$pkgver.tar.gz::https://codeload.github.com/JakeStanger/ironbar/tar.gz/cac7d684ddc7e26315b4e269b93143ab92c71757
+	ironbar-output-environment.patch"
+builddir="$srcdir/ironbar-cac7d684ddc7e26315b4e269b93143ab92c71757"
+options="net"
+
+_features="battery,cli,clock,config+toml,custom,label,launcher,menu,script,tray"
+export CARGO_PROFILE_RELEASE_OPT_LEVEL=s
+export CARGO_PROFILE_RELEASE_LTO=thin
+export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=8
+export CARGO_PROFILE_RELEASE_PANIC=abort
+export CARGO_PROFILE_RELEASE_DEBUG=1
+export CARGO_PROFILE_TEST_DEBUG=0
+export CARGO_INCREMENTAL=0
+
+prepare() {
+	default_prepare
+	cargo fetch --locked --target="$CTARGET"
+	cargo clean -p ironbar
+	cargo clean --release -p ironbar
+}
+
+build() {
+	mkdir -p "${CARGO_TARGET_DIR:-target}"
+	apk info -v > "${CARGO_TARGET_DIR:-target}/uflinux-build-packages.txt"
+	# Do not replace Alpine's RUSTFLAGS or select the runner's CPU instruction set.
+	RUSTFLAGS="$RUSTFLAGS --remap-path-prefix=$builddir=/usr/src/ironbar" \
+		cargo auditable build --release --frozen --no-default-features --features "$_features"
+}
+
+check() {
+	cargo test --frozen --no-default-features --features "$_features"
+}
+
+package() {
+	install -Dm755 "${CARGO_TARGET_DIR:-target}/release/ironbar" "$pkgdir/usr/bin/ironbar"
+	install -Dm644 README.md "$pkgdir/usr/share/doc/ironbar/README.md"
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/ironbar/LICENSE"
+}
+
+sha512sums="
+8ea1634af954c61b68fdcb450e7ffea4910abc40dc6f945d4d02708a373e89913a7647aab35c4925d35b25930c6014c6a9b45eea82c9dd71e5ad60ad9c6a3234  ironbar-0.19.1.tar.gz
+7aeb5ad98107dee258c9f5df3dbc6a79181ee3d138753dfe607de033f3d3f8cbb916b9d6712d686a9696764c6b747bf8f655babb7a33cb239533460579b6c45d  ironbar-output-environment.patch
+"

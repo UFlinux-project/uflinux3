@@ -1,0 +1,28 @@
+#!/sbin/openrc-run
+description="Prepare the ephemeral UFLinux live account"
+depend() {
+	need localmount
+	before greetd
+}
+start() {
+	ebegin "Preparing UFLinux live session"
+	if ! id live >/dev/null 2>&1; then
+		adduser -D -s /bin/ash -G users live || return 1
+	fi
+	addgroup live wheel
+	addgroup live netdev
+	printf 'live:live\n' | chpasswd
+	passwd -l root >/dev/null
+	install -Dm600 /usr/share/uflinux/greetd-live.toml /etc/greetd/config.toml
+	install -d -m755 /etc/doas.d
+	printf '%s\n' 'permit nopass live as root' > /etc/doas.d/uflinux-live.conf
+	chmod 600 /etc/doas.d/uflinux-live.conf
+	touch /run/uflinux-live
+	# setup-disk passes these signed media repositories to the installed-root apk.
+	for marker in /media/*/apks/.boot_repository; do
+		[ -f "$marker" ] || continue
+		repo=${marker%/.boot_repository}
+		grep -qxF "$repo" /etc/apk/repositories || printf '%s\n' "$repo" >> /etc/apk/repositories
+	done
+	eend 0
+}

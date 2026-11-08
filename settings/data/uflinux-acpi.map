@@ -1,0 +1,2 @@
+# BusyBox input-event map: only KEY_POWER press, never release/repeat.
+EV_KEY 0x01 KEY_POWER 116 1 button/power PWRF 00000080

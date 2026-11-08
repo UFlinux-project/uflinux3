@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+touch "$XDG_RUNTIME_DIR/uflinux-compositor-ready"
+# D-Bus activated applications need the compositor's environment.
+dbus-update-activation-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE LABWC_PID UFLINUX_RENDERER
+if [ -n "${GSK_RENDERER:-}" ]; then dbus-update-activation-environment GSK_RENDERER; fi
+/usr/libexec/pipewire-launcher &
+mako &
+/usr/libexec/uflinux-settingsd &
+/usr/libexec/uflinux-start-panel &
+wait

@@ -1,0 +1,32 @@
+[package]
+name = "uflinux-settings-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[dependencies]
+settings-core.workspace = true
+glib.workspace = true
+gio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+libc.workspace = true
+async-channel.workspace = true
+libpulse-binding = "=2.30.1"
+libpulse-glib-binding = "=2.29.0"
+gdk-pixbuf = "=0.21.2"
+wayland-client = "=0.31.14"
+wayland-protocols-wlr = { version = "=0.3.12", features = ["client"] }
+
+[build-dependencies]
+cc = "1"
+pkg-config = "0.3"
+
+[[bin]]
+name = "uflinux-settingsd"
+path = "src/main.rs"
+
+[[bin]]
+name = "uflinux-settingsctl"
+path = "src/ctl.rs"

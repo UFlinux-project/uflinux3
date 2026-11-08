@@ -1,0 +1,249 @@
+#!/usr/bin/python3
+"""Install to explicitly mounted, preformatted partitions; never run a mkfs."""
+import argparse
+import contextlib
+import fcntl
+import getpass
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tarfile
+import tempfile
+
+
+class InstallError(RuntimeError):
+    pass
+
+
+def run(*args, **kwargs):
+    return subprocess.run(args, check=True, text=True, **kwargs)
+
+
+def output(*args):
+    return run(*args, stdout=subprocess.PIPE).stdout.strip()
+
+
+def mounted(path, filesystem):
+    try:
+        result = json.loads(output("findmnt", "--json", "--mountpoint", str(path),
+                                   "--output", "TARGET,SOURCE,FSTYPE,OPTIONS,UUID"))
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        raise InstallError(f"{path} must be an explicit mount point") from exc
+    mounts = result.get("filesystems", [])
+    if len(mounts) != 1:
+        raise InstallError(f"Expected exactly one mount at {path}")
+    mount = mounts[0]
+    if mount["target"] != str(path) or mount["fstype"] != filesystem:
+        raise InstallError(f"{path} must be mounted as {filesystem}")
+    if "rw" not in mount["options"].split(",") or not mount.get("uuid"):
+        raise InstallError(f"{path} must be writable and have a filesystem UUID")
+    source = Path(mount["source"])
+    if not source.exists() or not stat.S_ISBLK(source.stat().st_mode):
+        raise InstallError(f"{path} must be backed by a block device")
+    return mount
+
+
+def walk_devices(devices):
+    for device in devices:
+        yield device
+        yield from walk_devices(device.get("children", []))
+
+
+def preflight(args):
+    if os.geteuid() != 0:
+        raise InstallError("Run this installer with doas from the live session")
+    if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,30}", args.user) or args.user in {"root", "live", "greetd"}:
+        raise InstallError("Choose a normal user name other than root, live, or greetd")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", args.hostname):
+        raise InstallError("Invalid hostname")
+    target = Path(args.target).resolve()
+    if str(target) in {"/", "/boot", "/home", "/etc", "/usr", "/var"}:
+        raise InstallError("Refusing to use a live system directory as the installation root")
+    root = mounted(target, "xfs")
+    boot = mounted(target / "boot", "ext4")
+    if root["source"] == boot["source"]:
+        raise InstallError("/boot must be a separate filesystem")
+    unexpected = {p.name for p in target.iterdir()} - {"boot", "lost+found"}
+    if unexpected:
+        raise InstallError("Target root must be empty apart from boot and lost+found")
+    arch = output("apk", "--print-arch")
+    mode = args.boot_mode
+    if mode == "auto":
+        mode = "uefi" if Path("/sys/firmware/efi").exists() else "native"
+    esp = None
+    if mode == "uefi":
+        if arch in {"ppc64le", "s390x"}:
+            raise InstallError(f"UEFI is not supported for {arch}")
+        esp = mounted(target / "boot/efi", "vfat")
+        if output("blkid", "--probe", "-s", "VERSION", "-o", "value", esp["source"]) != "FAT32":
+            raise InstallError("The EFI system partition must be FAT32")
+        loader = "grub"
+    elif arch in {"x86", "x86_64", "ppc64le"}:
+        loader = "grub"
+        if not args.boot_disk:
+            raise InstallError("--boot-disk is required for BIOS and PowerPC installations")
+    elif arch == "s390x":
+        loader = "zipl"
+    else:
+        raise InstallError(f"Boot the {arch} ISO through UEFI; board-specific U-Boot installation is outside this installer")
+    if args.boot_disk:
+        disk = Path(args.boot_disk).resolve()
+        if not disk.exists() or not stat.S_ISBLK(disk.stat().st_mode):
+            raise InstallError("--boot-disk must identify a whole block device")
+        devices = json.loads(output("lsblk", "--json", "--tree", "--output",
+                                   "PATH,TYPE,PTTYPE,PARTTYPE,MOUNTPOINTS", str(disk)))["blockdevices"]
+        if len(devices) != 1 or devices[0]["type"] != "disk":
+            raise InstallError("--boot-disk must identify a whole disk, not a partition")
+        entries = list(walk_devices(devices))
+        if any(str(m).startswith(("/media/", "/run/media/"))
+               for entry in entries for m in (entry.get("mountpoints") or []) if m):
+            raise InstallError("Refusing to write a bootloader to a disk containing mounted live media")
+        ancestors = output("lsblk", "--inverse", "--noheadings", "--paths", "--list", "--output", "NAME", boot["source"]).splitlines()
+        if str(disk) not in [line.strip() for line in ancestors]:
+            raise InstallError("The boot filesystem is not on --boot-disk")
+        types = {str(entry.get("parttype", "")).lower() for entry in entries}
+        if arch == "ppc64le" and not types.intersection({"0x41", "41", "9e1a2d38-c612-4316-aa26-8b49521e5a8b"}):
+            raise InstallError("PowerPC requires an existing PReP boot partition")
+        if arch in {"x86", "x86_64"} and mode != "uefi" and devices[0].get("pttype") == "gpt":
+            if "21686148-6449-6e6f-744e-656564454649" not in types:
+                raise InstallError("BIOS on GPT requires an existing BIOS boot partition")
+    return {"target": str(target), "root": root, "boot": boot, "esp": esp,
+            "arch": arch, "mode": mode, "loader": loader, "boot_disk": args.boot_disk}
+
+
+def write(root, name, value, mode=0o644):
+    path = root / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(value)
+    path.chmod(mode)
+
+
+def make_overlay(directory, args, repositories=None):
+    write(directory, "etc/hostname", args.hostname + "\n")
+    write(directory, "etc/apk/world", "alpine-base\nuflinux\nxfsprogs\nlinux-firmware-none\n")
+    write(directory, "etc/shadow", "root:!:19000:0:99999:7:::\n", 0o600)
+    write(directory, "etc/network/interfaces", "auto lo\niface lo inet loopback\n")
+    serial = {"aarch64": "ttyAMA0", "armv7": "ttyAMA0", "ppc64le": "hvc0", "s390x": "ttysclp0"}.get(args.arch, "ttyS0")
+    write(directory, "etc/inittab", "::sysinit:/sbin/openrc sysinit\n::sysinit:/sbin/openrc boot\n"
+          "::wait:/sbin/openrc default\ntty2::respawn:/sbin/getty 38400 tty2\n"
+          f"{serial}::respawn:/sbin/getty -L 115200 {serial} vt100\n"
+          "::ctrlaltdel:/sbin/reboot\n::shutdown:/sbin/openrc shutdown\n")
+    write(directory, "etc/apk/repositories", repositories if repositories is not None else Path("/usr/share/uflinux/repositories").read_text())
+    keys = directory / "etc/apk/keys"
+    keys.mkdir(parents=True)
+    for key in Path("/etc/apk/keys").glob("*.pub"):
+        shutil.copy2(key, keys / key.name)
+    for service, level in [("devfs", "sysinit"), ("dmesg", "sysinit"),
+                           ("udev", "sysinit"), ("udev-trigger", "sysinit"), ("udev-settle", "sysinit"),
+                           ("hwdrivers", "sysinit"), ("hwclock", "boot"), ("modules", "boot"),
+                           ("sysctl", "boot"), ("hostname", "boot"), ("bootmisc", "boot"),
+                           ("syslog", "boot"), ("dbus", "default"), ("elogind", "default"),
+                           ("iwd", "default"), ("connman", "default"), ("ntpd", "default"),
+                           ("tlp", "default"), ("uflinux-acpid", "default"),
+                           ("uflinux-routes", "default"), ("greetd", "default"),
+                           ("killprocs", "shutdown"), ("mount-ro", "shutdown")]:
+        path = directory / "etc/runlevels" / level / service
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.symlink_to("/etc/init.d/" + service)
+
+
+@contextlib.contextmanager
+def temporary_repositories(path, text):
+    original = path.read_bytes()
+    try:
+        path.write_text(text)
+        yield
+    finally:
+        path.write_bytes(original)
+
+
+def install(args, plan, password):
+    target = Path(plan["target"])
+    args.arch = plan["arch"]
+    full_repositories = Path("/usr/share/uflinux/repositories").read_text()
+    source_repositories = Path("/etc/apk/repositories")
+    media = [line.strip() for line in source_repositories.read_text().splitlines()
+             if line.startswith("/") and (Path(line.strip()) / ".boot_repository").is_file()]
+    if media:
+        # A first release is tested before its public custom repository exists.
+        # Its custom packages come from the signed ISO instead.
+        repositories = media + (full_repositories.splitlines()[1:] if args.online else [])
+        install_repositories = "\n".join(repositories) + "\n"
+    else:
+        install_repositories = full_repositories
+    # setup-disk receives a clean overlay, never a backup of live /etc or shadow.
+    with tempfile.TemporaryDirectory(prefix="uflinux-install-") as temporary:
+        temporary = Path(temporary)
+        overlay = temporary / "overlay"
+        overlay.mkdir()
+        make_overlay(overlay, args, install_repositories)
+        archive = temporary / "install.apkovl.tar.gz"
+        with tarfile.open(archive, "w:gz", dereference=False) as tar:
+            tar.add(overlay / "etc", arcname="etc")
+        command = ["setup-disk", "-m", "sys", "-k", "lts", "-B", plan["loader"], "-o", str(archive)]
+        if plan["boot_disk"]:
+            command.extend(["-b", plan["boot_disk"]])
+        command.append(str(target))
+        env = dict(os.environ, ROOTFS="xfs", BOOTFS="ext4")
+        if plan["arch"] == "s390x":
+            env["KERNELOPTS"] = "console=ttysclp0"
+        if plan["mode"] == "uefi":
+            env["USE_EFI"] = "1"
+        with temporary_repositories(source_repositories, install_repositories):
+            run(*command, env=env)
+    write(target, "etc/apk/repositories", full_repositories)
+    run("chroot", str(target), "adduser", "-D", "-s", "/bin/ash", "-G", "users", args.user)
+    run("chroot", str(target), "addgroup", args.user, "wheel")
+    run("chroot", str(target), "addgroup", args.user, "netdev")
+    run("chroot", str(target), "chpasswd", input=f"{args.user}:{password}\n")
+    run("chroot", str(target), "passwd", "-l", "root", stdout=subprocess.DEVNULL)
+    write(target, "etc/doas.d/uflinux.conf", "permit persist :wheel as root\n", 0o600)
+    # All persistent login settings come from the installed defaults package.
+    if (target / "etc/doas.d/uflinux-live.conf").exists() or (target / "home/live").exists():
+        raise InstallError("Live account contamination detected; do not boot this installation")
+    run("sync")
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--target", required=True)
+    parser.add_argument("--user", required=True)
+    parser.add_argument("--hostname", default="uflinux")
+    parser.add_argument("--boot-disk")
+    parser.add_argument("--boot-mode", choices=["auto", "uefi", "native"], default="auto")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--online", action="store_true", help="Allow official Alpine mirrors for packages absent from the media")
+    args = parser.parse_args(argv)
+    try:
+        plan = preflight(args)
+        print(json.dumps(plan, indent=2))
+        if args.dry_run:
+            return 0
+        confirmation = f"INSTALL {plan['root']['uuid']}"
+        if input(f"Existing files in the target boot filesystem may be replaced.\nType {confirmation} to install: ") != confirmation:
+            raise InstallError("Installation cancelled")
+        password = getpass.getpass(f"Password for {args.user}: ")
+        if len(password) < 8 or "\n" in password or ":" in password:
+            raise InstallError("Use at least eight characters, without colons or newlines")
+        if password != getpass.getpass("Repeat password: "):
+            raise InstallError("Passwords do not match")
+        with open("/run/uflinux-install.lock", "w") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise InstallError("Another UFLinux installation is already running") from exc
+            install(args, plan, password)
+        print("Installation complete. Unmount the target filesystems before rebooting.")
+        return 0
+    except (InstallError, subprocess.CalledProcessError, OSError, ValueError) as exc:
+        print(f"uflinux-install: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

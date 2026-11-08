@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+config_home=${XDG_CONFIG_HOME:-$HOME/.config}
+config=$config_home/ironbar/config.toml
+theme=$config_home/ironbar/style.css
+if [ ! -f "$config" ]; then
+	config=/etc/xdg/ironbar/config.toml
+	# Desktop machines should not create an empty battery widget or require UPower.
+	if ! grep -qs '^Battery$' /sys/class/power_supply/*/type; then
+		config=$XDG_RUNTIME_DIR/uflinux-ironbar.toml
+		umask 077
+		sed '/^# battery-start$/,/^# battery-end$/d' /etc/xdg/ironbar/config.toml > "$config"
+	fi
+fi
+[ -f "$theme" ] || theme=/etc/xdg/ironbar/style.css
+exec ironbar --config "$config" --theme "$theme" "$@"

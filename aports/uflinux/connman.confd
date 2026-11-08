@@ -1,0 +1,6 @@
+# iwd is the only Wi-Fi backend. ConnMan owns IP configuration and DNS.
+command_args="--noplugin=wifi"
+rc_need="iwd"
+start_pre() {
+	/usr/libexec/uflinux-network-init
+}

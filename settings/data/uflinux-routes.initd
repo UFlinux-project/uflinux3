@@ -1,0 +1,11 @@
+#!/sbin/openrc-run
+description="Restore additional UFLinux network routes when configured"
+depend() {
+	need dbus
+	after connman
+}
+start() {
+	modprobe i2c-dev 2>/dev/null || :
+	# The helper exits immediately if no routes exist; otherwise it watches ConnMan.
+	start-stop-daemon --start --background --exec /usr/libexec/uflinux-settings-system -- --restore-routes
+}

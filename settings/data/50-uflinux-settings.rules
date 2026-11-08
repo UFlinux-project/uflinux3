@@ -1,0 +1,8 @@
+// Installed root is locked. Authenticate using an administrator's own password.
+polkit.addAdminRule(function(action, subject) {
+    if (action.id.indexOf("org.uflinux.settings.") === 0) return ["unix-group:wheel"];
+});
+polkit.addRule(function(action, subject) {
+    if (action.id === "org.uflinux.settings.connect" && subject.local && subject.active && subject.isInGroup("netdev"))
+        return polkit.Result.YES;
+});

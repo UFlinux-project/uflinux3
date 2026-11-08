@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<labwc_config>
+  <core><gap>0</gap><decoration>server</decoration></core>
+  <theme><name>UFLinux</name><cornerRadius>0</cornerRadius><font place="ActiveWindow"><name>DejaVu Sans</name><size>10</size></font></theme>
+  <keyboard>
+    <default/>
+    <keybind key="W-r"><action name="Execute" command="fuzzel"/></keybind>
+    <keybind key="W-space"><action name="Execute" command="fuzzel"/></keybind>
+    <keybind key="W-Return"><action name="Execute" command="foot"/></keybind>
+    <keybind key="W-e"><action name="Execute" command="thunar"/></keybind>
+    <keybind key="W-i"><action name="Execute" command="uflinux-settings"/></keybind>
+    <keybind key="W-d"><action name="ToggleShowDesktop"/></keybind>
+    <keybind key="A-Tab"><action name="NextWindow"/></keybind>
+    <keybind key="A-F4"><action name="Close"/></keybind>
+    <keybind key="W-Left"><action name="SnapToEdge" direction="left"/></keybind>
+    <keybind key="W-Right"><action name="SnapToEdge" direction="right"/></keybind>
+    <keybind key="W-Up"><action name="Maximize"/></keybind>
+    <keybind key="W-Down"><action name="UnMaximize"/></keybind>
+    <keybind key="XF86AudioRaiseVolume"><action name="Execute" command="uflinux-settingsctl volume 5"/></keybind>
+    <keybind key="XF86AudioLowerVolume"><action name="Execute" command="uflinux-settingsctl volume -5"/></keybind>
+    <keybind key="XF86AudioMute"><action name="Execute" command="uflinux-settingsctl mute"/></keybind>
+    <keybind key="XF86MonBrightnessUp"><action name="Execute" command="uflinux-settingsctl brightness 5"/></keybind>
+    <keybind key="XF86MonBrightnessDown"><action name="Execute" command="uflinux-settingsctl brightness -5"/></keybind>
+  </keyboard>
+  <mouse><default/></mouse>
+</labwc_config>

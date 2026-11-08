@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.uflinux.Settings
+Exec=/usr/bin/uflinux-settings --gapplication-service

@@ -1,0 +1,14 @@
+#!/sbin/openrc-run
+# shellcheck shell=sh disable=SC2034
+description="UFLinux physical power-button handling using BusyBox acpid"
+command="/bin/busybox"
+command_args="acpid -f -p /run/uflinux-acpid.pid -c /etc/uflinux/acpi -a /etc/uflinux/acpid.conf -M /etc/uflinux/acpi.map -l /var/log/uflinux-acpid.log"
+command_background=true
+pidfile="/run/uflinux-acpid.pid"
+start_stop_daemon_args="-g wheel -k 027"
+depend() {
+	need dev localmount dbus elogind tlp
+	after hwdrivers modules udev-settle
+	before greetd
+	keyword -vserver -lxc
+}

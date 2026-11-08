@@ -1,0 +1,30 @@
+From: UFLinux contributors
+Subject: [PATCH] mkimage: support root builds with apk 3 and a persistent APK cache
+
+--no-chown selects apk 3 usermode, which rejects uid 0. UFLinux builds
+inside an isolated root chroot. Also permit a persistent verified APK
+cache without reusing incomplete mkimage sections after a failed build.
+Architecture-specific boot logic is unchanged.
+
+--- a/scripts/mkimage.sh
++++ b/scripts/mkimage.sh
+@@ -276,6 +276,10 @@
+ 	if [ ! -e "$APKROOT" ]; then
+ 		# create root for caching packages
+ 		mkdir -p "$APKROOT/etc/apk/cache" "$APKROOT"/etc/apk/keys
++		if [ -n "$UFLINUX_APK_CACHE" ]; then
++			rmdir "$APKROOT/etc/apk/cache"
++			ln -s "$UFLINUX_APK_CACHE" "$APKROOT/etc/apk/cache"
++		fi
+ 		if [ -d /usr/share/apk/keys/"$ARCH" ]; then
+ 			cp /usr/share/apk/keys/"$ARCH"/* "$APKROOT"/etc/apk/keys
+ 		fi
+@@ -285,7 +289,7 @@
+ 		if [ -n "$_abuild_pubkey" ]; then
+ 			cp "$_abuild_pubkey" "$APKROOT"/etc/apk/keys
+ 		fi
+-		apk --arch "$ARCH" --root "$APKROOT" add --initdb --no-chown
++		apk --arch "$ARCH" --root "$APKROOT" add --initdb
+ 
+ 		_repositories="$APKROOT/etc/apk/repositories"
+ 		if [ -n "$REPOS_FILE" ]; then

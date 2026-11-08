@@ -1,0 +1,48 @@
+# UFLinux Settings
+
+Plain GTK4 and Rust; no libadwaita, webview or GNOME settings daemon. The GUI exits
+when its last window closes. A separate GLib/GIO service maintains user-session
+state, ConnMan authentication and display rollback. The privileged system helper
+uses polkit and normally exits after 45 idle seconds; saved additional routes keep
+its ConnMan subscription alive. Authentication uses libpolkit-agent-1 and PAM.
+
+Open `uflinux-settings`, use `--page network|displays|audio|power|default-apps|datetime|appearance|about`,
+or `--quick-settings --output DP-1`. Super+I opens Settings. CLI hotkeys use
+`uflinux-settingsctl volume 5`, `brightness -5`, and `mute`. `status` prints JSON.
+`request` reads one typed JSON request from standard input; passwords must never
+be put in command arguments. Types and validation live in `core/src/model.rs`.
+
+Session D-Bus: `org.uflinux.Settings1`, object `/org/uflinux/Settings`, `GetState`
+and `Execute`, with a `Changed` signal. JSON payloads are constrained by the shared
+Rust enums; unknown operations and oversized requests are rejected. System D-Bus
+uses `org.uflinux.Settings.System1`, object `/org/uflinux/Settings/System` and an
+independently authorized `Execute` method. These are version-1 project interfaces.
+
+ConnMan owns IP addresses, DHCP, DNS and connection policy. iwd only handles Wi-Fi
+authentication. BusyBox ntpd owns synchronization; ConnMan clock mutation is
+disabled. Enterprise profiles require a CA and server domain. Saved network
+credentials are machine-wide in root-protected ConnMan/iwd storage.
+
+TLP provides Power saver, Balanced and Performance modes, with a persistent
+selection. Alpine's TLP 1.10 package includes the profile commands introduced in
+1.9; no tlp-pd or power-profiles-daemon runs alongside this service. Profiles are
+available in Settings and Ironbar Start, through `uflinux-settingsctl power-profile
+balanced`. Physical power-button behavior is configured only in Settings, with
+separate AC/battery choices. A small OpenRC service explicitly runs BusyBox acpid;
+elogind ignores the physical power key and performs the requested power action.
+Only KEY_POWER presses are mapped; releases, repeats and other events are ignored.
+Shutdown/sleep inhibitors are checked and unsupported suspend is rejected.
+`uflinux-settingsctl system-request` accepts a typed SystemAction on stdin for
+console administration; the system helper still enforces polkit authorization.
+
+Display changes require confirmation within 15 seconds. HDR is a global request
+to labwc, not a claim of per-monitor activation. Mirroring is unavailable on this
+compositor. Brightness requires a kernel backlight or a responding DDC/CI display.
+Additional routes use protocol 242 and only recorded routes are removed. Wallpapers
+are local files with a 16-megapixel/32-MiB limit; previews are downscaled.
+
+Build with `cargo build --workspace --release --locked`; packaging uses frozen
+resolution and cargo auditable. Run `cargo test --workspace --locked`. Generate
+the verified distribution source with `python3 scripts/settings-source.py --update`
+from the repository root after editing sources. Hardware and memory claims require
+the integration/VM tests; a successful compile is not hardware certification.

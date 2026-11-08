@@ -1,0 +1,13 @@
+[package]
+name = "settings-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+glib.workspace = true
+gio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+libc.workspace = true
+quick-xml = "=0.39.2"

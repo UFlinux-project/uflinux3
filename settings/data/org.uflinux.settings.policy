@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN" "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>UFLinux</vendor>
+  <icon_name>org.uflinux.Settings</icon_name>
+  <action id="org.uflinux.settings.power-profile">
+    <description>Choose the system power profile</description>
+    <message>Authorization is required to change the power profile</message>
+    <defaults><allow_any>no</allow_any><allow_inactive>no</allow_inactive><allow_active>yes</allow_active></defaults>
+  </action>
+  <action id="org.uflinux.settings.power-admin">
+    <description>Configure physical power-button behavior</description>
+    <message>Authentication is required to change power-button settings</message>
+    <defaults><allow_any>no</allow_any><allow_inactive>no</allow_inactive><allow_active>auth_admin_keep</allow_active></defaults>
+  </action>
+  <action id="org.uflinux.settings.datetime">
+    <description>Change system date, time and synchronization</description>
+    <message>Authentication is required to change system time settings</message>
+    <defaults><allow_any>no</allow_any><allow_inactive>no</allow_inactive><allow_active>auth_admin_keep</allow_active></defaults>
+  </action>
+  <action id="org.uflinux.settings.network-admin">
+    <description>Save enterprise credentials and additional network routes</description>
+    <message>Authentication is required to change protected network settings</message>
+    <defaults><allow_any>no</allow_any><allow_inactive>no</allow_inactive><allow_active>auth_admin_keep</allow_active></defaults>
+  </action>
+  <action id="org.uflinux.settings.connect">
+    <description>Connect to a hidden Wi-Fi network</description>
+    <message>Authentication is required to save a Wi-Fi profile</message>
+    <defaults><allow_any>no</allow_any><allow_inactive>no</allow_inactive><allow_active>auth_admin</allow_active></defaults>
+  </action>
+  <action id="org.uflinux.settings.brightness">
+    <description>Control a connected monitor's brightness</description>
+    <message>Authorization is required to control monitor brightness</message>
+    <defaults><allow_any>no</allow_any><allow_inactive>no</allow_inactive><allow_active>yes</allow_active></defaults>
+  </action>
+</policyconfig>

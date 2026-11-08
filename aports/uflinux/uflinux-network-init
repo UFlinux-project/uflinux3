@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+umask 077
+mkdir -p /var/lib/connman
+if [ ! -f /var/lib/connman/settings ]; then
+	cat > /var/lib/connman/settings <<'EOF'
+[global]
+OfflineMode=false
+TimeUpdates=manual
+TimezoneUpdates=manual
+EOF
+fi

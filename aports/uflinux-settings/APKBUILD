@@ -1,0 +1,90 @@
+# Maintainer: UFLinux contributors <noreply@example.invalid>
+pkgname=uflinux-settings
+pkgver=0.1.0
+pkgrel=0
+pkgdesc="Lightweight GTK4 settings and quick controls for UFLinux"
+url="${UFLINUX_PROJECT_URL:-https://github.com}"
+arch="x86 x86_64 aarch64 armv7 ppc64le s390x riscv64 loongarch64"
+license="GPL-3.0-only"
+depends="$pkgname-daemon=$pkgver-r$pkgrel $pkgname-system=$pkgver-r$pkgrel"
+makedepends="cargo cargo-auditable gtk4.0-dev gtk4-layer-shell-dev pulseaudio-dev polkit-dev
+	eudev-dev vulkan-loader-dev mesa-dev pkgconf"
+subpackages="$pkgname-dbg $pkgname-doc $pkgname-daemon:daemon $pkgname-system:system
+	$pkgname-system-openrc:system_openrc"
+options="net"
+# Generated from the repository by scripts/settings-source.py, independently verified.
+source="$pkgname-$pkgver.tar"
+export CARGO_INCREMENTAL=0
+export CARGO_PROFILE_TEST_DEBUG=0
+# abuild exports release-profile overrides; enforce the distro's chosen settings.
+export CARGO_PROFILE_RELEASE_OPT_LEVEL=s
+export CARGO_PROFILE_RELEASE_LTO=thin
+export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=8
+export CARGO_PROFILE_RELEASE_PANIC=abort
+export CARGO_PROFILE_RELEASE_DEBUG=1
+
+prepare() {
+	default_prepare
+	cargo fetch --locked --target="$CTARGET"
+	# Source bundles normalize timestamps. Never reuse stale workspace binaries.
+	cargo clean -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
+	cargo clean --release -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
+}
+build() {
+	RUSTFLAGS="$RUSTFLAGS --remap-path-prefix=$builddir=/usr/src/uflinux-settings" \
+		cargo auditable build --workspace --release --frozen
+}
+check() {
+	cargo test --workspace --frozen
+}
+package() {
+	local target="${CARGO_TARGET_DIR:-target}/release"
+	install -Dm755 "$target/uflinux-settings" "$pkgdir/usr/bin/uflinux-settings"
+	install -Dm755 "$target/uflinux-settingsctl" "$pkgdir/usr/bin/uflinux-settingsctl"
+	install -Dm755 "$target/uflinux-settingsd" "$pkgdir/usr/libexec/uflinux-settingsd"
+	install -Dm755 "$target/uflinux-settings-system" "$pkgdir/usr/libexec/uflinux-settings-system"
+	install -Dm644 data/org.uflinux.Settings.desktop "$pkgdir/usr/share/applications/org.uflinux.Settings.desktop"
+	install -Dm644 data/org.uflinux.Settings.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/org.uflinux.Settings.svg"
+	install -Dm644 data/org.uflinux.Settings.service "$pkgdir/usr/share/dbus-1/services/org.uflinux.Settings.service"
+	install -Dm644 data/org.uflinux.Settings1.service "$pkgdir/usr/share/dbus-1/services/org.uflinux.Settings1.service"
+	install -Dm644 data/org.uflinux.Settings.System1.service "$pkgdir/usr/share/dbus-1/system-services/org.uflinux.Settings.System1.service"
+	install -Dm644 data/org.uflinux.Settings.System1.conf "$pkgdir/usr/share/dbus-1/system.d/org.uflinux.Settings.System1.conf"
+	install -Dm644 data/org.uflinux.settings.policy "$pkgdir/usr/share/polkit-1/actions/org.uflinux.settings.policy"
+	install -Dm644 data/50-uflinux-settings.rules "$pkgdir/usr/share/polkit-1/rules.d/50-uflinux-settings.rules"
+	install -Dm644 data/uflinux-ddc.conf "$pkgdir/usr/lib/modules-load.d/uflinux-ddc.conf"
+	install -Dm755 data/uflinux-routes.initd "$pkgdir/etc/init.d/uflinux-routes"
+	install -Dm755 data/uflinux-acpid.initd "$pkgdir/etc/init.d/uflinux-acpid"
+	install -Dm755 data/uflinux-power-button "$pkgdir/etc/uflinux/acpi/power"
+	install -Dm644 data/uflinux-acpid.conf "$pkgdir/etc/uflinux/acpid.conf"
+	install -Dm644 data/uflinux-acpi.map "$pkgdir/etc/uflinux/acpi.map"
+	install -Dm644 data/uflinux-power.json "$pkgdir/etc/uflinux/power.json"
+	install -Dm644 data/uflinux-tlp.conf "$pkgdir/etc/tlp.d/90-uflinux-profile.conf"
+	install -Dm644 data/uflinux-logind-power.conf "$pkgdir/etc/elogind/logind.conf.d/90-uflinux-power.conf"
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+	install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
+daemon() {
+	pkgdesc="Headless UFLinux session settings service and command-line controls"
+	depends="dbus elogind swaybg mesa-vulkan-ati"
+	case "$CARCH" in
+		x86|x86_64|loongarch64) depends="$depends mesa-vulkan-intel mesa-vulkan-nouveau mesa-vulkan-virtio" ;;
+		aarch64) depends="$depends mesa-vulkan-asahi mesa-vulkan-broadcom mesa-vulkan-freedreno mesa-vulkan-imagination mesa-vulkan-intel mesa-vulkan-nouveau mesa-vulkan-panfrost mesa-vulkan-virtio" ;;
+	esac
+	amove usr/libexec/uflinux-settingsd usr/bin/uflinux-settingsctl usr/share/dbus-1/services/org.uflinux.Settings1.service
+}
+system() {
+	pkgdesc="Authorized UFLinux system settings helper"
+	depends="polkit-elogind ddcutil tzdata openssl busybox-openrc tlp~1.10 tlp-openrc tlp-udev
+		!tlp-pd !power-profiles-daemon !acpid !acpid-openrc $pkgname-system-openrc=$pkgver-r$pkgrel"
+	amove usr/libexec/uflinux-settings-system usr/share/dbus-1/system-services usr/share/dbus-1/system.d
+	amove usr/share/polkit-1 usr/lib/modules-load.d
+	amove etc/uflinux etc/tlp.d etc/elogind
+}
+system_openrc() {
+	pkgdesc="UFLinux route restoration OpenRC startup hook"
+	depends="openrc"
+	amove etc/init.d/uflinux-routes etc/init.d/uflinux-acpid
+}
+sha512sums="
+2bf1c163f21fcc980b7785c6756bebe2bff002b244de434d714d4a5bd46db02b29b2d4a2290056f9b96ab61cc94d6fdc31ed34c6dfa3a308e844ea68bcf28a8c  uflinux-settings-0.1.0.tar
+"

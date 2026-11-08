@@ -1,0 +1,2 @@
+# BusyBox NTP client only; do not add -l (server mode).
+NTPD_OPTS="-N -p pool.ntp.org"

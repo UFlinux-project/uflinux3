@@ -1,0 +1,2 @@
+# Started after labwc exports WAYLAND_DISPLAY into this session.
+/usr/libexec/uflinux-autostart &

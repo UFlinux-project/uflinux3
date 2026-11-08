@@ -1,0 +1,12 @@
+/.cache/
+/.state/
+/out/
+/out-settings/
+/dist/
+__pycache__/
+*.pyc
+*.rsa
+*.rsa.pub
+*.pem
+*.key
+.venv/

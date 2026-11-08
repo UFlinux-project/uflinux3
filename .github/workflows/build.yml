@@ -1,0 +1,327 @@
+name: Build and release UFLinux
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  checks:
+    runs-on: ubuntu-26.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      vm: ${{ steps.matrix.outputs.vm }}
+      version: ${{ steps.matrix.outputs.version }}
+      epoch: ${{ steps.matrix.outputs.epoch }}
+      cache: ${{ steps.matrix.outputs.cache }}
+      release: ${{ steps.matrix.outputs.release }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: python3 scripts/check.py
+      - name: Check Alpine package availability across all targets
+        run: python3 scripts/check-packages.py
+      - name: Validate shell and Actions workflows
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y shellcheck
+          shellcheck -S warning scripts/*.sh profiles/*.sh tests/*.sh aports/uflinux/uflinux-session aports/uflinux/uflinux-autostart aports/uflinux/uflinux-start-panel aports/uflinux/uflinux-compositor aports/uflinux/uflinux-network-init settings/data/uflinux-acpid.initd settings/data/uflinux-power-button
+          go install github.com/rhysd/actionlint/cmd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca
+          "$(go env GOPATH)/bin/actionlint" -config-file .github/actionlint.yaml .github/workflows/build.yml
+      - id: matrix
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: python3 scripts/ci-matrix.py
+
+  packages:
+    needs: checks
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.checks.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 350
+    env:
+      SOURCE_DATE_EPOCH: ${{ needs.checks.outputs.epoch }}
+      APK_REPOSITORY_URL: ${{ vars.APK_REPOSITORY_URL }}
+      CARGO_BUILD_JOBS: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Prepare architecture emulation
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y qemu-user-binfmt binfmt-support
+          python3 scripts/preflight.py --arch '${{ matrix.arch }}'
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        id: cache
+        with:
+          path: .cache/build
+          key: compile-${{ matrix.arch }}-${{ needs.checks.outputs.cache }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            compile-${{ matrix.arch }}-${{ needs.checks.outputs.cache }}-
+      - name: Compile without release secrets
+        run: |
+          timeout --signal=INT --kill-after=60s 300m sudo --preserve-env=SOURCE_DATE_EPOCH,APK_REPOSITORY_URL,CARGO_BUILD_JOBS,GITHUB_REPOSITORY,GITHUB_SHA bash scripts/build.sh --arch '${{ matrix.arch }}' --version '${{ needs.checks.outputs.version }}' --stage packages
+      - name: Compare a clean native rebuild
+        if: matrix.arch == 'x86_64'
+        run: |
+          timeout --signal=INT --kill-after=60s 40m sudo --preserve-env=SOURCE_DATE_EPOCH,APK_REPOSITORY_URL,CARGO_BUILD_JOBS,GITHUB_REPOSITORY,GITHUB_SHA python3 scripts/reproducibility.py --arch x86_64 --version '${{ needs.checks.outputs.version }}'
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        if: always()
+        with:
+          path: .cache/build
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: packages-${{ matrix.arch }}
+          retention-days: 7
+          path: |
+            out/packages
+            out/metadata
+            out/inputs
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+
+  images:
+    needs: [checks, packages]
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.checks.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 350
+    env:
+      SOURCE_DATE_EPOCH: ${{ needs.checks.outputs.epoch }}
+      APK_REPOSITORY_URL: ${{ vars.APK_REPOSITORY_URL }}
+      RELEASE: ${{ needs.checks.outputs.release }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: packages-${{ matrix.arch }}
+          path: out
+      - run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y qemu-user-binfmt binfmt-support
+          python3 scripts/preflight.py --arch '${{ matrix.arch }}'
+      - name: Sign packages and assemble ISO
+        env:
+          APK_SIGNING_PRIVATE_KEY: ${{ needs.checks.outputs.release == 'true' && secrets.APK_SIGNING_PRIVATE_KEY || '' }}
+          APK_SIGNING_PUBLIC_KEY: ${{ needs.checks.outputs.release == 'true' && secrets.APK_SIGNING_PUBLIC_KEY || '' }}
+        run: |
+          release_args=()
+          if [ "$RELEASE" = true ]; then release_args+=(--release); fi
+          for stage in sign image; do
+            sudo --preserve-env=SOURCE_DATE_EPOCH,APK_REPOSITORY_URL,GITHUB_REPOSITORY,GITHUB_SHA,APK_SIGNING_PRIVATE_KEY,APK_SIGNING_PUBLIC_KEY bash scripts/build.sh --arch '${{ matrix.arch }}' --version '${{ needs.checks.outputs.version }}' --stage "$stage" "${release_args[@]}"
+          done
+      - name: Verify signatures, desktop and installer checks
+        run: |
+          release_args=()
+          if [ "$RELEASE" = true ]; then release_args+=(--release); fi
+          sudo --preserve-env=SOURCE_DATE_EPOCH,APK_REPOSITORY_URL,GITHUB_REPOSITORY,GITHUB_SHA bash scripts/build.sh --arch '${{ matrix.arch }}' --version '${{ needs.checks.outputs.version }}' --stage verify "${release_args[@]}"
+      - name: Exercise release signing and key cleanup with a disposable key
+        if: matrix.arch == 'x86_64'
+        run: sudo --preserve-env=SOURCE_DATE_EPOCH,APK_REPOSITORY_URL,GITHUB_REPOSITORY,GITHUB_SHA python3 tests/signing-smoke.py --arch x86_64 --version '${{ needs.checks.outputs.version }}'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: image-${{ matrix.arch }}
+          retention-days: 7
+          path: |
+            out/images
+            out/repository
+            out/metadata
+            out/checks
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: inputs-${{ matrix.arch }}
+          retention-days: 7
+          path: out/inputs
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+
+  vm:
+    needs: [checks, images]
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.checks.outputs.vm) }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: image-${{ matrix.arch }}
+          path: out
+      - name: Install emulators and firmware
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y python3-pexpect qemu-system-x86 qemu-system-arm qemu-system-ppc qemu-system-misc qemu-system-s390x ovmf qemu-efi-aarch64 qemu-efi-riscv64 qemu-efi-loongarch64
+      - name: Boot ISO, install XFS and reboot installed system
+        run: |
+          network=()
+          if [ '${{ matrix.arch }}' = x86_64 ] && [ '${{ matrix.mode }}' = native ]; then network+=(--network-tests); fi
+          python3 scripts/vm-test.py --arch '${{ matrix.arch }}' --mode '${{ matrix.mode }}' --iso 'out/images/${{ matrix.arch }}/uflinux-${{ needs.checks.outputs.version }}-${{ matrix.arch }}.iso' "${network[@]}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: vm-${{ matrix.arch }}-${{ matrix.mode }}
+          retention-days: 7
+          path: out/vm
+          if-no-files-found: error
+          overwrite: true
+
+  draft:
+    if: needs.checks.outputs.release == 'true'
+    needs: [checks, images, vm]
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: python3 scripts/release.py create --version "$VERSION"
+        env:
+          VERSION: ${{ needs.checks.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+
+  release-inputs:
+    needs: [checks, draft]
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.checks.outputs.matrix) }}
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.checks.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: inputs-${{ matrix.arch }}
+          path: out/inputs
+      - run: python3 scripts/release-inputs.py --arch '${{ matrix.arch }}' --version "$VERSION"
+      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: out/uflinux-*.tar.gz
+      - name: Upload inputs to the unpublished draft
+        run: gh release upload "v$VERSION" --clobber out/uflinux-*.tar.gz
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: inputs-manifest-${{ matrix.arch }}
+          retention-days: 7
+          path: out/SHA256SUMS-*-inputs
+          overwrite: true
+
+  publish:
+    if: needs.checks.outputs.release == 'true'
+    needs: [checks, images, vm, release-inputs]
+    runs-on: ubuntu-26.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: release-publication
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.checks.outputs.version }}
+      SOURCE_DATE_EPOCH: ${{ needs.checks.outputs.epoch }}
+      APK_REPOSITORY_URL: ${{ vars.APK_REPOSITORY_URL }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: image-*
+          merge-multiple: true
+          path: out
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: vm-*
+          merge-multiple: true
+          path: out/vm
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: inputs-manifest-*
+          merge-multiple: true
+          path: out
+      - run: python3 scripts/fetch-previous.py
+      - name: Build complete signed APK repository
+        env:
+          APK_SIGNING_PRIVATE_KEY: ${{ secrets.APK_SIGNING_PRIVATE_KEY }}
+          APK_SIGNING_PUBLIC_KEY: ${{ secrets.APK_SIGNING_PUBLIC_KEY }}
+        run: |
+          previous=()
+          if [ -f out/previous/uflinux-apk-repository.tar.gz ]; then previous+=(--previous out/previous/uflinux-apk-repository.tar.gz); fi
+          sudo --preserve-env=SOURCE_DATE_EPOCH,APK_REPOSITORY_URL,GITHUB_REPOSITORY,APK_SIGNING_PRIVATE_KEY,APK_SIGNING_PUBLIC_KEY python3 scripts/publish-repository.py --version "$VERSION" "${previous[@]}"
+      - name: Check fresh clients and retained-version upgrades through the Pages layout
+        run: |
+          sudo --preserve-env=SOURCE_DATE_EPOCH,APK_REPOSITORY_URL,GITHUB_REPOSITORY python3 scripts/verify-repository.py --version "$VERSION" --staging out/pages/apk/v3.24/uflinux
+          sudo --preserve-env=SOURCE_DATE_EPOCH python3 scripts/release-records.py --version "$VERSION"
+      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: |
+            out/images/*/*.iso
+            out/uflinux-*.tar.gz
+            out/metadata/*/*.spdx.json
+            out/SHA256SUMS
+      - run: python3 scripts/release.py prepare --version "$VERSION"
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: out/pages
+      - uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+        id: deployment
+      - name: Check the deployed signed repository before publishing the release
+        run: |
+          for attempt in 1 2 3; do
+            if sudo --preserve-env=SOURCE_DATE_EPOCH,APK_REPOSITORY_URL,GITHUB_REPOSITORY python3 scripts/verify-repository.py --version "$VERSION"; then exit 0; fi
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            sleep 10
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: published-repository-check
+          path: out/checks/x86_64/repository-published.json
+          if-no-files-found: ignore
+          retention-days: 30
+      - run: python3 scripts/release.py publish --version "$VERSION"
