@@ -70,8 +70,12 @@ Twenty-one custom APKs are built: patched ConnMan (runtime/OpenRC/dev/docs/debug
 Ironbar, Settings components and the distribution packages. ConnMan's pinned
 upstream source and Alpine compatibility patches are retained with build inputs.
 
-- `packages`: unprivileged `abuild -r`, locked Cargo fetch, frozen release build
-  and tests, development signatures, dependency records, and input archives.
+- `packages`: root installs recipe dependencies with `SUDO_APK=apk abuild -F deps`;
+  the unprivileged builder runs plain `abuild`, including dependency validation,
+  locked Cargo fetch, frozen release build and tests, and development signing.
+  Root removes temporary dependencies afterward, including after build failures.
+  This avoids target setuid helpers, which cannot elevate under QEMU user
+  emulation. Dependency records and input archives are retained.
 - `sign`: verifies the incoming development signatures, replaces only the APK v2
   signature stream, signs indexes, and verifies the resulting packages.
 - `image`: uses Alpine mkimage, a custom profile, an APK cache, and a reproducible

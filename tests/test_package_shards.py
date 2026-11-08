@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import builder
@@ -115,3 +116,23 @@ class InputArchiveTests(unittest.TestCase):
             (directory/'ironbar/cargo-sources.tar.gz').unlink()
             rejected=subprocess.run(command,cwd=root,capture_output=True)
             self.assertNotEqual(rejected.returncode,0)
+
+
+class EmulatedDependencyTests(unittest.TestCase):
+    def test_dependencies_use_root_and_compilation_remains_unprivileged(self):
+        instance = object.__new__(builder.Builder)
+        instance.chroot = Mock()
+        instance.build_origin('connman', {'CARGO_BUILD_JOBS': '1'})
+        calls = instance.chroot.call_args_list
+        self.assertEqual(calls[0].args, ('sh', '-ec', 'cd /project/aports/connman && abuild -F deps'))
+        self.assertEqual(calls[0].kwargs['extra_env']['SUDO_APK'], 'apk')
+        self.assertEqual(calls[1].args, ('su', '-s', '/bin/sh', 'builder', '-c', 'cd /project/aports/connman && abuild'))
+        self.assertNotIn('SUDO_APK', calls[1].kwargs['extra_env'])
+        self.assertTrue(calls[2].args[-1].endswith('abuild -F undeps'))
+
+    def test_failed_compilation_still_cleans_dependencies_and_fails(self):
+        instance = object.__new__(builder.Builder)
+        instance.chroot = Mock(side_effect=[None, RuntimeError('compiler failed'), None])
+        with self.assertRaisesRegex(RuntimeError, 'compiler failed'):
+            instance.build_origin('ironbar', {})
+        self.assertTrue(instance.chroot.call_args_list[-1].args[-1].endswith('abuild -F undeps'))

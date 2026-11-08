@@ -348,10 +348,22 @@ class Builder:
         self.env.update(PACKAGER_PRIVKEY="/var/lib/uflinux/keys/uflinux.rsa", PACKAGER_PUBKEY="/var/lib/uflinux/keys/uflinux.rsa.pub")
         return public
 
+    def build_origin(self, origin, env):
+        # QEMU user emulation cannot elevate through a target setuid binary.
+        # Resolve dependencies as root, but run every compilation/check/package
+        # hook unprivileged. Plain abuild still checks that dependencies exist.
+        directory = f"cd /project/aports/{origin} && "
+        dependency_env = dict(env, SUDO_APK="apk", REPODEST="/home/builder/packages")
+        self.chroot("sh", "-ec", directory + "abuild -F deps", extra_env=dependency_env)
+        try:
+            self.chroot("su", "-s", "/bin/sh", "builder", "-c",
+                        directory + "abuild", extra_env=env)
+        finally:
+            self.chroot("sh", "-ec", directory + "abuild -F undeps", extra_env=dependency_env)
+
     def package(self):
         self.tools("git", "shadow", "sudo", "alpine-sdk")
         self.chroot("sh", "-ec", "id builder >/dev/null 2>&1 || adduser -D -u 1000 builder; addgroup builder abuild")
-        self.put("etc/doas.d/uflinux-builder.conf", "permit nopass builder as root cmd /usr/bin/abuild-apk\n", 0o600)
         self.signing_key(owner=1000)
         source = self.root / "project/aports"
         for path in (source, *source.rglob("*")):
@@ -387,7 +399,7 @@ class Builder:
                "CARGO_BUILD_JOBS": os.environ.get("CARGO_BUILD_JOBS", "1"),
                "VERGEN_GIT_SHA": LOCK["ironbar"]["commit"], "VERGEN_GIT_DESCRIBE": "v" + LOCK["ironbar"]["version"]}
         for package in selected:
-            self.chroot("su", "-s", "/bin/sh", "builder", "-c", f"cd /project/aports/{package} && abuild -r", extra_env=env)
+            self.build_origin(package, env)
         from sbom import apk_metadata
         versions = {}
         for origin, version in (("connman",LOCK["connman"]["version"]),("ironbar", LOCK["ironbar"]["version"]), ("uflinux-settings", LOCK["settings"]["version"]), ("uflinux", self.args.version)):

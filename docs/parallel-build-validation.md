@@ -28,3 +28,19 @@ that the four jobs can execute independently and combine correctly; they are
 not cold-runner speed benchmarks. The updated GitHub workflow and seven other
 architectures still need execution on GitHub. Actual concurrency depends on
 available runner slots, with a workflow maximum of eight compile jobs.
+
+## QEMU dependency privilege fix
+
+On 8 November 2026, a local x86_64 host built the aarch64 ConnMan shard through
+QEMU user emulation. Dependencies were installed by the root chroot using
+`SUDO_APK=apk abuild -F deps`; plain `abuild` ran as uid 1000, without a setuid
+privilege transition. All six ConnMan tests passed and all five expected APKs
+were produced. The runtime APK signature verified and its executable was
+confirmed as AArch64. Root dependency cleanup completed successfully.
+
+The regression suite passed 40 Python tests, including cleanup after compiler
+failure. Actionlint, ShellCheck for the build entry point, and whitespace checks
+passed. Local logs are in `.cache/emulated-fix.log`, with APKs and input records
+under `.cache/emulated-fix-out/`. This validates the shared package execution
+path under emulation; the reported armv7 GitHub job and the complete architecture
+matrix still require rerunning with this change. No ISO was rebuilt for this fix.
