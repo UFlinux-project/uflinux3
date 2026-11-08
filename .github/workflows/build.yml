@@ -80,7 +80,7 @@ jobs:
         if: matrix.arch == 'x86_64'
         run: |
           timeout --signal=INT --kill-after=60s 40m sudo --preserve-env=SOURCE_DATE_EPOCH,APK_REPOSITORY_URL,CARGO_BUILD_JOBS,GITHUB_REPOSITORY,GITHUB_SHA python3 scripts/reproducibility.py --arch x86_64 --version '${{ needs.checks.outputs.version }}' --package '${{ matrix.package }}'
-      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: always()
         with:
           path: .cache/build/${{ matrix.package }}
