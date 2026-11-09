@@ -113,7 +113,17 @@ command('modprobe', 'mac80211_hwsim', 'radios=2')
 phys=sorted(p.name for p in Path('/sys/class/ieee80211').iterdir())
 assert len(phys)==2, 'The isolated VM must have exactly two simulated Wi-Fi radios'
 ap, station = 'ufap0', 'ufsta0'
+# The headless CLI has no polkit agent. Permit only this disposable VM's live
+# user to perform the connect/forget authorization exercised by this fixture.
+policy_rule = Path('/etc/polkit-1/rules.d/10-uflinux-network-vm.rules')
+assert not policy_rule.exists(), 'Refusing to overwrite an existing polkit rule'
 try:
+    policy_rule.parent.mkdir(parents=True, exist_ok=True)
+    policy_rule.write_text("polkit.addRule(function(action, subject) {\n"
+        "    if (action.id == 'org.uflinux.settings.connect' && subject.user == 'live')\n"
+        "        return polkit.Result.YES;\n"
+        "});\n")
+    policy_rule.chmod(0o644)
     command('rc-service', 'connman', 'stop')
     command('rc-service', 'iwd', 'stop')
     for entry in Path('/sys/class/net').iterdir():
@@ -236,6 +246,9 @@ try:
                 records.append('static-route persistence and unrelated-route preservation')
             request({'action':'disconnect','service':service['path']})
             request({'action':'forget','service':service['path']})
+            if mode in ('PEAP', 'TTLS', 'TLS'):
+                known = Path('/var/lib/uflinux-settings/credentials.json')
+                assert not known.exists() or ssid not in json.loads(known.read_text()), 'Enterprise credentials were not forgotten'
             hostapd.terminate();hostapd.wait(timeout=5)
             records.append(mode+' association, DHCP, reconnect and forget')
         request({'action':'wifi','enabled':False})
@@ -244,6 +257,7 @@ try:
     assert all(p.stat().st_mode & 0o077 == 0 for p in Path('/var/lib/iwd').glob('*.8021x'))
     print('UFLINUX_NETWORK_VM:'+json.dumps({'passed':records}),flush=True)
 finally:
+    policy_rule.unlink(missing_ok=True)
     for child, log in reversed(children):
         if child.poll() is None: child.terminate();child.wait(timeout=5)
         if sys.exc_info()[0] is not None:

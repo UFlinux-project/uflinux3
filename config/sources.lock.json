@@ -60,7 +60,7 @@
   "ironbar": {
     "version": "0.19.1",
     "commit": "cac7d684ddc7e26315b4e269b93143ab92c71757",
-    "features": "battery,cli,clock,config+toml,custom,label,launcher,menu,script,tray",
+    "features": "battery,cli,clock,config+toml,custom,launcher,tray",
     "opt_level": "s",
     "lto": "thin",
     "codegen_units": 8,

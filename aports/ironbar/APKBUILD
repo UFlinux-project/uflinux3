@@ -13,7 +13,7 @@ source="$pkgname-$pkgver.tar.gz::https://codeload.github.com/JakeStanger/ironbar
 builddir="$srcdir/ironbar-cac7d684ddc7e26315b4e269b93143ab92c71757"
 options="net"
 
-_features="battery,cli,clock,config+toml,custom,label,launcher,menu,script,tray"
+_features="battery,cli,clock,config+toml,custom,launcher,tray"
 export CARGO_PROFILE_RELEASE_OPT_LEVEL=s
 export CARGO_PROFILE_RELEASE_LTO=thin
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=8

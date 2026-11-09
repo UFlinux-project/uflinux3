@@ -81,7 +81,7 @@ def main():
                         raise ValueError("The ISO does not contain the current custom package: " + package.name)
                 if names != ALLOWED:
                     raise ValueError("Incomplete or unexpected custom package set for " + arch)
-                modes = ["native", "uefi"] if arch in {"x86", "x86_64"} else ["native" if arch in {"ppc64le", "s390x"} else "uefi"]
+                modes = ["bios", "uefi"] if arch in {"x86", "x86_64"} else ["native" if arch in {"ppc64le", "s390x"} else "uefi"]
                 for mode in modes:
                     result = json.loads((out / "vm" / arch / mode / "verified.json").read_text())
                     iso = out / "images" / arch / f"uflinux-{args.version}-{arch}.iso"
@@ -91,7 +91,7 @@ def main():
                         memory = result.get("settings_512m") or {}
                         if memory.get("ram_mib") != 512 or memory.get("swap") is not False or memory.get("oom") is not False:
                             raise ValueError("Missing installed 512 MiB Settings acceptance for " + mode)
-                        if mode == "native" and not result.get("network_clock"):
+                        if mode == "bios" and not result.get("network_clock"):
                             raise ValueError("Missing real ConnMan+iwd and BusyBox NTP verification")
                         power = result.get("power") or {}
                         if not power.get("gtk_authorization_cancel_and_grant") or not power.get("physical_key_do_nothing") or not power.get("physical_key_poweroff") or set(power.get("profiles", [])) != {"power-saver", "balanced", "performance"}:

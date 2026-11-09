@@ -19,7 +19,7 @@ def configuration(event, ref):
     packages = {"include": [{"arch": arch, "runner": arches[arch]["runner"], "package": package}
                              for arch in selected for package in ("connman", "ironbar", "uflinux-settings", "uflinux")]}
     vm = {"include": [{"arch": arch, "mode": mode} for arch in selected for mode in (
-        ["native", "uefi"] if arch in {"x86", "x86_64"} else ["native" if arch in {"ppc64le", "s390x"} else "uefi"])]}
+        ["bios", "uefi"] if arch in {"x86", "x86_64"} else ["native" if arch in {"ppc64le", "s390x"} else "uefi"])]}
     return {"matrix": matrix, "packages": packages, "vm": vm, "version": version, "release": str(release).lower()}
 
 def main():

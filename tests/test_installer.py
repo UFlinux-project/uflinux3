@@ -38,7 +38,7 @@ class MountTests(unittest.TestCase):
 class InstallerTests(unittest.TestCase):
     def args(self, target, **overrides):
         return SimpleNamespace(**dict(dict(target=str(target), user="alice", hostname="uflinux", arch="x86_64",
-                                          boot_mode="native", boot_disk=None, dry_run=True), **overrides))
+                                          boot_mode="bios", boot_disk=None, dry_run=True), **overrides))
 
     def test_live_root_rejected_before_commands(self):
         with patch.object(installer.os, "geteuid", return_value=0), patch.object(installer, "run") as run:
@@ -76,7 +76,7 @@ class InstallerTests(unittest.TestCase):
              patch.object(installer, "mounted", side_effect=[{"source": "/dev/vda3"}, {"source": "/dev/vda2"}]), \
              patch.object(installer, "output", return_value="aarch64"):
             with self.assertRaisesRegex(installer.InstallError, "UEFI"):
-                installer.preflight(self.args(tmp))
+                installer.preflight(self.args(tmp, boot_mode="native"))
 
     def test_dry_run_never_installs_or_prompts(self):
         with patch.object(installer, "preflight", return_value={"target": "/mnt"}), \

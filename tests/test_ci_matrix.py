@@ -22,6 +22,13 @@ class MatrixTests(unittest.TestCase):
         for tag in ('vlatest','v0.1.0;id','v0.1.0\nmalformed'):
             with self.assertRaises(ValueError):ci.configuration('push','refs/tags/'+tag)
 
+    def test_bios_names_are_used_only_for_x86_vm_tests(self):
+        jobs = ci.configuration('workflow_dispatch', 'refs/heads/main')['vm']['include']
+        for arch in ('x86', 'x86_64'):
+            self.assertEqual({job['mode'] for job in jobs if job['arch'] == arch}, {'bios', 'uefi'})
+        for arch in ('ppc64le', 's390x'):
+            self.assertEqual({job['mode'] for job in jobs if job['arch'] == arch}, {'native'})
+
     def test_each_architecture_has_four_independent_jobs(self):
         for event,ref,count in [('pull_request','refs/heads/main',4),('workflow_dispatch','refs/heads/main',28)]:
             result=ci.configuration(event,ref)

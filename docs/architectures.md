@@ -48,7 +48,7 @@ Local checks:
 python3 scripts/check.py
 shellcheck -S warning scripts/*.sh profiles/*.sh tests/*.sh
 actionlint -config-file .github/actionlint.yaml .github/workflows/build.yml
-python3 scripts/vm-test.py --arch x86_64 --mode native \
+python3 scripts/vm-test.py --arch x86_64 --mode bios \
   --iso out/images/x86_64/uflinux-0.1.0-x86_64.iso
 ```
 

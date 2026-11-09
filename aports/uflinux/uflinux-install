@@ -106,6 +106,10 @@ def preflight(args):
     if unexpected:
         raise InstallError("Target root must be empty apart from boot and lost+found")
     arch = output("apk", "--print-arch")
+    if mode == "native" and arch in {"x86", "x86_64"}:
+        mode = "bios"  # Keep the old spelling usable for existing scripts.
+    if mode == "bios" and arch not in {"x86", "x86_64"}:
+        raise InstallError("BIOS mode is only available for x86 and x86_64")
     esp = None
     if mode == "uefi":
         if arch in {"ppc64le", "s390x"}:
@@ -282,7 +286,7 @@ def main(argv=None):
     parser.add_argument("--user", required=True)
     parser.add_argument("--hostname", default="uflinux")
     parser.add_argument("--boot-disk")
-    parser.add_argument("--boot-mode", choices=["auto", "uefi", "native"], default="auto")
+    parser.add_argument("--boot-mode", choices=["auto", "uefi", "bios", "native"], default="auto")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--online", action="store_true", help="Allow official Alpine mirrors for packages absent from the media")
     args = parser.parse_args(argv)

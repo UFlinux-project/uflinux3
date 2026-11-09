@@ -155,11 +155,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--arch", choices=ARCHES, required=True)
     parser.add_argument("--iso", required=True)
-    parser.add_argument("--mode", choices=["native", "uefi"], required=True)
+    parser.add_argument("--mode", choices=["bios", "native", "uefi"], required=True)
     parser.add_argument("--outdir", default="out/vm")
     parser.add_argument("--timeout", type=int, default=1800)
     parser.add_argument("--network-tests", action="store_true", help="Run real hwsim Wi-Fi tests in the disposable x86_64 VM")
     args = parser.parse_args()
+    if args.arch in {"x86", "x86_64"} and args.mode == "native":
+        args.mode = "bios"  # Backward compatibility for existing invocations.
+    if args.mode == "bios" and args.arch not in {"x86", "x86_64"}:
+        parser.error("BIOS mode is only available for x86 and x86_64")
     source_iso=Path(args.iso).resolve()
     firmware_lock = json.loads((ROOT / "config/firmware.lock.json").read_text())
     if args.mode == "uefi" and args.arch in {"x86", "armv7"}:

@@ -39,7 +39,8 @@ doas uflinux-install --target /mnt --user alice --boot-disk /dev/sda --dry-run
 After checking the displayed devices, run the corresponding command without
 `--dry-run`. Type the confirmation containing the root filesystem UUID, then
 choose and repeat a password of at least eight characters. Optional flags:
-`--hostname NAME`, and `--boot-mode uefi|native|auto`.
+`--hostname NAME`, and `--boot-mode uefi|bios|native|auto`. Use `bios` for
+x86 legacy BIOS and `native` for PowerPC or s390x firmware.
 
 While installing from media, the installer temporarily selects its package
 repositories and restores the live repository file on success or failure. The
