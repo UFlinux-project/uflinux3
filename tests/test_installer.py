@@ -96,7 +96,10 @@ class InstallerTests(unittest.TestCase):
             with patch.object(Path, "read_text", read), patch.object(Path, "glob", return_value=[]):
                 installer.make_overlay(root, self.args("/mnt"))
             self.assertEqual((root / "etc/shadow").read_text(), "root:!:19000:0:99999:7:::\n")
-            self.assertNotIn("live", (root / "etc/apk/world").read_text())
+            world = (root / "etc/apk/world").read_text().splitlines()
+            self.assertNotIn("live", world)
+            self.assertIn("linux-firmware", world)
+            self.assertNotIn("linux-firmware-none", world)
             self.assertFalse((root / "etc/runlevels/default/uflinux-live").exists())
             self.assertEqual((root / "etc/runlevels/default/greetd").readlink(), Path("/etc/init.d/greetd"))
 

@@ -18,8 +18,10 @@ profile_uflinux() {
 	# Keep profile_standard's architecture-specific console and boot configuration.
 	kernel_addons=""
 	initfs_features="$initfs_features kms xfs uflinux-plymouth"
+	# The diskless live root includes Alpine's full firmware collection.
+	initfs_cmdline="$initfs_cmdline rootflags=mode=0755,size=75%"
 	modloop_addons="$modloop_addons uflinux-initramfs"
-	apks="$apks uflinux uflinux-live uflinux-installer linux-lts linux-firmware-none
+	apks="$apks uflinux uflinux-live uflinux-installer linux-lts linux-firmware
 		systemd-boot xfsprogs e2fsprogs dosfstools util-linux vulkan-loader mesa-vulkan-ati"
 	case "$ARCH" in
 		x86|x86_64) apks="$apks mesa-vulkan-intel mesa-vulkan-nouveau mesa-vulkan-virtio" ;;

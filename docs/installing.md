@@ -5,8 +5,10 @@ logs in as `live`; serial consoles use **live / live**. The account can run `doa
 without a password. Use the taskbar quick settings or Settings → Network to
 configure ConnMan+iwd networking. `connmanctl` is available on the console.
 The live desktop and its core packages boot from the media without a network.
-Installation uses the signed media repository by default. Add `--online` to allow
-official Alpine mirrors for hardware firmware or other packages absent from it.
+The live image and installed system include Alpine’s full `linux-firmware`
+collection, which increases image size and live-session RAM use. Installation
+uses the signed media repository by default. Add
+`--online` to allow official Alpine mirrors for packages absent from the media.
 
 Prepare and mount the partitions yourself before running the installer. Formatting
 commands destroy data; the installer intentionally does not run them.

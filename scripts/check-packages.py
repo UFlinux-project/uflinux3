@@ -18,7 +18,7 @@ for block in re.findall(r'\bdepends="([^"]*)"', text):
         name = re.split(r"[=<>~]", item)[0]
         if not name.startswith(("uflinux", "$")) and name != "ironbar":
             required.add(name)
-required.update({"linux-lts", "linux-firmware-none", "xfsprogs", "alpine-conf", "rust", "cargo", "cargo-auditable",
+required.update({"linux-lts", "linux-firmware", "xfsprogs", "alpine-conf", "rust", "cargo", "cargo-auditable",
                  "gtk4.0-dev", "gtk4-layer-shell-dev", "pulseaudio-dev", "openssl-dev", "abuild"})
 required.update({"polkit-dev", "eudev-dev", "vulkan-loader-dev", "mesa-dev", "pkgconf",
                  "ddcutil", "tzdata", "vulkan-loader", "mesa-vulkan-ati"})

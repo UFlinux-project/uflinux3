@@ -160,7 +160,7 @@ def write(root, name, value, mode=0o644):
 
 def make_overlay(directory, args, repositories=None, uefi=False):
     write(directory, "etc/hostname", args.hostname + "\n")
-    write(directory, "etc/apk/world", "alpine-base\nuflinux\nxfsprogs\nlinux-firmware-none\n" + ("systemd-boot\n" if uefi else ""))
+    write(directory, "etc/apk/world", "alpine-base\nuflinux\nxfsprogs\nlinux-firmware\n" + ("systemd-boot\n" if uefi else ""))
     write(directory, "etc/shadow", "root:!:19000:0:99999:7:::\n", 0o600)
     write(directory, "etc/network/interfaces", "auto lo\niface lo inet loopback\n")
     serial = {"aarch64": "ttyAMA0", "armv7": "ttyAMA0", "ppc64le": "hvc0", "s390x": "ttysclp0"}.get(args.arch, "ttyS0")

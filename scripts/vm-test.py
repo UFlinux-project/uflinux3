@@ -192,7 +192,7 @@ def main():
             guest(child, "df -h /; df -i /")
             guest(child, "test -e /run/uflinux-live; test $(id -un) = root; ! rc-service sshd status")
             guest(child, "apk info -e uflinux ironbar labwc")
-            guest(child, '. /etc/rc.conf.d/uflinux.conf; test "$rc_parallel" = YES')
+            guest(child, '. /etc/rc.conf.d/uflinux.conf; test "$rc_parallel" = YES; apk info -e linux-firmware')
             guest(child, "ironbar -c /etc/xdg/ironbar/config.toml -t /etc/xdg/ironbar/style.css --validate-config")
             guest(child, "apk info -e connman iwd busybox-openrc uflinux-settings uflinux-settings-daemon uflinux-settings-system; connmanctl state; connmanctl services; rc-service ntpd status; ! pgrep -x NetworkManager; ! pgrep -x chronyd; ! pgrep -x openntpd; ! pgrep -x wpa_supplicant")
             if args.arch in {"x86", "x86_64", "aarch64"}:
@@ -247,7 +247,7 @@ def main():
             child.close()
             child = start(args, state, log, installed=True)
             login(child, "alice", "uflinux-test-password")
-            guest(child, "awk '$2 == \"/\" && $3 == \"xfs\" {ok=1} END {exit !ok}' /proc/mounts; test ! -e /run/uflinux-live; ! id live; apk info -e uflinux ironbar labwc", admin=False)
+            guest(child, "awk '$2 == \"/\" && $3 == \"xfs\" {ok=1} END {exit !ok}' /proc/mounts; test ! -e /run/uflinux-live; ! id live; apk info -e uflinux ironbar labwc linux-firmware", admin=False)
             # Authenticate doas normally before invoking the root-only test harness.
             guest(child, '. /etc/rc.conf.d/uflinux.conf; test "$rc_parallel" = YES', admin=False)
             child.sendline("doas true")

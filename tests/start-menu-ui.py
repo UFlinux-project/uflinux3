@@ -149,9 +149,11 @@ try:
     click(logout)
     cancel = wait(lambda: find('Cancel', 'push button') or find('Cancel', 'button'), 'Logout did not ask for confirmation')
     click(cancel)
+    wait(lambda: not find('Cancel', 'push button') and not find('Cancel', 'button'), 'Cancel did not dismiss confirmation')
     assert menu(), 'Cancelling logout dismissed the menu'
     assert not Path('/tmp/uflinux-login1-actions.log').read_text(), 'Cancelling an action issued a power request'
     click(logout)
+    wait(lambda: find('Cancel', 'push button') or find('Cancel', 'button'), 'Logout confirmation did not reopen')
     command('wtype', '-k', 'Escape')
     wait(lambda: not find('Cancel', 'push button') and not find('Cancel', 'button'), 'Escape did not cancel confirmation')
     command('wtype', '-k', 'Escape')

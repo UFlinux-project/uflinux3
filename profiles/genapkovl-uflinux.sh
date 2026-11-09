@@ -20,7 +20,7 @@ $serial::respawn:/sbin/getty -L 115200 $serial vt100
 ::ctrlaltdel:/sbin/reboot
 ::shutdown:/sbin/openrc shutdown
 EOF
-printf '%s\n' alpine-base uflinux uflinux-live uflinux-installer > "$tmp/etc/apk/world"
+printf '%s\n' alpine-base uflinux uflinux-live uflinux-installer linux-firmware > "$tmp/etc/apk/world"
 printf '%s\n' "${UFLINUX_REPOSITORY_URL:?}" \
 	'https://dl-cdn.alpinelinux.org/alpine/v3.24/main' \
 	'https://dl-cdn.alpinelinux.org/alpine/v3.24/community' > "$tmp/etc/apk/repositories"
