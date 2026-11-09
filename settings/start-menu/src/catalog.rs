@@ -2,7 +2,7 @@
 //! owned metadata, never GTK widgets or thread-bound GObjects.
 use gio::prelude::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
     pub id: String,
     pub name: String,

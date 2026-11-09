@@ -6,13 +6,33 @@ from pathlib import Path
 import subprocess
 import time
 import sys
+import select
 import pyatspi
 from gi.repository import GLib
 
 results = Path('/tmp/uflinux-settings-smoke-results')
 results.mkdir(exist_ok=True)
 log = results / 'start-menu.log'
+keyboard = subprocess.Popen(['/tmp/uflinux-ui-driver/keyboard-driver'], stdin=subprocess.PIPE,
+    stdout=subprocess.PIPE, text=True, bufsize=1)
+def keyboard_reply():
+    assert select.select([keyboard.stdout], [], [], 20)[0], 'Virtual keyboard timed out'
+    return keyboard.stdout.readline()
+assert keyboard_reply() == 'ready\n', 'Virtual keyboard did not initialize'
 def command(*args):
+    if args[0] == 'wtype':
+        # Keep the device attached across popups and hide/show cycles. Creating
+        # a new virtual keyboard for each key can reset the compositor's focus.
+        index = 1
+        while index < len(args):
+            option, value = args[index:index + 2]
+            if option == '-k': request = 'key ' + value
+            elif option in ('-M', '-m'): request = 'mod ' + value + (' 1' if option == '-M' else ' 0')
+            else: raise AssertionError('Unsupported keyboard option: ' + option)
+            keyboard.stdin.write(request + '\n'); keyboard.stdin.flush()
+            assert keyboard_reply() == 'ok\n', 'Virtual keyboard request failed: ' + request
+            index += 2
+        return
     with log.open('a') as stream:
         subprocess.run(args, check=True, stdout=stream, stderr=stream, timeout=20)
 def wait(predicate, description):
@@ -25,10 +45,12 @@ def wait(predicate, description):
         time.sleep(.05)
     raise AssertionError(description)
 def tree(root=None):
-    queue = list(root) if root is not None else [a for a in pyatspi.Registry.getDesktop(0) if a.name == 'uflinux-settings']
+    queue = list(root) if root is not None else [a for a in pyatspi.Registry.getDesktop(0) if a.name in ('uflinux-settings', 'uflinux-start-menu')]
     found = []
     while queue:
-        item = queue.pop(0); found.append(item)
+        item = queue.pop(0)
+        if item.getRoleName() == 'frame' and not item.getState().contains(pyatspi.STATE_SHOWING): continue
+        found.append(item)
         try: queue.extend(list(item))
         except Exception: pass
         assert len(found) < 6000, 'Unbounded launcher widget tree'
@@ -48,17 +70,19 @@ def diagnostics(kind, error, traceback):
 sys.excepthook = diagnostics
 def open_menu():
     assert not menu(), 'An earlier Start menu remained open'
-    command('uflinux-settings', '--start-menu', '--output', 'HEADLESS-1')
+    command('uflinux-start-menu', '--output', 'HEADLESS-1')
     wait(menu, 'Start menu did not appear')
     wait(lambda: find('Search applications'), 'Search field is missing')
     wait(lambda: not find('Loading applications…'), 'Application catalog did not load')
+    assert find('Search applications').queryText().getText(0, -1) == '', 'Search was retained after hiding'
+    assert not find('Back to favorites'), 'Application browser was retained after hiding'
     command('grim', str(results / 'start-menu-default.png'))
 def search(text):
     field = wait(lambda: find('Search applications'), 'Search field is missing')
     assert field.queryEditableText().setTextContents(text)
     time.sleep(.3)
 def close_menu():
-    command('uflinux-settings', '--start-menu')
+    command('uflinux-start-menu')
     wait(lambda: not menu(), 'Super-style toggle failed to close Start')
 def pointer(x, y, width=1280, height=720):
     command('/tmp/uflinux-ui-driver/pointer-driver', str(x), str(y), str(x), str(y), str(width), str(height))
@@ -86,8 +110,14 @@ broken.write_text('[Desktop Entry]\nType=Application\nName=UFLinux Fixture Broke
 created.append(broken)
 command('update-desktop-database', str(apps))
 try:
+    for _ in range(100):
+        status = subprocess.check_output(['uflinux-start-menu', '--status'], text=True, timeout=10)
+        if 'ready=true' in status: break
+        time.sleep(.05)
+    else: raise AssertionError('Resident Start menu was not prepared')
     open_menu()
     assert find('Home', 'push button') or find('Home', 'button')
+    assert not find('Power mode') and not find('Power settings…')
     click(find('All Applications', 'button') or find('All Applications', 'push button'))
     wait(lambda: find('Back to favorites'), 'Application browser did not open')
     command('wtype', '-k', 'Escape')
@@ -126,12 +156,18 @@ try:
     wait(lambda: not find('Cancel', 'push button') and not find('Cancel', 'button'), 'Escape did not cancel confirmation')
     command('wtype', '-k', 'Escape')
     wait(lambda: not menu(), 'Escape did not close the empty menu')
-    # Consecutive key events must not depend on the popdown animation finishing.
+    # Consecutive Escape presses cancel confirmation and close the menu.
     open_menu()
     click(wait(lambda: find('Log out'), 'Logout control missing'))
     wait(lambda: find('Cancel', 'push button') or find('Cancel', 'button'), 'Logout confirmation missing')
     command('wtype', '-k', 'Escape', '-k', 'Escape')
     wait(lambda: not menu(), 'Rapid Escape presses did not cancel confirmation and close Start')
+    # Catalog changes must also be observed while the resident menu is hidden.
+    fixture('resident', 'UFLinux Fixture Resident')
+    command('update-desktop-database', str(apps))
+    open_menu(); search('UFLinux Fixture Resident')
+    wait(lambda: find('UFLinux Fixture Resident'), 'Hidden catalog refresh was missed')
+    close_menu()
     open_menu(); close_menu()
     # A typed, confirmed request is denied by the private test-bus fixture.
     open_menu()
@@ -151,6 +187,14 @@ try:
     command('wtype', '-k', 'Super_R'); wait(lambda: not menu(), 'Right Super did not toggle Start closed')
     command('wtype', '-M', 'logo', '-k', 'i', '-m', 'logo')
     time.sleep(.3); assert not menu(), 'Super+I incorrectly triggered the modifier-only menu'
+    open_menu()
+    click(find('Settings', 'button') or find('Settings', 'push button'))
+    wait(lambda: not menu(), 'Settings shortcut did not dismiss Start')
+    wait(lambda: find('Settings', 'frame'), 'Settings shortcut did not open Settings')
+    command('uflinux-settings', '--start-menu', '--output', 'HEADLESS-1')
+    wait(menu, 'Compatibility command did not open the independent launcher')
+    command('uflinux-settings', '--start-menu')
+    wait(lambda: not menu(), 'Compatibility command did not hide the launcher')
     open_menu()
     command('uflinux-settings', '--quick-settings', '--output', 'HEADLESS-1')
     wait(lambda: not menu(), 'Quick settings did not replace Start')
@@ -174,7 +218,7 @@ try:
     # The selected monitor disappearing must close its layer immediately.
     command('wtype', '-M', 'ctrl', '-M', 'alt', '-k', 'F10', '-m', 'alt', '-m', 'ctrl')
     wait(lambda: 'UF-TEST' in subprocess.check_output(['wlr-randr'], text=True), 'Virtual monitor was not added')
-    command('uflinux-settings', '--start-menu', '--output', 'UF-TEST')
+    command('uflinux-start-menu', '--output', 'UF-TEST')
     wait(menu, 'Start did not open on the second output')
     command('wtype', '-M', 'ctrl', '-M', 'alt', '-k', 'F11', '-m', 'alt', '-m', 'ctrl')
     wait(lambda: not menu(), 'Start survived removal of its monitor')
@@ -193,8 +237,14 @@ except BaseException:
     sys.excepthook = sys.__excepthook__
     raise
 finally:
-    for path in created: path.unlink(missing_ok=True)
-    marker.unlink(missing_ok=True)
-    if menu(): close_menu()
-    command('uflinux-settings', '--page', 'network')
+    try:
+        for path in created: path.unlink(missing_ok=True)
+        marker.unlink(missing_ok=True)
+        if menu(): close_menu()
+        command('uflinux-settings', '--page', 'network')
+    finally:
+        keyboard.stdin.close()
+        try: keyboard.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            keyboard.kill(); keyboard.wait(timeout=10)
 print('Start menu catalog, GIO launch, search, confirmation, keyboard and pointer interactions passed')

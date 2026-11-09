@@ -24,7 +24,7 @@ required.update({"polkit-dev", "eudev-dev", "vulkan-loader-dev", "mesa-dev", "pk
                  "ddcutil", "tzdata", "vulkan-loader", "mesa-vulkan-ati"})
 required.update({"rsvg-convert"})
 required.update({"tlp", "tlp-openrc", "tlp-udev"})
-required.update({"py3-atspi", "wtype", "gcc", "musl-dev", "wayland-dev", "desktop-file-utils", "wlr-randr"})
+required.update({"py3-atspi", "wtype", "gcc", "musl-dev", "wayland-dev", "libxkbcommon-dev", "desktop-file-utils", "wlr-randr"})
 required.update({"autoconf", "automake", "dbus-dev", "glib-dev", "libmnl-dev", "libnftnl-dev", "libtool", "readline-dev", "linux-headers"})
 
 
@@ -41,9 +41,9 @@ def check(arch):
         for entry in index.split("\n\n"):
             fields=dict(line.split(":",1) for line in entry.splitlines() if ":" in line)
             if "P" in fields and "V" in fields: versions[fields["P"]]=fields["V"]
-    boots = {"grub-ieee1275"} if arch == "ppc64le" else {"s390-tools"} if arch == "s390x" else {"grub-efi"}
+    boots = {"grub-ieee1275"} if arch == "ppc64le" else {"s390-tools"} if arch == "s390x" else {"systemd-boot"}
     if arch in {"x86", "x86_64"}:
-        boots.update({"grub-bios", "syslinux", "amd-ucode", "intel-ucode"})
+        boots.update({"syslinux", "amd-ucode", "intel-ucode"})
     if arch in {"x86", "x86_64"}:
         boots.update({"mesa-vulkan-intel", "mesa-vulkan-nouveau", "mesa-vulkan-virtio"})
     if arch == "aarch64":

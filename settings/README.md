@@ -7,8 +7,10 @@ uses polkit and normally exits after 45 idle seconds; saved additional routes ke
 its ConnMan subscription alive. Authentication uses libpolkit-agent-1 and PAM.
 
 Open `uflinux-settings`, use `--page network|displays|audio|power|default-apps|datetime|appearance|about`,
-or `--quick-settings --output DP-1`. `--start-menu [--output DP-1]` opens the
-ArcMenu-inspired launcher with fixed favorites and integrated application search.
+or `--quick-settings --output DP-1`. The separate resident `uflinux-start-menu
+[--output DP-1]` toggles the ArcMenu-inspired launcher. It prepares its fixed
+favorites and application search while hidden at login. The old Settings
+`--start-menu` option forwards to this launcher for compatibility.
 Either Super key toggles Start; Super+I opens Settings. CLI hotkeys use
 `uflinux-settingsctl volume 5`, `brightness -5`, and `mute`. `status` prints JSON.
 `request` reads one typed JSON request from standard input; passwords must never

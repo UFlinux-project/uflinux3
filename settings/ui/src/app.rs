@@ -12,7 +12,6 @@ use std::{
 pub enum Surface {
     Full,
     Quick,
-    Start,
 }
 type Binding = Box<dyn Fn(&Snapshot) -> bool>;
 pub struct App {
@@ -21,11 +20,9 @@ pub struct App {
     pub agent: RefCell<Option<auth::Agent>>,
     full: RefCell<Option<gtk::ApplicationWindow>>,
     quick: RefCell<Option<gtk::ApplicationWindow>>,
-    pub start: RefCell<Option<Rc<crate::start_menu::Menu>>>,
     pub stack: RefCell<Option<gtk::Stack>>,
     full_bindings: RefCell<Vec<Binding>>,
     quick_bindings: RefCell<Vec<Binding>>,
-    start_bindings: RefCell<Vec<Binding>>,
     banner: RefCell<Vec<glib::WeakRef<gtk::Label>>>,
     quick_output: RefCell<String>,
     started: Instant,
@@ -70,11 +67,9 @@ pub fn run() {
             agent: RefCell::new(None),
             full: RefCell::new(None),
             quick: RefCell::new(None),
-            start: RefCell::new(None),
             stack: RefCell::new(None),
             full_bindings: RefCell::new(Vec::new()),
             quick_bindings: RefCell::new(Vec::new()),
-            start_bindings: RefCell::new(Vec::new()),
             banner: RefCell::new(Vec::new()),
             quick_output: RefCell::new(String::new()),
             started: began,
@@ -87,6 +82,17 @@ pub fn run() {
         });
         app.agent
             .replace(Some(auth::Agent::register(Rc::downgrade(&app))));
+        let action = gio::SimpleAction::new("close-quick", None);
+        let weak = Rc::downgrade(&app);
+        action.connect_activate(move |_, _| {
+            if let Some(app) = weak.upgrade() {
+                if let Some(window) = app.quick.borrow_mut().take() {
+                    window.close();
+                }
+                app.quick_bindings.borrow_mut().clear();
+            }
+        });
+        application.add_action(&action);
         app.connect();
         slot.replace(Some(app));
     });
@@ -107,9 +113,7 @@ pub fn run() {
                 .and_then(|i| args.get(i + 1))
                 .cloned()
         };
-        if args.iter().any(|s| s == "--start-menu") {
-            app.open_start(value("--output").unwrap_or_default());
-        } else if args.iter().any(|s| s == "--quick-settings") {
+        if args.iter().any(|s| s == "--quick-settings") {
             app.open_quick(value("--output").unwrap_or_default());
         } else if value("--network-auth").is_some() {
             if app.parent().is_none() {
@@ -132,11 +136,10 @@ pub fn run() {
 }
 impl App {
     pub fn parent(&self) -> Option<gtk::Window> {
-        self.start
+        self.quick
             .borrow()
             .as_ref()
-            .map(|m| m.window.clone().upcast())
-            .or_else(|| self.quick.borrow().as_ref().map(|w| w.clone().upcast()))
+            .map(|w| w.clone().upcast())
             .or_else(|| self.full.borrow().as_ref().map(|w| w.clone().upcast()))
     }
     fn connect(self: &Rc<Self>) {
@@ -170,11 +173,7 @@ impl App {
                 self.build_page(&page);
             }
         }
-        for bindings in [
-            &self.full_bindings,
-            &self.quick_bindings,
-            &self.start_bindings,
-        ] {
+        for bindings in [&self.full_bindings, &self.quick_bindings] {
             let mut previous = std::mem::take(&mut *bindings.borrow_mut());
             previous.retain(|callback| callback(&state));
             bindings.borrow_mut().extend(previous);
@@ -210,7 +209,6 @@ impl App {
         match surface {
             Surface::Full => self.full_bindings.borrow_mut().push(callback),
             Surface::Quick => self.quick_bindings.borrow_mut().push(callback),
-            Surface::Start => self.start_bindings.borrow_mut().push(callback),
         };
     }
     pub fn error(&self, message: &str) {
@@ -410,47 +408,8 @@ impl App {
         }
         pages::build(self, page, &content);
     }
-    pub fn menu_banner(&self, label: &gtk::Label) {
-        let mut banners = self.banner.borrow_mut();
-        banners.retain(|w| w.upgrade().is_some());
-        banners.push(label.downgrade());
-    }
-    pub fn close_start(&self) {
-        let previous = self.start.borrow_mut().take();
-        if let Some(menu) = previous {
-            menu.window.close();
-        }
-        self.start_bindings.borrow_mut().clear();
-    }
-    pub fn release_start(&self, menu: &Rc<crate::start_menu::Menu>) {
-        let is_current = self
-            .start
-            .borrow()
-            .as_ref()
-            .is_some_and(|m| Rc::ptr_eq(m, menu));
-        if is_current {
-            self.start.borrow_mut().take();
-            self.start_bindings.borrow_mut().clear();
-        }
-    }
-    fn open_start(self: &Rc<Self>, output: String) {
-        let previous = self.start.borrow_mut().take();
-        if let Some(menu) = previous {
-            let same = menu.matches_output(&output);
-            menu.window.close();
-            self.start_bindings.borrow_mut().clear();
-            if same {
-                return;
-            }
-        }
-        let menu = crate::start_menu::Menu::new(self, output);
-        // Construct the next application window before closing the previous one.
-        let quick = self.quick.borrow_mut().take();
-        if let Some(window) = quick {
-            window.close();
-        }
-        self.start.replace(Some(menu.clone()));
-        menu.present();
+    fn close_start(&self) {
+        remote_action("org.uflinux.StartMenu", "/org/uflinux/StartMenu", "hide");
     }
     pub fn open_quick(self: &Rc<Self>, output: String) {
         let previous = self.quick.borrow_mut().take();
@@ -615,4 +574,31 @@ impl App {
         }
         pages::network_auth(self, request);
     }
+}
+
+// NO_AUTO_START avoids starting the other application just to dismiss it.
+fn remote_action(name: &'static str, path: &'static str, action: &'static str) {
+    use glib::variant::ToVariant;
+    glib::MainContext::default().spawn_local(async move {
+        if let Ok(bus) = gio::bus_get_future(gio::BusType::Session).await {
+            let parameters = (
+                action,
+                Vec::<glib::Variant>::new(),
+                std::collections::HashMap::<String, glib::Variant>::new(),
+            )
+                .to_variant();
+            let _ = bus
+                .call_future(
+                    Some(name),
+                    path,
+                    "org.gtk.Actions",
+                    "Activate",
+                    Some(&parameters),
+                    None,
+                    gio::DBusCallFlags::NO_AUTO_START,
+                    1000,
+                )
+                .await;
+        }
+    });
 }

@@ -100,6 +100,59 @@ class InstallerTests(unittest.TestCase):
             self.assertFalse((root / "etc/runlevels/default/uflinux-live").exists())
             self.assertEqual((root / "etc/runlevels/default/greetd").readlink(), Path("/etc/init.d/greetd"))
 
+    def test_bios_syslinux_requires_only_boot_partition_marked(self):
+        table = {"label": "gpt", "partitions": [
+            {"node": "/dev/vda1", "attrs": "RequiredPartition, LegacyBIOSBootable"},
+            {"node": "/dev/vda2"}]}
+        self.assertEqual(installer.bios_mbr_code(table, "/dev/vda1"), "/usr/share/syslinux/gptmbr.bin")
+        with self.assertRaisesRegex(installer.InstallError, "LegacyBIOSBootable"):
+            installer.bios_mbr_code(table, "/dev/vda2")
+        table["partitions"][1]["attrs"] = "LegacyBIOSBootable"
+        with self.assertRaises(installer.InstallError):
+            installer.bios_mbr_code(table, "/dev/vda1")
+
+    def test_bios_mbr_write_preserves_partition_table(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            disk, boot_code = Path(tmp) / "disk", Path(tmp) / "mbr"
+            disk.write_bytes(b"d" * 4096)
+            boot_code.write_bytes(b"b" * 440)
+            installer.install_bios_mbr(disk, boot_code)
+            self.assertEqual(disk.read_bytes(), b"b" * 440 + b"d" * (4096 - 440))
+            boot_code.write_bytes(b"too short")
+            with self.assertRaisesRegex(installer.InstallError, "size"):
+                installer.install_bios_mbr(disk, boot_code)
+
+    def test_bios_dos_uses_active_partition(self):
+        table = {"label": "dos", "partitions": [{"node": "/dev/vda1", "bootable": True}]}
+        self.assertEqual(installer.bios_mbr_code(table, "/dev/vda1"), "/usr/share/syslinux/mbr.bin")
+        table["partitions"][0]["node"] = "/dev/vda5"
+        with self.assertRaisesRegex(installer.InstallError, "primary partition"):
+            installer.bios_mbr_code(table, "/dev/vda5")
+        table["partitions"][0]["node"] = "/dev/vda1"
+        table["partitions"][0]["bootable"] = False
+        with self.assertRaisesRegex(installer.InstallError, "bootable MBR flag"):
+            installer.bios_mbr_code(table, "/dev/vda1")
+
+    def test_uefi_boot_entry_uses_esp_and_root_uuid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            binary = root / "usr/lib/systemd/boot/efi/systemd-bootx64.efi"
+            binary.parent.mkdir(parents=True)
+            binary.write_bytes(b"efi test binary")
+            plan = {"arch": "x86_64", "root": {"uuid": "1234-abcd"}}
+            installer.install_systemd_boot(root, plan)
+            self.assertEqual((root / "boot/EFI/BOOT/BOOTX64.EFI").read_bytes(), b"efi test binary")
+            entry = (root / "boot/loader/entries/uflinux.conf").read_text()
+            self.assertIn("root=UUID=1234-abcd", entry)
+            self.assertIn("linux /vmlinuz-lts", entry)
+            self.assertIn("initrd /initramfs-lts", entry)
+
+    def test_uefi_overlay_installs_systemd_boot(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(Path, "glob", return_value=[]):
+            root = Path(tmp)
+            installer.make_overlay(root, self.args("/mnt"), "https://example.org/apk\n", uefi=True)
+            self.assertIn("systemd-boot\n", (root / "etc/apk/world").read_text())
+
     def test_repositories_restored_after_failed_install(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "repositories"

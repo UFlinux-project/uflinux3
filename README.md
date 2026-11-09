@@ -29,14 +29,14 @@ The desktop includes Foot, Thunar, Fuzzel, Mako, ConnMan with iwd, PipeWire with
 pipewire-pulse, WirePlumber, and UFLinux Settings in Rust and plain GTK4. BusyBox
 ntpd handles time synchronization. The taskbar opens a combined quick-settings
 flyout. GTK3 and GTK4 apps use Alpine’s adw-gtk3 dark theme. It has no browser or office suite by default.
-Settings and Start offer TLP Power saver, Balanced and Performance modes. Physical
+Settings offers TLP Power saver, Balanced and Performance modes. Physical
 power-button actions are configured in Settings and handled by BusyBox acpid.
 The live login is **live / live**, with passwordless local `doas`; root is locked
 and SSH is disabled. Installation creates a new password-protected user and does
 not copy the live account or its autologin settings.
 
-Installation uses existing partitions: **XFS `/`**, separate **ext4 `/boot`**, and
-a **FAT32 ESP** mounted at `/boot/efi` for UEFI. The installer does not partition
+Installation uses an existing **XFS `/`** and a separate `/boot`: a **FAT32 ESP**
+for UEFI, or **ext4** for native BIOS and other non-UEFI boot. The installer does not partition
 or format disks. Architecture boot requirements still apply.
 
 - [GitHub setup and publishing](docs/github.md)

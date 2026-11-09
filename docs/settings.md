@@ -9,7 +9,7 @@ Image previews are bounded; arbitrary remote wallpapers are not downloaded.
 ```sh
 uflinux-settings --page network
 uflinux-settings --quick-settings --output DP-1
-uflinux-settings --start-menu --output DP-1
+uflinux-start-menu --output DP-1
 uflinux-settingsctl status
 uflinux-settingsctl volume -5
 uflinux-settingsctl brightness 5
@@ -99,9 +99,8 @@ An active profile is reported only when TLP's runtime record confirms it. The
 [TLP profile documentation](https://linrunner.de/tlp/usage/tlp.html) describes the
 underlying commands and their hardware-dependent effects.
 
-Select a profile in Settings → Power or the Windows 10-inspired Ironbar Start
-menu. Its current-mode label and selection markers update through the shared
-backend and IPC. There is no resident tlp-pd, power-profiles-daemon or radio-device
+Select a profile in Settings → Power. Its current-mode label and selection
+markers update through the shared backend and IPC. There is no resident tlp-pd, power-profiles-daemon or radio-device
 wizard. TLP's OpenRC startup and udev hooks apply the chosen policy without a
 new persistent scripting process. Upstream TLP requires Perl and grep for its
 short-lived operations; they do not form an additional background service.
@@ -187,6 +186,6 @@ desktop dependencies. Missing test facilities fail the gate rather than silently
 claiming coverage. Physical HDR, VRR, DDC/CI, suspend and GPU support remain
 separate hardware validation. See [recorded results](settings-validation.md).
 
-The integrated [Start menu](start-menu.md) uses the same GUI process and power
-backend. See its [validation record](start-menu-validation.md) for launcher tests
+The resident [Start menu](start-menu.md) runs in a separate GTK4 process and
+launches Settings when requested. See its [validation record](start-menu-validation.md) for launcher tests
 and measurements.

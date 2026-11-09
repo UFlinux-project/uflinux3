@@ -1,13 +1,12 @@
 //! ArcMenu-inspired launcher. All UI and subscriptions are scoped to this window.
 use crate::{
-    app::{App, Surface},
+    app::App,
     catalog::{self, Catalog, Entry},
     widgets::{self, tr},
 };
 use glib::variant::ToVariant;
 use gtk::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
-use settings_core::{Action, PowerProfile};
 use std::{
     cell::{Cell, RefCell},
     path::PathBuf,
@@ -20,7 +19,7 @@ const START_WIDTH: i32 = 56;
 
 pub struct Menu {
     pub window: gtk::ApplicationWindow,
-    output: String,
+    output: RefCell<String>,
     app: Weak<App>,
     card: gtk::Box,
     root: gtk::Overlay,
@@ -36,8 +35,10 @@ pub struct Menu {
     loaded: Cell<bool>,
     closed: Cell<bool>,
     epoch: Cell<u64>,
+    presentation: Cell<u64>,
     busy: Cell<bool>,
-    confirm: RefCell<Option<gtk::Popover>>,
+    confirm: RefCell<Option<gtk::Box>>,
+    confirmation_host: gtk::Box,
     monitor: RefCell<Option<(gtk::gdk::Monitor, glib::SignalHandlerId)>>,
     app_monitor: gio::AppInfoMonitor,
     changed: RefCell<Option<glib::SignalHandlerId>>,
@@ -75,7 +76,7 @@ impl Menu {
             .default_width(536)
             .default_height(624)
             .build();
-        window.add_css_class("uflinux-settings");
+        window.add_css_class("uflinux-start-menu");
         window.add_css_class("start-shell");
         if gtk4_layer_shell::is_supported() {
             window.set_resizable(true);
@@ -84,7 +85,7 @@ impl Menu {
             window.set_namespace(Some("uflinux-start-menu"));
             window.set_layer(Layer::Overlay);
             window.set_exclusive_zone(-1);
-            window.set_keyboard_mode(KeyboardMode::OnDemand);
+            window.set_keyboard_mode(KeyboardMode::None);
             for edge in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
                 window.set_anchor(edge, true);
             }
@@ -176,12 +177,6 @@ impl Menu {
         error.set_ellipsize(gtk::pango::EllipsizeMode::End);
         error.set_visible(false);
         left.append(&error);
-        let backend_error = widgets::description("");
-        backend_error.add_css_class("error");
-        backend_error.set_lines(2);
-        backend_error.set_visible(false);
-        left.append(&backend_error);
-        app.menu_banner(&backend_error);
         let browse = shortcut("All Applications", "go-next-symbolic");
         left.append(&browse);
         let search = gtk::SearchEntry::builder()
@@ -222,18 +217,10 @@ impl Menu {
             .child(&places)
             .build();
         right.append(&right_scroll);
-        let mode =
-            gtk::DropDown::from_strings(&[&tr("Power saver"), &tr("Balanced"), &tr("Performance")]);
-        mode.set_tooltip_text(Some(&tr("Power mode")));
-        mode.update_property(&[gtk::accessible::Property::Label(&tr("Power mode"))]);
-        let mode_heading = widgets::description("Power mode");
-        right.append(&mode_heading);
-        right.append(&mode);
-        let unavailable = widgets::description("Power management unavailable");
-        right.append(&unavailable);
-        let power_settings = gtk::Button::with_label(&tr("Power settings…"));
-        power_settings.add_css_class("flat");
-        right.append(&power_settings);
+        let confirmation_host = widgets::column();
+        confirmation_host.set_visible(false);
+        confirmation_host.add_css_class("start-confirmation");
+        right.append(&confirmation_host);
         let power_row = gtk::Box::new(gtk::Orientation::Horizontal, 2);
         power_row.set_halign(gtk::Align::End);
         let actions = [
@@ -256,7 +243,7 @@ impl Menu {
         card.append(&right);
         let menu = Rc::new(Self {
             window,
-            output,
+            output: RefCell::new(output),
             app: Rc::downgrade(app),
             card,
             root,
@@ -272,8 +259,10 @@ impl Menu {
             loaded: Cell::new(false),
             closed: Cell::new(false),
             epoch: Cell::new(0),
+            presentation: Cell::new(0),
             busy: Cell::new(false),
             confirm: RefCell::new(None),
+            confirmation_host,
             monitor: RefCell::new(None),
             app_monitor: gio::AppInfoMonitor::get(),
             changed: RefCell::new(None),
@@ -308,84 +297,14 @@ impl Menu {
                 menu.launch_selected();
             }
         });
-        let guard = Rc::new(Cell::new(false));
-        let flag = guard.clone();
-        let target = mode.downgrade();
-        let unavailable = unavailable.downgrade();
-        app.bind_for(Surface::Start, &mode, move |s| {
-            if let Some(drop) = target.upgrade() {
-                guard.set(true);
-                drop.set_sensitive(s.power.available);
-                drop.set_visible(s.power.available);
-                if let Some(label) = unavailable.upgrade() {
-                    label.set_visible(!s.power.available);
-                }
-                drop.set_selected(
-                    s.power
-                        .profile
-                        .and_then(|p| {
-                            [
-                                PowerProfile::PowerSaver,
-                                PowerProfile::Balanced,
-                                PowerProfile::Performance,
-                            ]
-                            .iter()
-                            .position(|v| *v == p)
-                        })
-                        .map(|i| i as u32)
-                        .unwrap_or(gtk::INVALID_LIST_POSITION),
-                );
-                drop.set_tooltip_text(Some(&tr(if s.power.available {
-                    "Power mode"
-                } else {
-                    "Power management is unavailable on this system"
-                })));
-                if std::env::var("UFLINUX_SETTINGS_BENCH").as_deref() == Ok("1") {
-                    let profiles = ["power-saver", "balanced", "performance"];
-                    eprintln!(
-                        "UFLINUX_START_PROFILE={}",
-                        profiles
-                            .get(drop.selected() as usize)
-                            .copied()
-                            .unwrap_or("unavailable")
-                    );
-                }
-                guard.set(false);
-            }
-        });
-        let weak = Rc::downgrade(app);
-        mode.connect_selected_notify(move |drop| {
-            if !flag.get() {
-                if let (Some(app), Some(profile)) = (
-                    weak.upgrade(),
-                    [
-                        PowerProfile::PowerSaver,
-                        PowerProfile::Balanced,
-                        PowerProfile::Performance,
-                    ]
-                    .get(drop.selected() as usize),
-                ) {
-                    app.execute(
-                        Action::SetPowerProfile { profile: *profile },
-                        Some(drop.clone().upcast()),
-                    );
-                }
-            }
-        });
-        let weak = Rc::downgrade(&menu);
-        power_settings.connect_clicked(move |_| {
-            if let Some(menu) = weak.upgrade() {
-                menu.settings("power");
-            }
-        });
         for (button, (label, _, action)) in power_buttons.iter().zip(actions) {
             let weak = Rc::downgrade(&menu);
-            button.connect_clicked(move |button| {
+            button.connect_clicked(move |_| {
                 if let Some(menu) = weak.upgrade() {
                     if action == "Suspend" {
                         menu.session_action(action);
                     } else {
-                        menu.confirm_action(button, label, action);
+                        menu.confirm_action(label, action);
                     }
                 }
             });
@@ -399,20 +318,124 @@ impl Menu {
     }
     pub fn matches_output(&self, output: &str) -> bool {
         output.is_empty()
-            || self.output == output
+            || *self.output.borrow() == output
             || self
                 .monitor
                 .borrow()
                 .as_ref()
                 .is_some_and(|(monitor, _)| monitor.connector().as_deref() == Some(output))
     }
+    pub fn ready(&self) -> bool {
+        self.loaded.get()
+    }
+    pub fn set_output(self: &Rc<Self>, output: &str) {
+        if *self.output.borrow() != output {
+            self.hide();
+            self.output.replace(output.to_string());
+        }
+        if gtk4_layer_shell::is_supported() {
+            let display = gtk::prelude::WidgetExt::display(&self.window);
+            let monitor = display
+                .monitors()
+                .iter::<gtk::gdk::Monitor>()
+                .flatten()
+                .find(|monitor| monitor.connector().as_deref() == Some(output));
+            self.window.set_monitor(monitor.as_ref());
+            if let Some(monitor) = monitor {
+                self.track_monitor(&monitor);
+            }
+        }
+    }
+    fn escape(&self) {
+        let confirming = self.confirm.borrow().is_some();
+        if confirming {
+            self.dismiss_confirmation();
+            self.search.grab_focus();
+        } else if !self.search.text().is_empty() {
+            self.search.set_text("");
+            self.rebuild();
+        } else if self.all.replace(false) {
+            self.rebuild();
+            self.search.grab_focus();
+        } else {
+            self.hide();
+        }
+    }
+    fn dismiss_confirmation(&self) {
+        let previous = self.confirm.borrow_mut().take();
+        self.confirmation_host.set_visible(false);
+        if let Some(panel) = previous {
+            panel.set_visible(false);
+            let host = self.confirmation_host.clone();
+            // Release the event target after GTK finishes dispatching it.
+            glib::idle_add_local_once(move || {
+                if panel.parent().is_some() {
+                    host.remove(&panel);
+                }
+            });
+        }
+    }
+    pub fn hide(&self) {
+        self.presentation
+            .set(self.presentation.get().wrapping_add(1));
+        self.window.set_visible(false);
+        if gtk4_layer_shell::is_supported() {
+            self.window.set_keyboard_mode(KeyboardMode::None);
+        }
+        self.dismiss_confirmation();
+        self.all.set(false);
+        self.search.set_text("");
+        self.failure("");
+        self.rebuild();
+        if self.store.n_items() > 0 {
+            self.selection.set_selected(0);
+        }
+        self.prepare();
+        if let Some(app) = self.app.upgrade() {
+            app.report_status();
+        }
+    }
+    // Build and allocate the default screen without mapping a Wayland surface.
+    // GTK/compositor buffers are created on presentation, not by flashing a window.
+    fn prepare(&self) {
+        if self.window.is_visible() || self.closed.get() {
+            return;
+        }
+        let display = gtk::prelude::WidgetExt::display(&self.window);
+        let monitor = display
+            .monitors()
+            .item(0)
+            .and_downcast::<gtk::gdk::Monitor>();
+        let (width, height) = monitor
+            .map(|m| {
+                let geometry = m.geometry();
+                (geometry.width(), geometry.height())
+            })
+            .unwrap_or((1280, 720));
+        self.layout(width, height);
+        self.root.measure(gtk::Orientation::Horizontal, height);
+        self.root.measure(gtk::Orientation::Vertical, width);
+        self.root.allocate(width, height, -1, None);
+    }
+    pub fn shutdown(&self) {
+        self.cleanup();
+        self.window.destroy();
+    }
     pub fn present(self: &Rc<Self>) {
+        self.presentation
+            .set(self.presentation.get().wrapping_add(1));
         let began = self
             .app
             .upgrade()
             .map(|app| app.frame_start())
             .unwrap_or_else(Instant::now);
+        if gtk4_layer_shell::is_supported() {
+            self.window.set_keyboard_mode(KeyboardMode::Exclusive);
+        }
         self.window.present();
+        if let Some(app) = self.app.upgrade() {
+            app.report_status();
+        }
         self.search.grab_focus();
         if std::env::var_os("UFLINUX_SETTINGS_BENCH").is_some() {
             let weak = Rc::downgrade(self);
@@ -480,7 +503,7 @@ impl Menu {
                     gesture.set_state(gtk::EventSequenceState::Denied);
                 } else {
                     gesture.set_state(gtk::EventSequenceState::Claimed);
-                    menu.window.close();
+                    menu.hide();
                 }
             }
         });
@@ -493,20 +516,7 @@ impl Menu {
                 return glib::Propagation::Proceed;
             };
             if key == gtk::gdk::Key::Escape {
-                // Popdown animates; clear the logical state before another Escape arrives.
-                let confirmation = menu.confirm.borrow_mut().take();
-                if let Some(popover) = confirmation {
-                    popover.popdown();
-                    menu.search.grab_focus();
-                } else if !menu.search.text().is_empty() {
-                    menu.search.set_text("");
-                    menu.rebuild();
-                } else if menu.all.replace(false) {
-                    menu.rebuild();
-                    menu.search.grab_focus();
-                } else {
-                    menu.window.close();
-                }
+                menu.escape();
                 return glib::Propagation::Stop;
             }
             if (key == gtk::gdk::Key::Down || key == gtk::gdk::Key::Up)
@@ -528,7 +538,7 @@ impl Menu {
         self.window.connect_is_active_notify(move |window| {
             if window.is_active() {
                 seen.set(true);
-            } else if seen.get() && !crate::auth::active() {
+            } else if seen.get() {
                 let weak = weak.clone();
                 glib::idle_add_local_once(move || {
                     if let Some(menu) = weak.upgrade() {
@@ -541,10 +551,9 @@ impl Menu {
                         if !menu.closed.get()
                             && !menu.busy.get()
                             && !menu.window.is_active()
-                            && !crate::auth::active()
                             && !owned_modal
                         {
-                            menu.window.close();
+                            menu.hide();
                         }
                     }
                 });
@@ -553,12 +562,9 @@ impl Menu {
         let weak = Rc::downgrade(self);
         self.window.connect_close_request(move |_| {
             if let Some(menu) = weak.upgrade() {
-                menu.cleanup();
-                if let Some(app) = menu.app.upgrade() {
-                    app.release_start(&menu);
-                }
+                menu.hide();
             }
-            glib::Propagation::Proceed
+            glib::Propagation::Stop
         });
         let weak = Rc::downgrade(self);
         let id = self.app_monitor.connect_changed(move |_| {
@@ -617,7 +623,7 @@ impl Menu {
         let weak = Rc::downgrade(self);
         let id = monitor.connect_invalidate(move |_| {
             if let Some(menu) = weak.upgrade() {
-                menu.window.close();
+                menu.hide();
             }
         });
         self.monitor.replace(Some((monitor.clone(), id)));
@@ -636,11 +642,7 @@ impl Menu {
         if let Some((monitor, id)) = self.monitor.borrow_mut().take() {
             monitor.disconnect(id);
         }
-        let confirmation = self.confirm.borrow_mut().take();
-        if let Some(popover) = confirmation {
-            popover.popdown();
-            popover.unparent();
-        }
+        self.dismiss_confirmation();
         self.store.remove_all();
         self.catalog.replace(Catalog::default());
     }
@@ -660,6 +662,10 @@ impl Menu {
                             menu.catalog.replace(data);
                             menu.loaded.set(true);
                             menu.rebuild();
+                            menu.prepare();
+                            if let Some(app) = menu.app.upgrade() {
+                                app.report_status();
+                            }
                         }
                         Err(_) => menu.failure("Applications could not be loaded"),
                     }
@@ -706,9 +712,17 @@ impl Menu {
             } else {
                 "All Applications"
             }))]);
-        self.store.remove_all();
-        for entry in rows {
-            self.store.append(&glib::BoxedAnyObject::new(entry));
+        // Preserve bound rows and their icons when returning to the same screen.
+        let unchanged = self.store.n_items() as usize == rows.len()
+            && rows.iter().enumerate().all(|(index, entry)| {
+                self.store
+                    .item(index as u32)
+                    .and_downcast::<glib::BoxedAnyObject>()
+                    .is_some_and(|object| *object.borrow::<Entry>() == *entry)
+            });
+        if !unchanged {
+            let objects: Vec<_> = rows.into_iter().map(glib::BoxedAnyObject::new).collect();
+            self.store.splice(0, self.store.n_items(), &objects);
         }
         if self.loaded.get() && self.store.n_items() == 0 {
             self.heading.set_text(&tr(if query.is_empty() {
@@ -718,7 +732,7 @@ impl Menu {
             }));
         }
     }
-    fn failure(&self, message: &str) {
+    pub fn failure(&self, message: &str) {
         self.error
             .set_tooltip_text((!message.is_empty()).then_some(message));
         self.error.set_text(message);
@@ -755,17 +769,22 @@ impl Menu {
         self.failure("");
         let context = gtk::prelude::WidgetExt::display(&self.window).app_launch_context();
         let weak = Rc::downgrade(self);
+        let presentation = self.presentation.get();
         glib::MainContext::default().spawn_local(async move {
             let result = info.launch_uris_future(&[], Some(&context)).await;
             if let Some(menu) = weak.upgrade() {
                 menu.busy.set(false);
                 menu.view.set_sensitive(true);
+                if menu.presentation.get() != presentation || !menu.window.is_visible() {
+                    return;
+                }
                 match result {
-                    Ok(()) => menu.window.close(),
+                    Ok(()) => menu.hide(),
                     Err(e) => {
                         menu.failure(&format!("{}: {}", tr("Could not launch application"), e));
-                        menu.window.present();
-                        menu.search.grab_focus();
+                        if menu.window.is_visible() {
+                            menu.search.grab_focus();
+                        }
                     }
                 }
             }
@@ -840,14 +859,19 @@ impl Menu {
                 if let Some(menu) = weak.upgrade() {
                     let uri = uri.clone();
                     let weak = Rc::downgrade(&menu);
+                    let presentation = menu.presentation.get();
                     let context =
                         gtk::prelude::WidgetExt::display(&menu.window).app_launch_context();
                     glib::MainContext::default().spawn_local(async move {
                         let result =
                             gio::AppInfo::launch_default_for_uri_future(&uri, Some(&context)).await;
                         if let Some(menu) = weak.upgrade() {
+                            if menu.presentation.get() != presentation || !menu.window.is_visible()
+                            {
+                                return;
+                            }
                             match result {
-                                Ok(()) => menu.window.close(),
+                                Ok(()) => menu.hide(),
                                 Err(e) => {
                                     menu.failure(&format!("{}: {}", tr("Could not open folder"), e))
                                 }
@@ -907,28 +931,14 @@ impl Menu {
             }
         });
     }
-    fn confirm_action(
-        self: &Rc<Self>,
-        button: &gtk::Button,
-        label: &'static str,
-        action: &'static str,
-    ) {
+    fn confirm_action(self: &Rc<Self>, label: &'static str, action: &'static str) {
         if self.busy.get() {
             return;
         }
-        let previous = self.confirm.borrow_mut().take();
-        if let Some(previous) = previous {
-            previous.popdown();
-            previous.unparent();
-        }
-        let popover = gtk::Popover::new();
-        popover.set_parent(button);
-        popover.set_position(gtk::PositionType::Top);
+        self.dismiss_confirmation();
+        // Keep confirmation in the same native surface so keyboard focus and
+        // rapid Escape events cannot get stranded in a closing Wayland popup.
         let content = widgets::column();
-        content.set_margin_top(8);
-        content.set_margin_bottom(8);
-        content.set_margin_start(8);
-        content.set_margin_end(8);
         content.append(&widgets::description(&format!("{}?", tr(label))));
         let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         let cancel = gtk::Button::with_label(&tr("Cancel"));
@@ -937,43 +947,23 @@ impl Menu {
         buttons.append(&cancel);
         buttons.append(&confirm);
         content.append(&buttons);
-        popover.set_child(Some(&content));
-        let target = popover.downgrade();
+        let weak = Rc::downgrade(self);
         cancel.connect_clicked(move |_| {
-            if let Some(p) = target.upgrade() {
-                p.popdown();
+            if let Some(menu) = weak.upgrade() {
+                menu.dismiss_confirmation();
+                menu.search.grab_focus();
             }
         });
         let weak = Rc::downgrade(self);
         confirm.connect_clicked(move |_| {
             if let Some(menu) = weak.upgrade() {
-                let confirmation = menu.confirm.borrow().clone();
-                if let Some(p) = confirmation {
-                    p.popdown();
-                }
+                menu.dismiss_confirmation();
                 menu.session_action(action);
             }
         });
-        let weak = Rc::downgrade(self);
-        popover.connect_closed(move |popover| {
-            if let Some(menu) = weak.upgrade() {
-                let current = menu.confirm.borrow().as_ref().is_some_and(|p| p == popover);
-                if current {
-                    menu.confirm.borrow_mut().take();
-                }
-            }
-            // GTK may still be dispatching the popover's pointer/key event.
-            let target = popover.downgrade();
-            glib::idle_add_local_once(move || {
-                if let Some(popover) = target.upgrade() {
-                    if popover.parent().is_some() {
-                        popover.unparent();
-                    }
-                }
-            });
-        });
-        self.confirm.replace(Some(popover.clone()));
-        popover.popup();
+        self.confirmation_host.append(&content);
+        self.confirm.replace(Some(content));
+        self.confirmation_host.set_visible(true);
         cancel.grab_focus();
     }
     fn session_action(self: &Rc<Self>, action: &'static str) {
@@ -981,8 +971,14 @@ impl Menu {
             return;
         }
         self.failure("");
+        if action != "Logout" {
+            if let Some(app) = self.app.upgrade() {
+                app.ensure_agent();
+            }
+        }
         self.card.set_sensitive(false);
         let weak = Rc::downgrade(self);
+        let presentation = self.presentation.get();
         glib::MainContext::default().spawn_local(async move {
             let result = if action == "Logout" {
                 match gio::Subprocess::newv(
@@ -1017,12 +1013,19 @@ impl Menu {
             if let Some(menu) = weak.upgrade() {
                 menu.busy.set(false);
                 menu.card.set_sensitive(true);
+                if let Some(app) = menu.app.upgrade() {
+                    app.agent.borrow_mut().take();
+                }
+                if menu.presentation.get() != presentation || !menu.window.is_visible() {
+                    return;
+                }
                 match result {
-                    Ok(()) => menu.window.close(),
+                    Ok(()) => menu.hide(),
                     Err(e) => {
                         menu.failure(&format!("{}: {e}", tr("Action could not be completed")));
-                        menu.window.present();
-                        menu.search.grab_focus();
+                        if menu.window.is_visible() {
+                            menu.search.grab_focus();
+                        }
                     }
                 }
             }

@@ -20,7 +20,7 @@ else:
     Path("out").mkdir(exist_ok=True)
     notes = Path("out/release-notes.md")
     notes.write_text(f"UFLinux {args.version}, based on Alpine {LOCK['alpine']['version']}, with labwc and Ironbar {LOCK['ironbar']['version']}.\n\n"
-                     "Install into existing partitions with XFS root, separate ext4 /boot and a FAT32 ESP for UEFI. See the repository installation guide before writing media.\n\n"
+                     "Install into existing partitions with XFS root and a separate /boot: FAT32 ESP for UEFI or ext4 for native boot. See the repository installation guide before writing media.\n\n"
                      "Live login: live / live. The live account has local administrative access. Installed systems use a new password and have no live autologin.\n\n"
                      "All release architectures passed the configured QEMU ISO boot and XFS installation/reboot checks. This is virtual-machine coverage; physical hardware compatibility depends on its firmware and graphics support.\n\n"
                      "Verify SHA256SUMS and GitHub artifact attestations before use. The signed APK repository snapshot contains custom packages and the public signing key. Build records include package inventories, SPDX metadata and test logs.\n")

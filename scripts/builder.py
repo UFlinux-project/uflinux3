@@ -502,8 +502,8 @@ class Builder:
         self.tools("xorriso", "mtools", "squashfs-tools", "zstd", "util-linux", "syslinux" if self.args.arch in {"x86", "x86_64"} else "util-linux")
         if self.args.arch == "s390x":
             self.chroot("apk", "add", "s390-tools")
-        else:
-            self.chroot("apk", "add", "grub", "grub-ieee1275" if self.args.arch == "ppc64le" else "grub-efi")
+        elif self.args.arch == "ppc64le":
+            self.chroot("apk", "add", "grub", "grub-ieee1275")
         for name, digest in LOCK["image"]["patches"].items():
             if hashlib.sha512((PROJECT / "patches" / name).read_bytes()).hexdigest() != digest:
                 raise RuntimeError("Image compression patch differs from the source lock: " + name)
@@ -513,6 +513,11 @@ class Builder:
         shutil.copy2(self.root / "usr/sbin/update-kernel", image_tools / "update-kernel")
         self.chroot("patch", "--batch", "--fuzz=0", "-d", "/opt/uflinux/bin", "-p1",
                     "-i", "/project/patches/update-kernel-zstd.patch")
+        # mkimage builds its kernel in a separate root. Select our init wrapper
+        # without changing Alpine's installed mkinitfs or its configuration.
+        wrapper = image_tools / "mkinitfs"
+        wrapper.write_text('#!/bin/sh\nexec /sbin/mkinitfs -i /project/aports/uflinux/uflinux-initramfs-init "$@"\n')
+        wrapper.chmod(0o755)
         self.signing_key(release=self.args.release)
         final = self.out / "repository" / self.args.arch
         if not final.is_dir():
@@ -560,7 +565,8 @@ class Builder:
                    "--repository", "/repo", "--repository", f"{LOCK['alpine']['mirror']}/{LOCK['alpine']['branch']}/main",
                    "--repository", f"{LOCK['alpine']['mirror']}/{LOCK['alpine']['branch']}/community"]
         self.chroot(*command, extra_env={"PATH": "/opt/uflinux/bin:" + self.env["PATH"],
-                                         "complevel_zstd": "-" + str(LOCK["image"]["initramfs_level"])})
+                                         "complevel_zstd": "-" + str(LOCK["image"]["initramfs_level"]),
+                                         "features_dir": "/project/aports/uflinux /etc/mkinitfs/features.d"})
         target = self.out / "images" / self.args.arch
         target.mkdir(parents=True, exist_ok=True)
         for path in (self.root / "image-out").glob("*"):
@@ -619,7 +625,7 @@ class Builder:
 
     def verify_installed(self):
         (self.out / "checks" / self.args.arch / "verified.json").unlink(missing_ok=True)
-        self.tools("pax-utils", "file", "dbus", "shadow", "wayland-utils", "wlrctl", "wlr-randr", "grim", "procps", "pulseaudio-utils", "libnotify", "py3-gobject3", "py3-atspi", "wtype", "gcc", "musl-dev", "wayland-dev", "desktop-file-utils")
+        self.tools("pax-utils", "file", "dbus", "shadow", "wayland-utils", "wlrctl", "wlr-randr", "grim", "procps", "pulseaudio-utils", "libnotify", "py3-gobject3", "py3-atspi", "wtype", "gcc", "musl-dev", "wayland-dev", "libxkbcommon-dev", "desktop-file-utils")
         self.put("etc/apk/keys/uflinux.rsa.pub", (self.out / "repository/uflinux.rsa.pub").read_text())
         repo = self.root / "repo" / self.args.arch
         if repo.exists():
@@ -673,7 +679,7 @@ class Builder:
         if machine != expected or elf_type != 3:
             raise RuntimeError("Ironbar must be a position-independent executable for the target architecture")
         settings_binaries = {}
-        for relative in ("usr/bin/uflinux-settings", "usr/bin/uflinux-settingsctl",
+        for relative in ("usr/bin/uflinux-start-menu", "usr/bin/uflinux-settings", "usr/bin/uflinux-settingsctl",
                          "usr/libexec/uflinux-settingsd", "usr/libexec/uflinux-settings-system", "usr/sbin/connmand"):
             path = self.root / relative
             data = path.read_bytes()[:64]

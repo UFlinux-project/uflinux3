@@ -2,7 +2,7 @@
 pkgname=uflinux-settings
 pkgver=0.1.0
 pkgrel=0
-pkgdesc="Lightweight GTK4 settings and quick controls for UFLinux"
+pkgdesc="UFLinux Settings, quick controls and resident Start menu"
 url="${UFLINUX_PROJECT_URL:-https://github.com}"
 arch="x86 x86_64 aarch64 armv7 ppc64le s390x riscv64"
 license="GPL-3.0-only"
@@ -27,8 +27,8 @@ prepare() {
 	default_prepare
 	cargo fetch --locked --target="$CTARGET"
 	# Source bundles normalize timestamps. Never reuse stale workspace binaries.
-	cargo clean -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
-	cargo clean --release -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
+	cargo clean -p uflinux-start-menu -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
+	cargo clean --release -p uflinux-start-menu -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
 }
 build() {
 	RUSTFLAGS="$RUSTFLAGS --remap-path-prefix=$builddir=/usr/src/uflinux-settings" \
@@ -39,6 +39,8 @@ check() {
 }
 package() {
 	local target="${CARGO_TARGET_DIR:-target}/release"
+	install -Dm755 "$target/uflinux-start-menu" "$pkgdir/usr/bin/uflinux-start-menu"
+	install -Dm644 data/org.uflinux.StartMenu.service "$pkgdir/usr/share/dbus-1/services/org.uflinux.StartMenu.service"
 	install -Dm755 "$target/uflinux-settings" "$pkgdir/usr/bin/uflinux-settings"
 	install -Dm755 "$target/uflinux-settingsctl" "$pkgdir/usr/bin/uflinux-settingsctl"
 	install -Dm755 "$target/uflinux-settingsd" "$pkgdir/usr/libexec/uflinux-settingsd"

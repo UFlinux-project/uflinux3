@@ -9,13 +9,13 @@ license="GPL-3.0-only"
 depends="uflinux-desktop=$pkgver-r$pkgrel"
 subpackages="uflinux-release:release uflinux-defaults:defaults uflinux-desktop:desktop
 	uflinux-live:live uflinux-live-openrc:live_openrc uflinux-installer:installer
-	uflinux-bootsplash-openrc:bootsplash_openrc"
+	uflinux-bootsplash-openrc:bootsplash_openrc uflinux-initramfs:initramfs"
 # Configuration and installer checks are run by scripts/check.py and verify.
 options="!check"
 makedepends="rsvg-convert"
 builddir="$srcdir"
 source="uflinux-openrc.conf uflinux.plymouth uflinux.script uflinux-spinner.svg plymouthd.conf
-	uflinux-bootsplash uflinux-splash.initd uflinux-splash-stop.initd LICENSE uflinux-session uflinux-compositor uflinux-autostart uflinux-start-panel uflinux-install
+	uflinux-bootsplash uflinux-initramfs-init uflinux-initramfs-splash uflinux-plymouth.files uflinux-splash.initd uflinux-splash-stop.initd LICENSE uflinux-session uflinux-compositor uflinux-autostart uflinux-start-panel uflinux-install
 	uflinux-live.initd uflinux.desktop uflinux-logo.svg artwork-NOTICE labwc-rc.xml labwc-menu.xml
 	labwc-autostart labwc-environment ironbar.toml ironbar.css fuzzel.ini mako.conf
 	gtk-settings.ini themerc greetd-installed.toml greetd-live.toml greetd.pam
@@ -34,6 +34,9 @@ package() {
 	install -Dm644 "$srcdir/logo.png" "$pkgdir/usr/share/plymouth/themes/uflinux/logo.png"
 	install -Dm644 "$srcdir/spinner.png" "$pkgdir/usr/share/plymouth/themes/uflinux/spinner.png"
 	install -Dm644 "$srcdir/plymouthd.conf" "$pkgdir/etc/plymouth/plymouthd.conf"
+	install -Dm755 "$srcdir/uflinux-initramfs-init" "$pkgdir/usr/libexec/uflinux-initramfs-init"
+	install -Dm755 "$srcdir/uflinux-initramfs-splash" "$pkgdir/usr/libexec/uflinux-initramfs-splash"
+	install -Dm644 "$srcdir/uflinux-plymouth.files" "$pkgdir/etc/mkinitfs/features.d/uflinux-plymouth.files"
 	install -Dm755 "$srcdir/uflinux-bootsplash" "$pkgdir/usr/libexec/uflinux-bootsplash"
 	install -Dm755 "$srcdir/uflinux-splash.initd" "$pkgdir/etc/init.d/uflinux-splash"
 	install -Dm755 "$srcdir/uflinux-splash-stop.initd" "$pkgdir/etc/init.d/uflinux-splash-stop"
@@ -105,13 +108,22 @@ release() {
 defaults() {
 	pkgdesc="UFLinux labwc and Windows 10-inspired Ironbar defaults"
 	license="GPL-3.0-only AND CC-BY-SA-3.0 AND CC0-1.0"
-	depends="adw-gtk3 papirus-icon-theme plymouth plymouth-drm"
+	depends="adw-gtk3 papirus-icon-theme uflinux-initramfs=$pkgver-r$pkgrel"
 	replaces="plymouth greetd greetd-agreety-config fuzzel connman connman-openrc iwd busybox-openrc"
 	replaces_priority=100
-	amove etc/plymouth usr/share/plymouth
-	amove etc/rc.conf.d etc/xdg etc/greetd etc/pam.d etc/connman etc/iwd etc/conf.d usr/bin usr/libexec \
+	amove usr/libexec/uflinux-autostart usr/libexec/uflinux-compositor usr/libexec/uflinux-network-init usr/libexec/uflinux-start-panel
+	amove etc/rc.conf.d etc/xdg etc/greetd etc/pam.d etc/connman etc/iwd etc/conf.d usr/bin \
 		usr/share/wayland-sessions usr/share/backgrounds usr/share/themes usr/share/dbus-1 \
 		usr/share/icons usr/share/licenses/uflinux-defaults
+}
+
+initramfs() {
+	pkgdesc="UFLinux early boot animation and mkinitfs integration"
+	depends="mkinitfs plymouth plymouth-drm"
+	replaces="plymouth"
+	replaces_priority=100
+	amove etc/plymouth etc/mkinitfs usr/share/plymouth \
+		usr/libexec/uflinux-bootsplash usr/libexec/uflinux-initramfs-init usr/libexec/uflinux-initramfs-splash
 }
 
 desktop() {
@@ -158,23 +170,26 @@ fe0731a7ce022b0c57029e6eed375cf7264ce92805ad8483be0d7c4a16603d9b18e5df075551400a
 cea1e1131fab86599f8d817c5b2359767403f0d29d1b8bf9dc2256ea820a323a377e227c1e7281aa49bf58879d00b57a46068806f82e144cc314bd87273c7d4c  uflinux-spinner.svg
 f84c9a47c270e9985d8dbe84fc4e39f63ef6ca41be69d459b676781258783c665b9e989c3dfb671133fd5a557ccad094a3057ef9b7b47033ba4099e3583b6cf2  plymouthd.conf
 2f118c48d9b91386ff00b0f427e4384b4c16d08ae06d0ba03442d3a1f75f017a01e7dd1f0b676244e86a17b6fbd71cc68a28d0b345815b077b4848c9fd2b21e9  uflinux-bootsplash
+bca7c4ad389440091c54e86213aae47a2f3c5e43399930d694deb3ff38f91563cbb98d8bdc8793d3a0a6fbba4c6e7885effa801bd9ca2c62ab7e832ead0e04da  uflinux-initramfs-init
+f1c3efa7e12ec821d099c4bd0c3406ec6eade14d9da67082c24c89c55de3db624bff2b71c9a4f538714c8b993279218bf83f2f144ec783c732c15cb29f7d5bc8  uflinux-initramfs-splash
+5d746ff66e54f5cbb1c47e6b7b06d63968dbc6a1472b1249548d6dd3020f541748f75f6f130643291b72088788d11a418405b1aabdc2c00c24c8baa34fd9692a  uflinux-plymouth.files
 e92feea7df43f10d1191032283fd882e81a63046158d362fcfb018d89dd31ba2664b6f58aa1546acc749928b31b72d67c45c985ef7595a2c651be0cf7be4b124  uflinux-splash.initd
 a4df2659edcc5ad83752f9b61ef9331885ab422c66e273ab2c8da35fa606b69d33ce20769ba9a12090535d6a4e0ed994c767c54971f1774f24e43ea08620c116  uflinux-splash-stop.initd
 d361e5e8201481c6346ee6a886592c51265112be550d5224f1a7a6e116255c2f1ab8788df579d9b8372ed7bfd19bac4b6e70e00b472642966ab5b319b99a2686  LICENSE
 2182b688fa7faf1126861a816d35aab1c82b42411de1ba9cd161955df0d665202662b06cfef1766c42f2c2660bc31464f697e36d9b92661ee970fd80b9b5f84d  uflinux-session
 1e5eedf741904d0ebbab6f34aa3424683a87724d92d3e9dfbd2edc5e99645bd207185890807b6374ca02390cbe8dba64f32b609ac445e8f71a29edfef8939eec  uflinux-compositor
-e530b691671bc6965c698fcb394c16c609c0842b9a57b4041f7c4cea199298790dd097fcdff635a9da3e394430d7103f8a9ec3de09ba3d01e2550dd29ec54f5d  uflinux-autostart
+8f519911a1df4dec9cc195c9ea49c10d785d719efb9e06dbd8f5571c2eeec9e34a7766f6f7be7c44b75b691a731e79d9db9c971da0c70cbb562a4b330c81956c  uflinux-autostart
 9cf0caf7163fbedd72f3da76febb0da1be63fd7ca636c688638e3e46c72a08469248ddf1da1a9ff1ca240ff583af18c40ef601ab9d8f1214ed9035423e0debfb  uflinux-start-panel
-c5709de1bd7cf626a20ba4db8a5579645a1557fc3967c46de466d8bfd52b17faf4ae63822cfe5f9f1944d195d4e3106c581d4f47099d6dac4a2fffd9fc931a6b  uflinux-install
+4d323e34d77b0b1f0d4a289042304ec6f0b518c8073ff9743909db2ef283c513ddcbf900330440d841b0e5ba7899fdc0e61db0d55c1572d743e01c26a87d956c  uflinux-install
 153f498b540da75c6398e7eb271d360ee2ced012d2cd5c77d11d8833c48bcd12fc51f2e46169f7351b38a8e8e7faa24c790776fe5d6537d78b6dafa497eec49f  uflinux-live.initd
 e6df4f4a610b45f3426de64299f2fcc0e53691cf4f62a571cc9a3a0c168628042f31ea328e202bcec79d0aa62204e370265b38ea131772c8c548a5b1a19a9d11  uflinux.desktop
 f1c52e9fb8613e71ef77817ffcfad4638be5fba1c606218562955ad6a0d75a087bce62ed514d8687af9fa25940d64513ba0b535f1de370c51a1db9b2ed399256  uflinux-logo.svg
 89b7074aeb57025a702b731948ccf015d46fdddc53a563f7be26d58e22e0610017aeb894843c1b95441c88cbe07e9529e2915c4b154cad39575204c56f8a423f  artwork-NOTICE
-ed9d8d8dc88af9ed3e71c0729e9d4daf7feb3bad706ce56f4299f9d31c03668db4ff4adf44d57ecc8b4ae9e29db770bb6b18ad7149b1283926328aa2121ac2df  labwc-rc.xml
+579e91d56cd6514ed73dad33fa93c42484b9498471da97dad80da9c27e153b21811291534d97e602ec164b1f3bc49757c3e09df74ab4123e3b6dc7366b251475  labwc-rc.xml
 454f49f78008059ac7ff6080e5111f9c20fcd373e5cbf465fa7fb1f779417b790f46278fd04a21bf57639e4c6ae8081b0f7c87a0a439d447e735e371ab244a4a  labwc-menu.xml
 f25b2a1b852ea3519078d149f2ab86eedaddb811a2f4c6437a4e572072ddf7b758fa8b2570c9ba6f266ed2ac585a5e3f11e056a8e6e77df3de89c8814f9acb7e  labwc-autostart
 f635e02bd8f0b6b859571a578336b978585dc93baae7a6a9d4ee74aa038d29c813706cd72ae5c8a90391b0f05d37b33bcfb8c146c969ffbd6da5680dcd6dd9ed  labwc-environment
-e732e56528c4deb22113460804936ee5579d01faa6e87efc55eb4da4b7228a8398badbfc6608ac9c061f2709e3082795cfbe16058e1ee45142b803c3531678ac  ironbar.toml
+e83ed462488da68d8c0317beadfde767425d720d87ea07705518c2e3426f893d701128342d6df8efcbba5fca7e308ca0e1d45c0809421788fd5a7feedee15d37  ironbar.toml
 ccc8ee50ecdaa3522fa6f968c6cb8aeded1db53f0c6511c24e2e562412f4df01f870d356ab2a4f74eea9ab3fdbca8ca9a83bccc982431bd14932d331d809f7a0  ironbar.css
 5f07d27a727c86e7962ea0ecce130e4a0c7b3d2470dc6ad0c55c41aa2626c47151e57505ae1e6881f9238259968ae1c732f28db4cf62e8fd3888b6bad700d5be  fuzzel.ini
 3a49c15b1f8ee2a7eae01e4dbeb595d7ff00eabbb2f02003496cd781d2a9bacc38dcbb1e0d03a079a6cd61d6d39c756a52478dbd86f017515fde17f40f733e7d  mako.conf

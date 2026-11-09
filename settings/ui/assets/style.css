@@ -11,19 +11,3 @@
 .uflinux-settings .display-box { background: #1a5b8c; color: white; padding: 20px; border: 2px solid #3584e4; }
 .uflinux-settings .suggested-action { background: #1c71d8; color: white; }
 .uflinux-settings .network-name { font-weight: bold; }
-
-/* The shell is transparent and only the card paints a background. */
-.uflinux-settings.start-shell { background: transparent; }
-.uflinux-settings .start-card { background: @theme_bg_color; color: @theme_fg_color; border: 1px solid alpha(@theme_fg_color, 0.18); border-radius: 14px; padding: 12px; box-shadow: 0 4px 16px alpha(black, 0.25); }
-.uflinux-settings .start-heading { opacity: 0.7; padding: 3px 8px; }
-.uflinux-settings .start-apps { background: transparent; }
-.uflinux-settings .start-apps row { border-radius: 6px; padding: 0; }
-.uflinux-settings .start-apps row:selected { background: alpha(@theme_selected_bg_color, 0.45); }
-.uflinux-settings .start-app-row { min-height: 38px; padding: 2px 8px; }
-.uflinux-settings .start-shortcut { padding: 3px 6px; min-height: 28px; }
-.uflinux-settings .start-places { min-width: 160px; }
-.uflinux-settings .start-places image { -gtk-icon-size: 18px; }
-.uflinux-settings .start-places separator { margin: 8px 4px; }
-.uflinux-settings .start-power { min-width: 28px; min-height: 28px; padding: 3px; }
-.uflinux-settings .start-card searchentry { border-radius: 8px; min-height: 32px; }
-.uflinux-settings .start-shortcut label { font-weight: normal; }

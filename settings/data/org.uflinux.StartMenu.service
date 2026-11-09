@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.uflinux.StartMenu
+Exec=/usr/bin/uflinux-start-menu --daemon

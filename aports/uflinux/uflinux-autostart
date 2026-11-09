@@ -7,5 +7,6 @@ if [ -n "${GSK_RENDERER:-}" ]; then dbus-update-activation-environment GSK_RENDE
 /usr/libexec/pipewire-launcher &
 mako &
 /usr/libexec/uflinux-settingsd &
+uflinux-start-menu --daemon &
 /usr/libexec/uflinux-start-panel &
 wait

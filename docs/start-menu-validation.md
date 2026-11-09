@@ -1,6 +1,7 @@
 # Start menu validation — 9 November 2026
 
-This record covers the new plain GTK4 launcher in `.cache/start-out/`, separately
+This historical record predates the separate resident launcher. It covers the
+original plain GTK4 launcher in `.cache/start-out/`, separately
 from previous development images. The earlier tested Plymouth image remains in
 `.cache/splash-final-out/`. This is a development-key build, not a published release.
 

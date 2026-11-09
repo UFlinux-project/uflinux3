@@ -210,18 +210,20 @@ def main():
                 network_clock = {"network": json.loads(re.search(r"UFLINUX_NETWORK_VM:(\{[^\r\n]*\})", radio).group(1)),
                                  "clock": json.loads(re.search(r"UFLINUX_CLOCK_VM:(\{[^\r\n]*\})", clock).group(1))}
                 (out / "network-clock.json").write_text(json.dumps(network_clock, indent=2) + "\n")
-            if args.arch in {"x86", "x86_64", "ppc64le"} or args.mode == "uefi":
+            if args.arch == "ppc64le" or args.mode == "uefi":
                 special = "size=512M,type=U" if args.mode == "uefi" else (
                     "size=8M,type=9e1a2d38-c612-4316-aa26-8b49521e5a8b" if args.arch == "ppc64le" else "size=2M,type=21686148-6449-6e6f-744e-656564454649")
                 layout = [special, "size=1G,type=L", "size=4G,type=L", "size=64M,type=L"]
                 root_part, boot_part, keep_part = 3, 2, 4
             else:
-                layout = ["size=1G,type=L", "size=4G,type=L", "size=64M,type=L"]
+                boot_layout = "size=1G,type=L,attrs=LegacyBIOSBootable" if args.arch in {"x86", "x86_64"} else "size=1G,type=L"
+                layout = [boot_layout, "size=4G,type=L", "size=64M,type=L"]
                 root_part, boot_part, keep_part = 2, 1, 3
             guest(child, "test -b /dev/vda; printf '%s\\n' " + " ".join(shlex.quote(x) for x in ["label: gpt", *layout]) + " | sfdisk /dev/vda")
-            guest(child, f"mkfs.xfs -f /dev/vda{root_part}; mkfs.ext4 -q /dev/vda{boot_part}; mount /dev/vda{root_part} /mnt; mkdir /mnt/boot; mount /dev/vda{boot_part} /mnt/boot")
             if args.mode == "uefi":
-                guest(child, "mkfs.vfat -F32 /dev/vda1; mkdir /mnt/boot/efi; mount /dev/vda1 /mnt/boot/efi")
+                guest(child, f"mkfs.xfs -f /dev/vda{root_part}; mkfs.vfat -F32 /dev/vda1; mount /dev/vda{root_part} /mnt; mkdir /mnt/boot; mount /dev/vda1 /mnt/boot")
+            else:
+                guest(child, f"mkfs.xfs -f /dev/vda{root_part}; mkfs.ext4 -q /dev/vda{boot_part}; mount /dev/vda{root_part} /mnt; mkdir /mnt/boot; mount /dev/vda{boot_part} /mnt/boot")
             guest(child, f"printf UFLINUX_PRESERVE_PARTITION | dd of=/dev/vda{keep_part} conv=notrunc status=none")
             hash_output = guest(child, f"sha256sum /dev/vda{keep_part} | tee /tmp/preserved.sha256; sfdisk --dump /dev/vda > /tmp/table.before")
             preserved_hash = re.search(r"([0-9a-f]{64})\s+/dev/vda" + str(keep_part), hash_output).group(1)

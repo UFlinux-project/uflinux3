@@ -1,0 +1,22 @@
+#!/bin/sh
+# Splash failures must not interfere with finding or mounting the root filesystem.
+case "$1" in
+	prepare)
+		case " $(cat /proc/cmdline) " in
+			*" splash=no "*|*" nosplash "*|*" plymouth.enable=0 "*) exit 0 ;;
+		esac
+		if grep -qs ' /run ' /proc/mounts || mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /run; then
+			mkdir -p /run/cryptsetup /run/uflinux-splash
+			touch /run/uflinux-splash/initramfs-ready
+		fi
+		;;
+	start)
+		[ ! -e /run/uflinux-splash/initramfs-ready ] || /usr/libexec/uflinux-bootsplash start
+		;;
+	handoff)
+		if [ -e /run/uflinux-splash/started ]; then
+			timeout 2 plymouth update-root-fs --new-root-dir="$2" >/dev/null 2>&1 || :
+		fi
+		;;
+esac
+exit 0

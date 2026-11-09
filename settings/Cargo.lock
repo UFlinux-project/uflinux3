@@ -1049,6 +1049,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "uflinux-start-menu"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "gio",
+ "glib",
+ "gtk4",
+ "gtk4-layer-shell",
+ "pkg-config",
+]
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -145,9 +145,9 @@ Ironbar uses the locked feature list, `opt-level=s`, ThinLTO, eight codegen unit
 abort-on-panic, and dynamically linked Alpine libraries. Debug symbols are split
 from the runtime APK. There is no `target-cpu=native` or host instruction-set tuning.
 
-Settings uses the same release optimization and hardening practices. Its four
-Rust components share `settings/Cargo.lock`. Only the UI links GTK4; the session
-service and privileged helper do not. `cargo auditable` records dependency data.
+Settings uses the same release optimization and hardening practices. Settings
+and the resident Start menu share `settings/Cargo.lock`. Their UIs link GTK4;
+the session service and privileged helper do not. `cargo auditable` records dependency data.
 The six Settings APKs split GUI, daemon/CLI, system helper, OpenRC, documentation
 and debug symbols. Ironbar omits its NetworkManager and volume modules and carries
 the checksum-pinned `IRONBAR_OUTPUT` child-environment patch.

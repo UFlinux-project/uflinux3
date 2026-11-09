@@ -3,8 +3,9 @@
 set -eu
 results=/tmp/uflinux-settings-smoke-results
 mkdir -p "$results"
-daemon='' gui='' pulse=''
+daemon='' gui='' pulse='' launcher=''
 cleanup() {
+	[ -z "$launcher" ] || kill "$launcher" 2>/dev/null || :
 	[ -z "$gui" ] || kill "$gui" 2>/dev/null || :
 	[ -z "$daemon" ] || kill "$daemon" 2>/dev/null || :
 	[ -z "$pulse" ] || kill "$pulse" 2>/dev/null || :
@@ -100,6 +101,8 @@ PY
 wait "$gui"
 gui=''
 python3 "$(dirname "$0")/start-menu-bench.py"
+G_DEBUG=fatal-criticals uflinux-start-menu --daemon > "$results/launcher-ui.log" 2>&1 &
+launcher=$!
 G_DEBUG=fatal-criticals UFLINUX_SETTINGS_BENCH=1 /usr/bin/uflinux-settings --page network > "$results/ui.log" 2>&1 &
 gui=$!
 for _attempt in $(seq 1 30); do
@@ -152,7 +155,9 @@ if kill -0 "$gui" 2>/dev/null; then
 	exit 1
 fi
 gui=
-if grep -Eiq 'panicked at|thread.*panicked|CRITICAL|assertion.*failed' "$results/ui.log" "$results/flyout.log" "$results/service.log"; then
+kill -0 "$launcher"
+uflinux-start-menu --status | grep -q '^ready=true visible=false$'
+if grep -Eiq 'panicked at|thread.*panicked|CRITICAL|assertion.*failed' "$results/ui.log" "$results/flyout.log" "$results/service.log" "$results/launcher-ui.log"; then
 	cat "$results/ui.log" "$results/service.log" >&2
 	exit 1
 fi

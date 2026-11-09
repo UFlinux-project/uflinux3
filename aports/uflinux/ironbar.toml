@@ -9,10 +9,11 @@ popup_autohide = true
 [[start]]
 type = "custom"
 name = "start-menu"
-bar = [{ type = "button", name = "start-button", widgets = [{ type = "image", src = "file:///usr/share/icons/hicolor/scalable/apps/uflinux.svg", size = 28 }], on_click = '!uflinux-settings --start-menu --output "$IRONBAR_OUTPUT"', tooltip = "Start" }]
+bar = [{ type = "button", name = "start-button", widgets = [{ type = "image", src = "file:///usr/share/icons/hicolor/scalable/apps/uflinux.svg", size = 28 }], on_click = '!uflinux-start-menu --output "$IRONBAR_OUTPUT"', tooltip = "Start" }]
 
 [[start]]
 type = "launcher"
+disable_popup = true
 favorites = ["foot", "thunar"]
 show_names = false
 show_icons = true

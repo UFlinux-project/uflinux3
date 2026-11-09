@@ -1,0 +1,15 @@
+[package]
+name = "uflinux-start-menu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+glib.workspace = true
+gio = { workspace = true, features = ["v2_80"] }
+gtk = { package = "gtk4", version = "=0.10.1", features = ["v4_12"] }
+gtk4-layer-shell = "=0.6.3"
+
+[build-dependencies]
+cc = "1"
+pkg-config = "0.3"

@@ -54,6 +54,37 @@ def walk_devices(devices):
         yield from walk_devices(device.get("children", []))
 
 
+def bios_mbr_code(table, boot_source):
+    """Choose Syslinux MBR code only when exactly the boot partition is marked."""
+    label = table.get("label")
+    if label not in {"gpt", "dos"}:
+        raise InstallError("Syslinux BIOS boot requires a GPT or DOS partition table")
+    partitions = table.get("partitions", [])
+    marked = [part for part in partitions if
+              ("LegacyBIOSBootable" in (attr.strip() for attr in part.get("attrs", "").split(",")) if label == "gpt"
+               else part.get("bootable", False))]
+    boot = Path(boot_source).resolve()
+    if len(marked) != 1 or Path(marked[0]["node"]).resolve() != boot:
+        flag = "LegacyBIOSBootable GPT attribute" if label == "gpt" else "bootable MBR flag"
+        raise InstallError(f"Set the {flag} on /boot only before installing Syslinux")
+    if label == "dos":
+        number = re.search(r"(\d+)$", marked[0]["node"])
+        if not number or int(number.group(1)) > 4:
+            raise InstallError("Syslinux BIOS on MBR requires /boot on a primary partition")
+    return "/usr/share/syslinux/gptmbr.bin" if label == "gpt" else "/usr/share/syslinux/mbr.bin"
+
+
+def install_bios_mbr(disk, code_path):
+    # Syslinux's MBR is exactly the boot code: preserve disk ID and partition table.
+    code = Path(code_path).read_bytes()
+    if len(code) != 440:
+        raise InstallError("Unexpected Syslinux MBR size; refusing to write the disk")
+    with open(disk, "r+b", buffering=0) as device:
+        if device.write(code) != len(code):
+            raise InstallError("Could not write the complete Syslinux MBR")
+        os.fsync(device.fileno())
+
+
 def preflight(args):
     if os.geteuid() != 0:
         raise InstallError("Run this installer with doas from the live session")
@@ -65,32 +96,33 @@ def preflight(args):
     if str(target) in {"/", "/boot", "/home", "/etc", "/usr", "/var"}:
         raise InstallError("Refusing to use a live system directory as the installation root")
     root = mounted(target, "xfs")
-    boot = mounted(target / "boot", "ext4")
+    mode = args.boot_mode
+    if mode == "auto":
+        mode = "uefi" if Path("/sys/firmware/efi").exists() else "native"
+    boot = mounted(target / "boot", "vfat" if mode == "uefi" else "ext4")
     if root["source"] == boot["source"]:
         raise InstallError("/boot must be a separate filesystem")
     unexpected = {p.name for p in target.iterdir()} - {"boot", "lost+found"}
     if unexpected:
         raise InstallError("Target root must be empty apart from boot and lost+found")
     arch = output("apk", "--print-arch")
-    mode = args.boot_mode
-    if mode == "auto":
-        mode = "uefi" if Path("/sys/firmware/efi").exists() else "native"
     esp = None
     if mode == "uefi":
         if arch in {"ppc64le", "s390x"}:
             raise InstallError(f"UEFI is not supported for {arch}")
-        esp = mounted(target / "boot/efi", "vfat")
+        esp = boot
         if output("blkid", "--probe", "-s", "VERSION", "-o", "value", esp["source"]) != "FAT32":
             raise InstallError("The EFI system partition must be FAT32")
-        loader = "grub"
+        loader = "systemd-boot"
     elif arch in {"x86", "x86_64", "ppc64le"}:
-        loader = "grub"
+        loader = "grub" if arch == "ppc64le" else "syslinux"
         if not args.boot_disk:
             raise InstallError("--boot-disk is required for BIOS and PowerPC installations")
     elif arch == "s390x":
         loader = "zipl"
     else:
         raise InstallError(f"Boot the {arch} ISO through UEFI; board-specific U-Boot installation is outside this installer")
+    mbr_code = None
     if args.boot_disk:
         disk = Path(args.boot_disk).resolve()
         if not disk.exists() or not stat.S_ISBLK(disk.stat().st_mode):
@@ -109,11 +141,14 @@ def preflight(args):
         types = {str(entry.get("parttype", "")).lower() for entry in entries}
         if arch == "ppc64le" and not types.intersection({"0x41", "41", "9e1a2d38-c612-4316-aa26-8b49521e5a8b"}):
             raise InstallError("PowerPC requires an existing PReP boot partition")
-        if arch in {"x86", "x86_64"} and mode != "uefi" and devices[0].get("pttype") == "gpt":
-            if "21686148-6449-6e6f-744e-656564454649" not in types:
-                raise InstallError("BIOS on GPT requires an existing BIOS boot partition")
+        if loader == "syslinux":
+            try:
+                table = json.loads(output("sfdisk", "--json", str(disk)))["partitiontable"]
+            except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError) as exc:
+                raise InstallError("Cannot inspect the BIOS boot disk partition table") from exc
+            mbr_code = bios_mbr_code(table, boot["source"])
     return {"target": str(target), "root": root, "boot": boot, "esp": esp,
-            "arch": arch, "mode": mode, "loader": loader, "boot_disk": args.boot_disk}
+            "arch": arch, "mode": mode, "loader": loader, "boot_disk": args.boot_disk, "mbr_code": mbr_code}
 
 
 def write(root, name, value, mode=0o644):
@@ -123,9 +158,9 @@ def write(root, name, value, mode=0o644):
     path.chmod(mode)
 
 
-def make_overlay(directory, args, repositories=None):
+def make_overlay(directory, args, repositories=None, uefi=False):
     write(directory, "etc/hostname", args.hostname + "\n")
-    write(directory, "etc/apk/world", "alpine-base\nuflinux\nxfsprogs\nlinux-firmware-none\n")
+    write(directory, "etc/apk/world", "alpine-base\nuflinux\nxfsprogs\nlinux-firmware-none\n" + ("systemd-boot\n" if uefi else ""))
     write(directory, "etc/shadow", "root:!:19000:0:99999:7:::\n", 0o600)
     write(directory, "etc/network/interfaces", "auto lo\niface lo inet loopback\n")
     serial = {"aarch64": "ttyAMA0", "armv7": "ttyAMA0", "ppc64le": "hvc0", "s390x": "ttysclp0"}.get(args.arch, "ttyS0")
@@ -163,6 +198,25 @@ def temporary_repositories(path, text):
         path.write_bytes(original)
 
 
+EFI_ARCH = {"x86": "ia32", "x86_64": "x64", "aarch64": "aa64",
+            "armv7": "arm", "riscv64": "riscv64"}
+
+
+def install_systemd_boot(target, plan):
+    """Use the removable-media fallback path; kernel updates write directly to the ESP."""
+    suffix = EFI_ARCH[plan["arch"]]
+    boot = target / "boot"
+    binary = target / "usr/lib/systemd/boot/efi" / f"systemd-boot{suffix}.efi"
+    fallback = boot / "EFI/BOOT" / f"BOOT{suffix.upper()}.EFI"
+    fallback.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(binary, fallback)
+    write(boot, "loader/loader.conf", "default uflinux.conf\ntimeout 1\n")
+    serial = {"aarch64": "ttyAMA0", "armv7": "ttyAMA0"}.get(plan["arch"], "ttyS0")
+    write(boot, "loader/entries/uflinux.conf", "title UFLinux\nlinux /vmlinuz-lts\n"
+          "initrd /initramfs-lts\n"
+          f"options root=UUID={plan['root']['uuid']} rootfstype=xfs rw console=tty0 console={serial},115200\n")
+
+
 def install(args, plan, password):
     target = Path(plan["target"])
     args.arch = plan["arch"]
@@ -182,11 +236,11 @@ def install(args, plan, password):
         temporary = Path(temporary)
         overlay = temporary / "overlay"
         overlay.mkdir()
-        make_overlay(overlay, args, install_repositories)
+        make_overlay(overlay, args, install_repositories, plan["mode"] == "uefi")
         archive = temporary / "install.apkovl.tar.gz"
         with tarfile.open(archive, "w:gz", dereference=False) as tar:
             tar.add(overlay / "etc", arcname="etc")
-        command = ["setup-disk", "-m", "sys", "-k", "lts", "-B", plan["loader"], "-o", str(archive)]
+        command = ["setup-disk", "-m", "sys", "-k", "lts", "-B", "none" if plan["mode"] == "uefi" else plan["loader"], "-o", str(archive)]
         if plan["boot_disk"]:
             command.extend(["-b", plan["boot_disk"]])
         command.append(str(target))
@@ -197,6 +251,18 @@ def install(args, plan, password):
             env["USE_EFI"] = "1"
         with temporary_repositories(source_repositories, install_repositories):
             run(*command, env=env)
+    # setup-disk generates its own mkinitfs.conf, so extend it after installation.
+    initfs_conf = target / "etc/mkinitfs/mkinitfs.conf"
+    with initfs_conf.open("a") as config:
+        config.write('\nfeatures="$features kms uflinux-plymouth"\ninit=/usr/libexec/uflinux-initramfs-init\n')
+    kernels = sorted((target / "lib/modules").glob("*-lts"))
+    if not kernels:
+        raise InstallError("Installed LTS kernel modules are missing; cannot build initramfs")
+    run("chroot", str(target), "mkinitfs", "-o", "/boot/initramfs-lts", kernels[-1].name)
+    if plan["mode"] == "uefi":
+        install_systemd_boot(target, plan)
+    elif plan["loader"] == "syslinux":
+        install_bios_mbr(plan["boot_disk"], plan["mbr_code"])
     write(target, "etc/apk/repositories", full_repositories)
     run("chroot", str(target), "adduser", "-D", "-s", "/bin/ash", "-G", "users", args.user)
     run("chroot", str(target), "addgroup", args.user, "wheel")

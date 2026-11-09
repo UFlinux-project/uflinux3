@@ -1,0 +1,18 @@
+.uflinux-start-menu .description { opacity: 0.75; }
+.uflinux-start-menu .error { color: #c01c28; padding: 8px; }
+/* The shell is transparent and only the card paints a background. */
+.uflinux-start-menu.start-shell { background: transparent; }
+.uflinux-start-menu .start-card { background: @theme_bg_color; color: @theme_fg_color; border: 1px solid alpha(@theme_fg_color, 0.18); border-radius: 14px; padding: 12px; box-shadow: 0 4px 16px alpha(black, 0.25); }
+.uflinux-start-menu .start-heading { opacity: 0.7; padding: 3px 8px; }
+.uflinux-start-menu .start-apps { background: transparent; }
+.uflinux-start-menu .start-apps row { border-radius: 6px; padding: 0; }
+.uflinux-start-menu .start-apps row:selected { background: alpha(@theme_selected_bg_color, 0.45); }
+.uflinux-start-menu .start-app-row { min-height: 38px; padding: 2px 8px; }
+.uflinux-start-menu .start-shortcut { padding: 3px 6px; min-height: 28px; }
+.uflinux-start-menu .start-places { min-width: 160px; }
+.uflinux-start-menu .start-places image { -gtk-icon-size: 18px; }
+.uflinux-start-menu .start-places separator { margin: 8px 4px; }
+.uflinux-start-menu .start-power { min-width: 28px; min-height: 28px; padding: 3px; }
+.uflinux-start-menu .start-card searchentry { border-radius: 8px; min-height: 32px; }
+.uflinux-start-menu .start-shortcut label { font-weight: normal; }
+.uflinux-start-menu .start-confirmation { padding: 8px; border: 1px solid alpha(@theme_fg_color, 0.18); border-radius: 8px; }

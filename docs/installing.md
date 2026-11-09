@@ -14,9 +14,11 @@ commands destroy data; the installer intentionally does not run them.
 Required layout:
 
 - `/mnt`: a writable, empty XFS filesystem, normally at least 8 GiB for use.
-- `/mnt/boot`: a separate ext4 filesystem; 1 GiB is a practical default.
-- UEFI: FAT32 EFI system partition at `/mnt/boot/efi`; 512 MiB is a practical default.
-- BIOS with GPT: an existing unformatted BIOS boot partition with the BIOS boot GUID.
+- UEFI: a FAT32 EFI system partition mounted at `/mnt/boot`; 1 GiB is a practical default.
+- BIOS, PowerPC, and s390x: a separate ext4 filesystem at `/mnt/boot`; 1 GiB is a practical default.
+- BIOS on GPT: set the `LegacyBIOSBootable` attribute on the `/boot` partition.
+- BIOS on MBR: use a primary partition for `/boot` and set its bootable (active) flag.
+  It must be the only partition with that flag.
 - PowerPC: an existing PReP boot partition in addition to root and `/boot`.
 - s390x: storage and boot configuration suitable for zipl.
 
@@ -48,7 +50,9 @@ installation are outside this ISO installer. An ESP must be FAT32, not just a
 filesystem identified as vfat.
 
 Alpine's `setup-disk` receives a clean overlay, writes UUID-based mounts and XFS
-initramfs configuration, and installs the appropriate bootloader. The installed
+initramfs configuration, and installs the appropriate bootloader. UEFI uses
+systemd-boot with its kernel and initramfs directly on the ESP, so package updates
+update the files that firmware will actually boot. The installed
 system gets a new regular user, password-authenticated `doas`, locked root, and a
 normal greetd login. Live credentials, live autologin, and live-only services are
 excluded. If installation fails, do not boot the partial target; inspect the
