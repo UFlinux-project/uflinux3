@@ -14,11 +14,10 @@ builddir="$srcdir/ironbar-cac7d684ddc7e26315b4e269b93143ab92c71757"
 options="net"
 
 _features="battery,cli,clock,config+toml,custom,launcher,tray"
-export CARGO_PROFILE_RELEASE_OPT_LEVEL=s
-export CARGO_PROFILE_RELEASE_LTO=thin
+export CARGO_PROFILE_RELEASE_OPT_LEVEL=3
+export CARGO_PROFILE_RELEASE_LTO=fat
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=8
 export CARGO_PROFILE_RELEASE_PANIC=abort
-export CARGO_PROFILE_RELEASE_DEBUG=1
 export CARGO_PROFILE_TEST_DEBUG=0
 export CARGO_INCREMENTAL=0
 
@@ -30,6 +29,8 @@ prepare() {
 }
 
 build() {
+	# abuild enables Rust debug info when a -dbg subpackage exists.
+	unset CARGO_PROFILE_RELEASE_DEBUG
 	mkdir -p "${CARGO_TARGET_DIR:-target}"
 	apk info -v > "${CARGO_TARGET_DIR:-target}/uflinux-build-packages.txt"
 	# Do not replace Alpine's RUSTFLAGS or select the runner's CPU instruction set.

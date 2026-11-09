@@ -21,6 +21,9 @@ $serial::respawn:/sbin/getty -L 115200 $serial vt100
 ::shutdown:/sbin/openrc shutdown
 EOF
 printf '%s\n' alpine-base uflinux uflinux-live uflinux-installer linux-firmware > "$tmp/etc/apk/world"
+case "$ARCH" in
+	x86|x86_64|aarch64|armv7|riscv64) printf '%s\n' efibootmgr >> "$tmp/etc/apk/world" ;;
+esac
 printf '%s\n' "${UFLINUX_REPOSITORY_URL:?}" \
 	'https://dl-cdn.alpinelinux.org/alpine/v3.24/main' \
 	'https://dl-cdn.alpinelinux.org/alpine/v3.24/community' > "$tmp/etc/apk/repositories"

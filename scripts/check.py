@@ -54,9 +54,15 @@ for name, digest in lock["image"]["patches"].items():
     assert hashlib.sha512((ROOT / "patches" / name).read_bytes()).hexdigest() == digest
 profile=tomllib.loads((ROOT / "settings/Cargo.toml").read_text())["profile"]["release"]
 recipe=(ROOT / "aports/uflinux-settings/APKBUILD").read_text()
-for setting in ("opt-level","lto","codegen-units","panic","debug"):
+for setting in ("codegen-units", "panic"):
     variable="CARGO_PROFILE_RELEASE_"+setting.upper().replace("-","_")
     assert f"export {variable}={profile[setting]}" in recipe, f"abuild must enforce {variable}"
+for setting in ("OPT_LEVEL", "LTO"):
+    assert re.search(rf"^export CARGO_PROFILE_RELEASE_{setting}=\S+", recipe, re.M), f"abuild must set {setting}"
+assert "debug" not in profile, "Settings release profile must use Cargo's default debug level"
+for origin in ("ironbar", "uflinux-settings"):
+    recipe = (ROOT / "aports" / origin / "APKBUILD").read_text()
+    assert "unset CARGO_PROFILE_RELEASE_DEBUG" in recipe, f"{origin} must clear abuild's debug override"
 for path in (ROOT / ".github/workflows").glob("*.yml"):
     for action in re.findall(r"uses:\s*([^\s#]+)", path.read_text()):
         if not action.startswith("./"):

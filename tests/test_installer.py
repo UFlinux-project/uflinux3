@@ -40,6 +40,28 @@ class InstallerTests(unittest.TestCase):
         return SimpleNamespace(**dict(dict(target=str(target), user="alice", hostname="uflinux", arch="x86_64",
                                           boot_mode="bios", boot_disk=None, dry_run=True), **overrides))
 
+    def test_early_graphics_selects_only_active_gpu_modules(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target, drm = root / 'target', root / 'drm'
+            gpu = target / 'lib/modules/6-lts/kernel/drivers/gpu/drm'
+            for name in ('virtio/virtio_gpu.ko.gz', 'amd/amdgpu.ko.gz'):
+                path = gpu / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+            driver_module = root / 'sys/module/virtio_gpu'
+            driver_module.mkdir(parents=True)
+            driver = drm / 'card0/device/driver'
+            driver.mkdir(parents=True)
+            (driver / 'module').symlink_to(driver_module)
+            (drm / 'card0-HDMI-A-1').mkdir()
+            installer.configure_early_graphics(target, '6-lts', drm)
+            feature = target / 'etc/mkinitfs/features.d/uflinux-graphics.modules'
+            self.assertEqual(feature.read_text(), 'kernel/drivers/gpu/drm/virtio/virtio_gpu.ko*\n')
+            (driver / 'module').unlink()
+            installer.configure_early_graphics(target, '6-lts', drm)
+            self.assertEqual(feature.read_text(), '')
+
     def test_live_root_rejected_before_commands(self):
         with patch.object(installer.os, "geteuid", return_value=0), patch.object(installer, "run") as run:
             with self.assertRaises(installer.InstallError):
@@ -142,13 +164,29 @@ class InstallerTests(unittest.TestCase):
             binary = root / "usr/lib/systemd/boot/efi/systemd-bootx64.efi"
             binary.parent.mkdir(parents=True)
             binary.write_bytes(b"efi test binary")
-            plan = {"arch": "x86_64", "root": {"uuid": "1234-abcd"}}
-            installer.install_systemd_boot(root, plan)
+            plan = {"arch": "x86_64", "root": {"uuid": "1234-abcd"},
+                    "efi_target": {"disk": "/dev/vda", "partition": 1}}
+            with patch.object(installer, "run") as register, \
+                 patch.object(Path, "is_dir", return_value=True), patch.object(Path, "is_mount", return_value=True):
+                installer.install_systemd_boot(root, plan)
+            register.assert_called_once_with("efibootmgr", "--create", "--disk", "/dev/vda",
+                                             "--part", "1", "--label", "UFLinux",
+                                             "--loader", "\\EFI\\BOOT\\BOOTX64.EFI")
             self.assertEqual((root / "boot/EFI/BOOT/BOOTX64.EFI").read_bytes(), b"efi test binary")
             entry = (root / "boot/loader/entries/uflinux.conf").read_text()
             self.assertIn("root=UUID=1234-abcd", entry)
             self.assertIn("linux /vmlinuz-lts", entry)
             self.assertIn("initrd /initramfs-lts", entry)
+
+    def test_efi_partition_must_have_system_partition_type(self):
+        part = {"path": "/dev/vda1", "type": "part", "partn": 1, "pkname": "/dev/vda",
+                "parttype": "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"}
+        with patch.object(installer, "output", return_value=json.dumps({"blockdevices": [part]})):
+            self.assertEqual(installer.efi_partition("/dev/vda1"), {"disk": "/dev/vda", "partition": 1})
+        part["parttype"] = "0fc63daf-8483-4772-8e79-3d69d8477de4"
+        with patch.object(installer, "output", return_value=json.dumps({"blockdevices": [part]})):
+            with self.assertRaisesRegex(installer.InstallError, "EFI partition type"):
+                installer.efi_partition("/dev/vda1")
 
     def test_uefi_overlay_installs_systemd_boot(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(Path, "glob", return_value=[]):

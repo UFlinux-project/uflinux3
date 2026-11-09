@@ -16,7 +16,7 @@ import time
 
 import pexpect
 from builder import sha, download
-from vm_control import qmp, memory_mib, check_boot_errors
+from vm_control import qmp, memory_mib, check_boot_errors, expect_login_prompt
 
 ROOT = Path(__file__).resolve().parents[1]
 ARCHES = json.loads((ROOT / "config/architectures.json").read_text())
@@ -87,7 +87,7 @@ def guest(child, script, admin=True):
 
 
 def login(child, user, password):
-    child.expect(r"login: ")
+    expect_login_prompt(child)
     child.sendline(user)
     child.expect("Password:")
     child.sendline(password)
@@ -241,6 +241,8 @@ def main():
             child.sendline("uflinux-test-password")
             child.expect(r"\r*\nUFLINUX_RC:0\r*\n")
             guest(child, "test $(findmnt -n -o FSTYPE /mnt) = xfs; ! grep -q '^live:' /mnt/etc/passwd; ! grep -q initial_session /mnt/etc/greetd/config.toml; sha256sum -c /tmp/preserved.sha256; sfdisk --dump /dev/vda > /tmp/table.after; cmp /tmp/table.before /tmp/table.after")
+            if args.mode == "uefi":
+                guest(child, "test -s /mnt/boot/EFI/BOOT/BOOT*.EFI; test -s /mnt/boot/loader/entries/uflinux.conf; ls -lh /mnt/boot/initramfs-lts; efibootmgr -v")
             if args.arch == "x86_64":
                 # Install only the measurement harness interpreter from the signed
                 # media. Opening the complete online index can pull kernel firmware

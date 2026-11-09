@@ -49,8 +49,8 @@ installations are rejected with a lock; `--dry-run` does not change repositories
 
 UEFI is detected from the running firmware by default. ARM and RISC-V
 installations in this version require UEFI; board-specific U-Boot and Raspberry Pi
-installation are outside this ISO installer. An ESP must be FAT32, not just a
-filesystem identified as vfat.
+installation are outside this ISO installer. An ESP must be FAT32 and have the EFI system partition type. The installer
+registers UFLinux in UEFI firmware as well as installing its fallback boot path.
 
 Alpine's `setup-disk` receives a clean overlay, writes UUID-based mounts and XFS
 initramfs configuration, and installs the appropriate bootloader. UEFI uses
@@ -60,6 +60,14 @@ system gets a new regular user, password-authenticated `doas`, locked root, and 
 normal greetd login. Live credentials, live autologin, and live-only services are
 excluded. If installation fails, do not boot the partial target; inspect the
 reported failure and clean/reprepare the target before retrying.
+
+The installed initramfs includes the graphics drivers active during installation
+and their dependencies, limiting the firmware needed for early graphics. Other
+drivers and the full firmware collection remain available after the root filesystem
+mounts. If the graphics hardware changes, the system may use the firmware
+framebuffer during early boot; reinstalling or updating
+`/etc/mkinitfs/features.d/uflinux-graphics.modules` and rebuilding the initramfs
+restores early loading for the new graphics driver.
 
 Unmount target filesystems and remove the live media before booting the installed
 system. Reconnect through Settings if Wi-Fi credentials are needed; live network secrets are

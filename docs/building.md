@@ -141,9 +141,10 @@ and gzip without timestamps. GitHub uses the source commit time. These controls
 help reproducibility; byte-for-byte reproducibility is not claimed until two
 clean builds with identical resolved packages have been compared.
 
-Ironbar uses the locked feature list, `opt-level=s`, ThinLTO, eight codegen units,
-abort-on-panic, and dynamically linked Alpine libraries. Debug symbols are split
-from the runtime APK. There is no `target-cpu=native` or host instruction-set tuning.
+Ironbar and Settings use `opt-level=3`, fat LTO, eight codegen units,
+abort-on-panic, and dynamically linked Alpine libraries. Their release builds use
+Cargo's default Rust debug-info level; Alpine still splits any available debug
+symbols into the debug APKs. There is no `target-cpu=native` or host instruction-set tuning.
 
 Settings uses the same release optimization and hardening practices. Settings
 and the resident Start menu share `settings/Cargo.lock`. Their UIs link GTK4;

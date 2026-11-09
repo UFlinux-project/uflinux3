@@ -17,11 +17,10 @@ source="$pkgname-$pkgver.tar"
 export CARGO_INCREMENTAL=0
 export CARGO_PROFILE_TEST_DEBUG=0
 # abuild exports release-profile overrides; enforce the distro's chosen settings.
-export CARGO_PROFILE_RELEASE_OPT_LEVEL=s
-export CARGO_PROFILE_RELEASE_LTO=thin
+export CARGO_PROFILE_RELEASE_OPT_LEVEL=3
+export CARGO_PROFILE_RELEASE_LTO=fat
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=8
 export CARGO_PROFILE_RELEASE_PANIC=abort
-export CARGO_PROFILE_RELEASE_DEBUG=1
 
 prepare() {
 	default_prepare
@@ -31,6 +30,8 @@ prepare() {
 	cargo clean --release -p uflinux-start-menu -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
 }
 build() {
+	# abuild enables Rust debug info when a -dbg subpackage exists.
+	unset CARGO_PROFILE_RELEASE_DEBUG
 	RUSTFLAGS="$RUSTFLAGS --remap-path-prefix=$builddir=/usr/src/uflinux-settings" \
 		cargo auditable build --workspace --release --frozen
 }

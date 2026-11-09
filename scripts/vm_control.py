@@ -29,6 +29,16 @@ def qmp(state):
             stream.close()
 
 
+def expect_login_prompt(child):
+    """Stop immediately when firmware gives up, rather than timing out on login."""
+    matched = child.expect([r"login: ", r"No bootable option or device was found\.",
+                            r"EFI stub: ERROR: Failed to load initrd: 0x8000000000000009"])
+    if matched == 1:
+        raise RuntimeError("UEFI firmware could not find a bootable device; inspect the VM console log")
+    if matched == 2:
+        raise RuntimeError("UEFI ran out of resources loading the initramfs; inspect its size and VM memory")
+
+
 def memory_mib(arch, installed=False):
     """Diskless live roots need RAM for unpacked APKs as well as the desktop."""
     if not installed:

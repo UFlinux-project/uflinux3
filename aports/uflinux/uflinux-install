@@ -28,6 +28,27 @@ def output(*args):
     return run(*args, stdout=subprocess.PIPE).stdout.strip()
 
 
+def configure_early_graphics(target, kernel, drm=Path('/sys/class/drm')):
+    """Include the active graphics drivers, not every GPU and its firmware."""
+    modules = set()
+    for card in drm.glob('card*'):
+        if not re.fullmatch(r'card[0-9]+', card.name):
+            continue
+        module = card / 'device/driver/module'
+        if module.exists():
+            modules.add(module.resolve().name.replace('-', '_'))
+    gpu = target / 'lib/modules' / kernel / 'kernel/drivers/gpu'
+    paths = set()
+    if gpu.exists():
+        for module in gpu.rglob('*.ko*'):
+            name = module.name.split('.ko', 1)[0].replace('-', '_')
+            if name in modules and module.is_file():
+                paths.add(str(module.relative_to(target / 'lib/modules' / kernel)).split('.ko', 1)[0] + '.ko*')
+    feature = target / 'etc/mkinitfs/features.d/uflinux-graphics.modules'
+    feature.parent.mkdir(parents=True, exist_ok=True)
+    feature.write_text(''.join(path + '\n' for path in sorted(paths)))
+
+
 def mounted(path, filesystem):
     try:
         result = json.loads(output("findmnt", "--json", "--mountpoint", str(path),
@@ -85,6 +106,26 @@ def install_bios_mbr(disk, code_path):
         os.fsync(device.fileno())
 
 
+def efi_partition(source):
+    """Identify a direct EFI system partition for firmware registration."""
+    try:
+        info = json.loads(output("lsblk", "--json", "--nodeps", "--paths", "--output",
+                                 "PATH,TYPE,PARTN,PKNAME,PARTTYPE", source))["blockdevices"]
+        if len(info) != 1:
+            raise ValueError("expected one device")
+        part = info[0]
+        partition = int(part["partn"])
+        parent = part["pkname"]
+        parttype = (part.get("parttype") or "").lower()
+        if part["type"] != "part" or partition < 1 or not parent:
+            raise ValueError("not a direct partition")
+        if parttype not in {"c12a7328-f81f-11d2-ba4b-00a0c93ec93b", "0xef", "ef"}:
+            raise ValueError("incorrect partition type")
+        return {"disk": parent, "partition": partition}
+    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        raise InstallError("/boot must be a directly attached EFI system partition with the EFI partition type") from exc
+
+
 def preflight(args):
     if os.geteuid() != 0:
         raise InstallError("Run this installer with doas from the live session")
@@ -111,12 +152,14 @@ def preflight(args):
     if mode == "bios" and arch not in {"x86", "x86_64"}:
         raise InstallError("BIOS mode is only available for x86 and x86_64")
     esp = None
+    efi_target = None
     if mode == "uefi":
         if arch in {"ppc64le", "s390x"}:
             raise InstallError(f"UEFI is not supported for {arch}")
         esp = boot
         if output("blkid", "--probe", "-s", "VERSION", "-o", "value", esp["source"]) != "FAT32":
             raise InstallError("The EFI system partition must be FAT32")
+        efi_target = efi_partition(esp["source"])
         loader = "systemd-boot"
     elif arch in {"x86", "x86_64", "ppc64le"}:
         loader = "grub" if arch == "ppc64le" else "syslinux"
@@ -152,7 +195,7 @@ def preflight(args):
                 raise InstallError("Cannot inspect the BIOS boot disk partition table") from exc
             mbr_code = bios_mbr_code(table, boot["source"])
     return {"target": str(target), "root": root, "boot": boot, "esp": esp,
-            "arch": arch, "mode": mode, "loader": loader, "boot_disk": args.boot_disk, "mbr_code": mbr_code}
+            "arch": arch, "mode": mode, "loader": loader, "boot_disk": args.boot_disk, "mbr_code": mbr_code, "efi_target": efi_target}
 
 
 def write(root, name, value, mode=0o644):
@@ -219,6 +262,15 @@ def install_systemd_boot(target, plan):
     write(boot, "loader/entries/uflinux.conf", "title UFLinux\nlinux /vmlinuz-lts\n"
           "initrd /initramfs-lts\n"
           f"options root=UUID={plan['root']['uuid']} rootfstype=xfs rw console=tty0 console={serial},115200\n")
+    target_disk = plan["efi_target"]
+    variables = Path("/sys/firmware/efi/efivars")
+    if not variables.is_dir():
+        raise InstallError("UEFI variables are unavailable; boot the installer in UEFI mode")
+    if not variables.is_mount():
+        run("mount", "-t", "efivarfs", "efivarfs", str(variables))
+    run("efibootmgr", "--create", "--disk", target_disk["disk"],
+        "--part", str(target_disk["partition"]), "--label", "UFLinux",
+        "--loader", "\\EFI\\BOOT\\" + fallback.name)
 
 
 def install(args, plan, password):
@@ -257,11 +309,12 @@ def install(args, plan, password):
             run(*command, env=env)
     # setup-disk generates its own mkinitfs.conf, so extend it after installation.
     initfs_conf = target / "etc/mkinitfs/mkinitfs.conf"
-    with initfs_conf.open("a") as config:
-        config.write('\nfeatures="$features kms uflinux-plymouth"\ninit=/usr/libexec/uflinux-initramfs-init\n')
     kernels = sorted((target / "lib/modules").glob("*-lts"))
     if not kernels:
         raise InstallError("Installed LTS kernel modules are missing; cannot build initramfs")
+    configure_early_graphics(target, kernels[-1].name)
+    with initfs_conf.open("a") as config:
+        config.write('\nfeatures="$features uflinux-graphics uflinux-plymouth"\ninit=/usr/libexec/uflinux-initramfs-init\n')
     run("chroot", str(target), "mkinitfs", "-o", "/boot/initramfs-lts", kernels[-1].name)
     if plan["mode"] == "uefi":
         install_systemd_boot(target, plan)

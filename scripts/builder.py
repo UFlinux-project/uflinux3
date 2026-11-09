@@ -36,6 +36,33 @@ PACKAGE_NAMES = {
 }
 
 
+def omit_modloop_firmware(update_kernel):
+    """Adjust the image-only helper after its existing compression patch."""
+    marker = "# Refuse an image that its selected kernel cannot decompress."
+    if update_kernel.count(marker) != 1:
+        raise ValueError("Unexpected update-kernel compression section")
+    cleanup = r'''# Firmware is supplied by the live root's linux-firmware packages. Preserve
+# wireless-regdb, which is a separate package and not in linux-firmware.
+if [ -d "$MODLOOP/modules/firmware" ]; then
+    find "$MODLOOP/modules/firmware" -mindepth 1 -maxdepth 1 \
+        ! -name 'regulatory.db*' -exec rm -rf {} +
+fi
+
+'''
+    return update_kernel.replace(marker, cleanup + marker, 1)
+
+
+def check_modloop_firmware_listing(listing):
+    """Only the separately packaged wireless regulatory database may remain."""
+    prefix = "squashfs-root/modules/firmware/"
+    for line in listing.splitlines():
+        if prefix not in line:
+            continue
+        relative = line.split(prefix, 1)[1].split(" -> ", 1)[0]
+        if "/" in relative or not relative.startswith("regulatory.db"):
+            raise ValueError("Device firmware remains in the modloop: " + relative)
+
+
 def image_compression(initramfs, modloop):
     with Path(initramfs).open("rb") as stream:
         if stream.read(4) != b"\x28\xb5\x2f\xfd":
@@ -514,6 +541,8 @@ class Builder:
         shutil.copy2(self.root / "usr/sbin/update-kernel", image_tools / "update-kernel")
         self.chroot("patch", "--batch", "--fuzz=0", "-d", "/opt/uflinux/bin", "-p1",
                     "-i", "/project/patches/update-kernel-zstd.patch")
+        update_kernel = image_tools / "update-kernel"
+        update_kernel.write_text(omit_modloop_firmware(update_kernel.read_text()))
         # mkimage builds its kernel in a separate root. Select our init wrapper
         # without changing Alpine's installed mkinitfs or its configuration.
         wrapper = image_tools / "mkinitfs"
@@ -608,6 +637,10 @@ class Builder:
                         "/image-out/uflinux-" + self.args.version + "-" + self.args.arch + ".iso",
                         "-extract", "/boot/" + name, "/compression-check/" + name)
         compression = image_compression(compression_dir / "initramfs-lts", compression_dir / "modloop-lts")
+        listing = self.chroot("unsquashfs", "-ll", "/compression-check/modloop-lts",
+                              stdout=subprocess.PIPE, text=True).stdout
+        check_modloop_firmware_listing(listing)
+        compression["modloop_device_firmware"] = False
         self.chroot("zstd", "--test", "/compression-check/initramfs-lts")
         report = self.out / "checks" / self.args.arch / "compression.json"
         report.parent.mkdir(parents=True, exist_ok=True)

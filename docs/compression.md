@@ -9,7 +9,12 @@ The builder copies Alpine's `update-kernel` into an image-only tools directory
 and applies [the locked compression patch](../patches/update-kernel-zstd.patch).
 It checks the patch checksum and requires `CONFIG_RD_ZSTD=y` and
 `CONFIG_SQUASHFS_ZSTD=y` in the selected kernel configuration before proceeding.
-Alpine's installed helper and installed-system mkinitfs settings are unchanged.
+The image-only helper removes device firmware from the modloop before signing;
+the wireless regulatory database remains there. Alpine's mkinitfs still selects
+firmware for initramfs drivers, and the live root includes the full
+`linux-firmware` package collection. Devices that need firmware before the live
+root is populated depend on the initramfs selection. Alpine's installed helper
+and installed-system mkinitfs settings are unchanged.
 
 After ISO extraction, the builder checks the Zstandard frame magic, SquashFS
 compressor identifier and block size, and tests the complete initramfs stream.

@@ -8,7 +8,7 @@ import threading
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from vm_control import qmp, memory_mib, check_boot_errors
+from vm_control import qmp, memory_mib, check_boot_errors, expect_login_prompt
 
 
 class ControlTests(unittest.TestCase):
@@ -51,6 +51,20 @@ class ControlTests(unittest.TestCase):
 
 
 class BootTests(unittest.TestCase):
+    def test_firmware_failure_does_not_wait_for_login_timeout(self):
+        class Console:
+            def __init__(self, result): self.result = result
+            def expect(self, patterns):
+                self.patterns = patterns
+                return self.result
+        console = Console(1)
+        with self.assertRaisesRegex(RuntimeError, "could not find a bootable device"):
+            expect_login_prompt(console)
+        self.assertTrue(any("No bootable option" in pattern for pattern in console.patterns))
+        with self.assertRaisesRegex(RuntimeError, "out of resources loading the initramfs"):
+            expect_login_prompt(Console(2))
+        expect_login_prompt(Console(0))
+
     def test_live_budget_does_not_change_installed_acceptance_budget(self):
         for arch in ("x86", "x86_64", "armv7", "aarch64", "s390x", "ppc64le", "riscv64"):
             self.assertEqual(memory_mib(arch), 3072 if arch == "armv7" else 4096)

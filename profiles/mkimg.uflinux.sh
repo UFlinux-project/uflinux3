@@ -24,6 +24,9 @@ profile_uflinux() {
 	apks="$apks uflinux uflinux-live uflinux-installer linux-lts linux-firmware
 		systemd-boot xfsprogs e2fsprogs dosfstools util-linux vulkan-loader mesa-vulkan-ati"
 	case "$ARCH" in
+		x86|x86_64|aarch64|armv7|riscv64) apks="$apks efibootmgr" ;;
+	esac
+	case "$ARCH" in
 		x86|x86_64) apks="$apks mesa-vulkan-intel mesa-vulkan-nouveau mesa-vulkan-virtio" ;;
 		aarch64) apks="$apks mesa-vulkan-asahi mesa-vulkan-broadcom mesa-vulkan-freedreno mesa-vulkan-imagination mesa-vulkan-intel mesa-vulkan-nouveau mesa-vulkan-panfrost mesa-vulkan-virtio" ;;
 	esac

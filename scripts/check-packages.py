@@ -42,6 +42,8 @@ def check(arch):
             fields=dict(line.split(":",1) for line in entry.splitlines() if ":" in line)
             if "P" in fields and "V" in fields: versions[fields["P"]]=fields["V"]
     boots = {"grub-ieee1275"} if arch == "ppc64le" else {"s390-tools"} if arch == "s390x" else {"systemd-boot"}
+    if arch in {"x86", "x86_64", "aarch64", "armv7", "riscv64"}:
+        boots.add("efibootmgr")
     if arch in {"x86", "x86_64"}:
         boots.update({"syslinux", "amd-ucode", "intel-ucode"})
     if arch in {"x86", "x86_64"}:
