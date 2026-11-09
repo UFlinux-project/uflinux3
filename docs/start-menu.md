@@ -26,7 +26,7 @@ errors appear inside the menu. Power-button policy remains in Settings.
 Search receives focus on opening. Arrow keys navigate applications and Enter
 launches the selection. Escape first cancels confirmation, then clears search,
 returns from All Applications and finally closes the menu. Outside clicks close
-it immediately. Start and quick settings replace each other while a full Settings
+it immediately. Start and the Network, Sound and Power menus replace each other while a full Settings
 window can remain open.
 
 `uflinux-start-menu [--output NAME]` opens or toggles the menu on the
@@ -46,8 +46,7 @@ measured results and architecture coverage.
 
 The launcher does not connect to the Settings state service or register a polkit
 agent at startup. Settings shortcuts launch `uflinux-settings`; session actions
-use login1 and initialize authorization only when requested. Start and quick
-settings dismiss each other through D-Bus actions without starting the other app.
+use login1 and initialize authorization only when requested. Start and the status menus dismiss each other through D-Bus actions without starting the other app.
 `uflinux-settings --start-menu` remains a compatibility alias for user bindings.
 
 `uflinux-start-menu --daemon` starts or ensures the hidden resident process.
@@ -57,3 +56,12 @@ it does not destroy the catalog or widgets. Desktop-file changes refresh the
 catalog while hidden, and monitor removal dismisses the menu. Resident memory
 is part of the desktop's background cost; the old nonresident measurements in
 the validation record do not establish this version's memory or latency.
+
+The taskbar has separate Network, Sound and Power buttons with Papirus symbolic
+icons. They track connection, output volume and battery state. Sound includes
+input/output and application controls; Power includes battery information,
+brightness and power profiles. The corresponding Settings page provides advanced
+controls. Open a panel directly with `uflinux-settings --panel network|sound|power
+--output NAME`; `--quick-settings` opens Network for compatibility. The settings
+service reads system batteries and updates the panel after device changes or an
+Ironbar restart. Desktop systems use a bolt icon.

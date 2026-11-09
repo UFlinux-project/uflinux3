@@ -462,4 +462,14 @@ pub struct Power {
     pub on_battery: bool,
     pub button_handler_running: bool,
     pub can_suspend: bool,
+    #[serde(default)]
+    pub batteries: Vec<Battery>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Battery {
+    pub name: String,
+    pub percent: Option<u8>,
+    pub status: String,
+    pub energy_full: Option<u64>,
 }

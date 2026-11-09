@@ -72,13 +72,17 @@ pub fn page(app: &Rc<App>, parent: &gtk::Box) {
             group.append(&row(&card.description, &dropdown));
         }
     });
+    applications(app, parent, Surface::Full);
+}
+
+pub fn applications(app: &Rc<App>, parent: &gtk::Box, surface: Surface) {
     section(parent, "Applications");
     let group = column();
     parent.append(&group);
     let target = group.downgrade();
     let weak = Rc::downgrade(app);
     let last = RefCell::new(String::new());
-    app.bind_for(Surface::Full, &group, move |s| {
+    app.bind_for(surface, &group, move |s| {
         let signature = s
             .audio
             .streams
@@ -100,7 +104,7 @@ pub fn page(app: &Rc<App>, parent: &gtk::Box) {
             let weak = Rc::downgrade(&app);
             slider(
                 &app,
-                Surface::Full,
+                surface,
                 &group,
                 &name,
                 move |s| {
@@ -135,7 +139,7 @@ pub fn page(app: &Rc<App>, parent: &gtk::Box) {
             let weak = Rc::downgrade(&app);
             toggle(
                 &app,
-                Surface::Full,
+                surface,
                 &group,
                 "Mute application",
                 move |s| {
@@ -169,6 +173,7 @@ pub fn page(app: &Rc<App>, parent: &gtk::Box) {
         }
     });
 }
+
 pub fn basic(app: &Rc<App>, parent: &gtk::Box, surface: Surface) {
     section(parent, "Sound");
     let unavailable = description("");
@@ -220,6 +225,25 @@ pub fn basic(app: &Rc<App>, parent: &gtk::Box, surface: Surface) {
             input: false,
             device: String::new(),
             muted,
+        },
+    );
+    slider(
+        app,
+        surface,
+        parent,
+        "Input volume",
+        |s| {
+            s.audio
+                .inputs
+                .iter()
+                .find(|d| d.name == s.audio.default_input)
+                .map(|d| d.volume)
+                .unwrap_or(0.)
+        },
+        |percent| Action::SetVolume {
+            input: true,
+            device: String::new(),
+            percent,
         },
     );
     toggle(

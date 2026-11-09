@@ -6,6 +6,7 @@ use std::{cell::RefCell, rc::Rc, time::Instant};
 pub struct App {
     pub application: gtk::Application,
     pub agent: RefCell<Option<auth::Agent>>,
+    pub authorization_active: std::cell::Cell<bool>,
     menu: RefCell<Option<Rc<Menu>>>,
     activation: RefCell<Instant>,
 }
@@ -19,7 +20,11 @@ pub fn run() {
     let slot = controller.clone();
     application.connect_startup(move |application| {
         let css = gtk::CssProvider::new();
-        css.load_from_string(include_str!("style.css"));
+        css.load_from_string(&format!(
+            "{}\n{}",
+            crate::popup::CSS,
+            include_str!("style.css")
+        ));
         if let Some(display) = gtk::gdk::Display::default() {
             gtk::style_context_add_provider_for_display(
                 &display,
@@ -30,6 +35,7 @@ pub fn run() {
         let app = Rc::new(App {
             application: application.clone(),
             agent: RefCell::new(None),
+            authorization_active: std::cell::Cell::new(false),
             menu: RefCell::new(None),
             activation: RefCell::new(Instant::now()),
         });

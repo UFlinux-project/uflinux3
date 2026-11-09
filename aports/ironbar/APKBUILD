@@ -9,7 +9,8 @@ license="MIT"
 makedepends="cargo cargo-auditable gtk4.0-dev gtk4-layer-shell-dev openssl-dev"
 subpackages="$pkgname-dbg $pkgname-doc"
 source="$pkgname-$pkgver.tar.gz::https://codeload.github.com/JakeStanger/ironbar/tar.gz/cac7d684ddc7e26315b4e269b93143ab92c71757
-	ironbar-output-environment.patch"
+	ironbar-output-environment.patch
+	ironbar-symbolic-icons.patch"
 builddir="$srcdir/ironbar-cac7d684ddc7e26315b4e269b93143ab92c71757"
 options="net"
 
@@ -51,4 +52,5 @@ package() {
 sha512sums="
 8ea1634af954c61b68fdcb450e7ffea4910abc40dc6f945d4d02708a373e89913a7647aab35c4925d35b25930c6014c6a9b45eea82c9dd71e5ad60ad9c6a3234  ironbar-0.19.1.tar.gz
 7aeb5ad98107dee258c9f5df3dbc6a79181ee3d138753dfe607de033f3d3f8cbb916b9d6712d686a9696764c6b747bf8f655babb7a33cb239533460579b6c45d  ironbar-output-environment.patch
+274f958aee0a9e361f5223de5ebe03c46621a93d00e08b74aafbd45e636b49b28dbaf492fa371476806a01828a02bca30ff6b14a2926a005d0b2c9f218e824a3  ironbar-symbolic-icons.patch
 "

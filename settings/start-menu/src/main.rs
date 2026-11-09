@@ -1,4 +1,6 @@
 mod app;
+#[path = "../../shared/popup.rs"]
+mod popup;
 // Authorization is shared UI code, initialized only for an explicit power action.
 #[path = "../../ui/src/auth.rs"]
 mod auth;

@@ -2,7 +2,7 @@
 
 Boot a matching ISO using firmware supported for that architecture. The desktop
 logs in as `live`; serial consoles use **live / live**. The account can run `doas`
-without a password. Use the taskbar quick settings or Settings → Network to
+without a password. Use the taskbar Network menu or Settings → Network to
 configure ConnMan+iwd networking. `connmanctl` is available on the console.
 The live desktop and its core packages boot from the media without a network.
 The live image and installed system include Alpine’s full `linux-firmware`
@@ -89,10 +89,10 @@ Review `.apk-new` files after upgrades if you have edited system defaults.
 
 Use `~/.config/labwc/`, `~/.config/ironbar/config.toml`, and
 `~/.config/ironbar/style.css` for personal overrides. Defaults live in
-`/etc/xdg`. Ironbar uses its packaged defaults when user files are absent and
-omits the battery widget on machines without a battery. Super+Space opens the
+`/etc/xdg`. Ironbar uses its packaged defaults when user files are absent. The Power icon
+shows battery status where available and a bolt on desktops. Super+Space opens the
 launcher; Super+Enter opens a terminal; Super+E opens files; Super+D shows the
-desktop. Super+I opens Settings; the taskbar status button opens quick settings.
+desktop. Super+I opens Settings; the taskbar has separate Network, Sound and Power menus.
 Audio and brightness hotkeys use the same settings backend.
 
 To roll back a custom package, inspect the retained versions with `apk policy`,

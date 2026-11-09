@@ -1,18 +1,17 @@
-* { font-family: "DejaVu Sans", sans-serif; font-size: 12px; border-radius: 0; }
-.background { background: #1f1f1f; color: #ffffff; }
-button { background: transparent; color: #ffffff; border: none; box-shadow: none; padding: 0 10px; min-height: 38px; }
-button:hover { background: #414141; }
-button:active, button:checked { background: #505050; }
-#start-button { min-width: 56px; padding: 0; }
-#start-button label { font-size: 26px; }
-#start-button:hover { color: #59b7ff; }
+* { font-family: "DejaVu Sans", sans-serif; font-size: 12px; }
+.background { background: @theme_bg_color; color: @theme_fg_color; }
+button { background: transparent; color: @theme_fg_color; border: none; box-shadow: none; border-radius: 6px; padding: 0 10px; min-height: 34px; margin: 3px 1px; }
+button:hover { background: alpha(@theme_fg_color, 0.10); }
+button:active, button:checked { background: alpha(@theme_selected_bg_color, 0.35); }
+#start-button { min-width: 56px; padding: 0 10px; }
+#start-button label { font-size: 12px; margin-left: 6px; }
+#network-button, #sound-button, #power-button { min-width: 32px; padding: 0 4px; }
 .launcher .item { min-width: 40px; padding: 0 6px; border-bottom: 2px solid transparent; }
-.launcher .item.open { border-bottom-color: #76b9ed; }
-.launcher .item.focused { background: #414141; border-bottom-color: #76b9ed; }
+.launcher .item.open { border-bottom-color: @theme_selected_bg_color; }
+.launcher .item.focused { background: alpha(@theme_fg_color, 0.10); border-bottom-color: @theme_selected_bg_color; }
 .clock { font-size: 11px; padding: 0 10px; }
 .tray { padding: 0 6px; }
-.popup { background: #292929; color: #ffffff; border: 1px solid #515151; padding: 12px; }
+.popup { background: @theme_bg_color; color: @theme_fg_color; border: 1px solid alpha(@theme_fg_color, 0.18); border-radius: 14px; padding: 12px; }
 calendar, label { color: inherit; }
-calendar:selected { background: #0078d7; color: #ffffff; }
-scale highlight { background: #0078d7; }
-tooltip { background: #292929; color: #ffffff; border: 1px solid #515151; }
+calendar:selected, scale highlight { background: @theme_selected_bg_color; color: @theme_selected_fg_color; }
+tooltip { background: @theme_bg_color; color: @theme_fg_color; border: 1px solid alpha(@theme_fg_color, 0.18); border-radius: 6px; }

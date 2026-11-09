@@ -66,7 +66,8 @@
     "codegen_units": 8,
     "panic": "abort",
     "patches": {
-      "ironbar-output-environment.patch": "7aeb5ad98107dee258c9f5df3dbc6a79181ee3d138753dfe607de033f3d3f8cbb916b9d6712d686a9696764c6b747bf8f655babb7a33cb239533460579b6c45d"
+      "ironbar-output-environment.patch": "7aeb5ad98107dee258c9f5df3dbc6a79181ee3d138753dfe607de033f3d3f8cbb916b9d6712d686a9696764c6b747bf8f655babb7a33cb239533460579b6c45d",
+      "ironbar-symbolic-icons.patch": "274f958aee0a9e361f5223de5ebe03c46621a93d00e08b74aafbd45e636b49b28dbaf492fa371476806a01828a02bca30ff6b14a2926a005d0b2c9f218e824a3"
     }
   },
   "aports_commit": "3db0a46d5ef507f6faaa9c0c0fc52181a277e9b7",

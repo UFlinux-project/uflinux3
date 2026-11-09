@@ -25,45 +25,7 @@ pub fn page(app: &Rc<App>, parent: &gtk::Box) {
             ));
         }
     });
-    section(parent, "Power mode");
-    let profiles = [
-        PowerProfile::PowerSaver,
-        PowerProfile::Balanced,
-        PowerProfile::Performance,
-    ];
-    let labels = profiles.iter().map(|p| tr(p.label())).collect::<Vec<_>>();
-    let drop = gtk::DropDown::from_strings(&labels.iter().map(|s| s.as_str()).collect::<Vec<_>>());
-    parent.append(&row("Power mode", &drop));
-    let guard = Rc::new(Cell::new(false));
-    let flag = guard.clone();
-    let weak = Rc::downgrade(app);
-    drop.connect_selected_notify(move |drop| {
-        if !flag.get() {
-            if let (Some(app), Some(profile)) =
-                (weak.upgrade(), profiles.get(drop.selected() as usize))
-            {
-                app.execute(
-                    Action::SetPowerProfile { profile: *profile },
-                    Some(drop.clone().upcast()),
-                );
-            }
-        }
-    });
-    let target = drop.downgrade();
-    app.bind_for(Surface::Full, &drop, move |s| {
-        if let Some(drop) = target.upgrade() {
-            guard.set(true);
-            drop.set_sensitive(s.power.available);
-            drop.set_selected(
-                s.power
-                    .profile
-                    .and_then(|p| profiles.iter().position(|v| *v == p))
-                    .map(|n| n as u32)
-                    .unwrap_or(gtk::INVALID_LIST_POSITION),
-            );
-            guard.set(false);
-        }
-    });
+    profile(app, parent, Surface::Full);
     parent.append(&description("Power saver favors lower energy use. Balanced is the default. Performance favors responsiveness. The effect depends on the drivers and hardware available."));
     section(parent, "Power button");
     parent.append(&description("Choose what a short press of your device’s power button does. Holding the button to force power off is controlled by the hardware."));
@@ -121,5 +83,59 @@ pub fn page(app: &Rc<App>, parent: &gtk::Box) {
         note.set_text(if !s.power.button_handler_running{"Power-button handling is not running or this device has no supported input event."}
             else if !s.power.can_suspend{"Suspend is unavailable on this hardware. Shut down and Do nothing remain available."}
             else{"System sleep and shutdown inhibitors are respected. Changes require administrator authorization."});
+    });
+}
+
+pub fn profile(app: &Rc<App>, parent: &gtk::Box, surface: Surface) {
+    section(parent, "Power mode");
+    let status = description("");
+    parent.append(&status);
+    let target = status.downgrade();
+    app.bind_for(surface, &status, move |state| {
+        if let Some(status) = target.upgrade() {
+            status.set_text(if state.power.available {
+                ""
+            } else {
+                "Power profiles are unavailable."
+            });
+        }
+    });
+    let profiles = [
+        PowerProfile::PowerSaver,
+        PowerProfile::Balanced,
+        PowerProfile::Performance,
+    ];
+    let labels = profiles.iter().map(|p| tr(p.label())).collect::<Vec<_>>();
+    let drop = gtk::DropDown::from_strings(&labels.iter().map(|s| s.as_str()).collect::<Vec<_>>());
+    parent.append(&row("Power mode", &drop));
+    let guard = Rc::new(Cell::new(false));
+    let flag = guard.clone();
+    let weak = Rc::downgrade(app);
+    drop.connect_selected_notify(move |drop| {
+        if !flag.get() {
+            if let (Some(app), Some(profile)) =
+                (weak.upgrade(), profiles.get(drop.selected() as usize))
+            {
+                app.execute(
+                    Action::SetPowerProfile { profile: *profile },
+                    Some(drop.clone().upcast()),
+                );
+            }
+        }
+    });
+    let target = drop.downgrade();
+    app.bind_for(surface, &drop, move |s| {
+        if let Some(drop) = target.upgrade() {
+            guard.set(true);
+            drop.set_sensitive(s.power.available);
+            drop.set_selected(
+                s.power
+                    .profile
+                    .and_then(|p| profiles.iter().position(|v| *v == p))
+                    .map(|n| n as u32)
+                    .unwrap_or(gtk::INVALID_LIST_POSITION),
+            );
+            guard.set(false);
+        }
     });
 }

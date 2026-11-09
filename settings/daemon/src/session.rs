@@ -144,6 +144,7 @@ pub fn run() -> Result<()> {
                 old.timezone!=next.timezone||old.ntp_enabled!=next.ntp_enabled||old.ntp_running!=next.ntp_running||old.synchronized!=next.synchronized||old.servers!=next.servers};
             app.view.borrow_mut().datetime=next;if changed{app.publish();}
             app.refresh_power();
+            app.publish(); // Resynchronize after Ironbar has restarted.
             glib::ControlFlow::Continue
         });
         let mainloop=glib::MainLoop::new(None,false);
@@ -293,8 +294,10 @@ impl App {
                 })
                 .unwrap_or_else(|| "Audio unavailable".into());
             let power = view.power.clone();
+            let icons = panel::status(&view);
             glib::MainContext::default().spawn_local(async move {
-                let _ = gio::spawn_blocking(move || ironbar(network, &volume, &power)).await;
+                let _ =
+                    gio::spawn_blocking(move || ironbar(network, &volume, &power, &icons)).await;
             });
         });
     }
@@ -966,7 +969,12 @@ fn information() -> BTreeMap<String, String> {
     data.insert("Settings".into(), env!("CARGO_PKG_VERSION").into());
     data
 }
-fn ironbar(network: &str, volume: &str, power: &Power) -> Result<()> {
+fn ironbar(
+    network: &str,
+    volume: &str,
+    power: &Power,
+    icons: &[(String, String); 3],
+) -> Result<()> {
     let path =
         PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR").ok_or("Missing runtime directory")?)
             .join("ironbar-ipc.sock");
@@ -982,6 +990,12 @@ fn ironbar(network: &str, volume: &str, power: &Power) -> Result<()> {
         )
     };
     for (key, value) in [
+        ("uflinux_network_icon", icons[0].0.clone()),
+        ("uflinux_network_tooltip", icons[0].1.clone()),
+        ("uflinux_sound_icon", icons[1].0.clone()),
+        ("uflinux_sound_tooltip", icons[1].1.clone()),
+        ("uflinux_power_icon", icons[2].0.clone()),
+        ("uflinux_power_tooltip", icons[2].1.clone()),
         ("uflinux_network", network.to_string()),
         ("uflinux_volume", volume.to_string()),
         (

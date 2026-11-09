@@ -65,6 +65,7 @@ unsafe extern "C" fn event(
         .to_string_lossy()
         .into_owned();
     if kind == 2 {
+        app.authorization_active.set(false);
         DIALOG.with(|d| {
             if let Some(window) = d.borrow_mut().take() {
                 window.destroy();
@@ -81,6 +82,7 @@ unsafe extern "C" fn event(
             window.destroy();
         }
     });
+    app.authorization_active.set(true);
     let window = gtk::ApplicationWindow::builder()
         .application(&app.application)
         .title("Administrator authorization")

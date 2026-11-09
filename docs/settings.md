@@ -8,7 +8,9 @@ Image previews are bounded; arbitrary remote wallpapers are not downloaded.
 
 ```sh
 uflinux-settings --page network
-uflinux-settings --quick-settings --output DP-1
+uflinux-settings --panel network --output DP-1
+uflinux-settings --panel sound --output DP-1
+uflinux-settings --panel power --output DP-1
 uflinux-start-menu --output DP-1
 uflinux-settingsctl status
 uflinux-settingsctl volume -5
@@ -18,12 +20,13 @@ uflinux-settingsctl power-profile balanced
 ```
 
 Other page names are `displays`, `audio`, `power`, `default-apps`, `datetime`, `appearance`
-and `about`. The quick panel provides Wi-Fi selection and credentials, network
-and radio power, output/input devices, volume, microphone mute and available
-brightness controls. Escape, focus loss or a repeated taskbar click dismisses it.
-Ironbar supplies the originating monitor through a patched child environment.
-The GUI reuses its process and exits after the last UI closes. There are no
-periodically spawned shell commands polling the panel's state.
+and `about`. The Network panel provides connection selection, credentials and
+radio controls. Sound provides input, output and application audio controls;
+Power provides battery status, brightness and power modes. Advanced options are
+available from each panel's Settings link. `--quick-settings` is an alias for the
+Network panel. Escape, an outside click or a repeated taskbar click dismisses the
+active panel. Ironbar supplies the originating monitor. The GUI reuses its
+process and exits after its last window closes; no shell processes poll status.
 
 ## Services and authorization
 

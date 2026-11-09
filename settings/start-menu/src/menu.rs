@@ -89,14 +89,7 @@ impl Menu {
             for edge in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
                 window.set_anchor(edge, true);
             }
-            if let Some(display) = gtk::gdk::Display::default() {
-                for item in display.monitors().iter::<gtk::gdk::Monitor>().flatten() {
-                    if !output.is_empty() && item.connector().as_deref() == Some(output.as_str()) {
-                        window.set_monitor(Some(&item));
-                        break;
-                    }
-                }
-            }
+            crate::popup::select_monitor(&window, &output);
         }
         let root = gtk::Overlay::new();
         let empty = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -105,6 +98,7 @@ impl Menu {
         root.set_child(Some(&empty));
         let card = gtk::Box::new(gtk::Orientation::Horizontal, 12);
         card.add_css_class("start-card");
+        card.add_css_class("uflinux-popup-card");
         card.set_halign(gtk::Align::Start);
         card.set_valign(gtk::Align::End);
         card.set_margin_start(8);
@@ -217,10 +211,6 @@ impl Menu {
             .child(&places)
             .build();
         right.append(&right_scroll);
-        let confirmation_host = widgets::column();
-        confirmation_host.set_visible(false);
-        confirmation_host.add_css_class("start-confirmation");
-        right.append(&confirmation_host);
         let power_row = gtk::Box::new(gtk::Orientation::Horizontal, 2);
         power_row.set_halign(gtk::Align::End);
         let actions = [
@@ -240,7 +230,15 @@ impl Menu {
             })
             .collect::<Vec<_>>();
         right.append(&power_row);
-        card.append(&right);
+        let right_overlay = gtk::Overlay::new();
+        right_overlay.set_child(Some(&right));
+        let confirmation_host = widgets::column();
+        confirmation_host.set_visible(false);
+        confirmation_host.set_valign(gtk::Align::End);
+        confirmation_host.set_margin_bottom(44);
+        confirmation_host.add_css_class("start-confirmation");
+        right_overlay.add_overlay(&confirmation_host);
+        card.append(&right_overlay);
         let menu = Rc::new(Self {
             window,
             output: RefCell::new(output),
@@ -593,19 +591,7 @@ impl Menu {
             (height - BAR_HEIGHT - 24).clamp(160, 560),
         );
         if let Some(surface) = self.window.surface() {
-            let region = gtk::cairo::Region::create_rectangle(&gtk::cairo::RectangleInt::new(
-                0,
-                0,
-                width,
-                (height - BAR_HEIGHT).max(0),
-            ));
-            let _ = region.union_rectangle(&gtk::cairo::RectangleInt::new(
-                0,
-                (height - BAR_HEIGHT).max(0),
-                START_WIDTH.min(width),
-                BAR_HEIGHT.min(height),
-            ));
-            surface.set_input_region(&region);
+            crate::popup::set_input_region(&surface, width, height, START_WIDTH);
         }
     }
     fn track_monitor(self: &Rc<Self>, monitor: &gtk::gdk::Monitor) {
@@ -940,7 +926,7 @@ impl Menu {
         // rapid Escape events cannot get stranded in a closing Wayland popup.
         let content = widgets::column();
         content.append(&widgets::description(&format!("{}?", tr(label))));
-        let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        let buttons = gtk::Box::new(gtk::Orientation::Vertical, 8);
         let cancel = gtk::Button::with_label(&tr("Cancel"));
         let confirm = gtk::Button::with_label(&tr(label));
         confirm.add_css_class("destructive-action");

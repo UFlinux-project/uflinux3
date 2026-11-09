@@ -7,7 +7,8 @@ uses polkit and normally exits after 45 idle seconds; saved additional routes ke
 its ConnMan subscription alive. Authentication uses libpolkit-agent-1 and PAM.
 
 Open `uflinux-settings`, use `--page network|displays|audio|power|default-apps|datetime|appearance|about`,
-or `--quick-settings --output DP-1`. The separate resident `uflinux-start-menu
+or `--panel network|sound|power --output DP-1` for the taskbar menus.
+`--quick-settings` remains an alias for the Network panel. The separate resident `uflinux-start-menu
 [--output DP-1]` toggles the ArcMenu-inspired launcher. It prepares its fixed
 favorites and application search while hidden at login. The old Settings
 `--start-menu` option forwards to this launcher for compatibility.
@@ -30,7 +31,7 @@ credentials are machine-wide in root-protected ConnMan/iwd storage.
 TLP provides Power saver, Balanced and Performance modes, with a persistent
 selection. Alpine's TLP 1.10 package includes the profile commands introduced in
 1.9; no tlp-pd or power-profiles-daemon runs alongside this service. Profiles are
-available in Settings and Ironbar Start, through `uflinux-settingsctl power-profile
+available in Settings and the Ironbar Power menu, or through `uflinux-settingsctl power-profile
 balanced`. Physical power-button behavior is configured only in Settings, with
 separate AC/battery choices. A small OpenRC service explicitly runs BusyBox acpid;
 elogind ignores the physical power key and performs the requested power action.

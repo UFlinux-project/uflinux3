@@ -167,7 +167,6 @@ pub fn list(app: &Rc<App>, parent: &gtk::Box, surface: Surface, compact: bool) {
             .network
             .services
             .iter()
-            .filter(|v| !compact || v.kind == "wifi")
             .take(if compact { 32 } else { 128 })
             .collect::<Vec<_>>();
         let next = serde_json::to_string(&services).unwrap_or_default();

@@ -3,7 +3,13 @@
 /out/
 /out-settings/
 /dist/
-/settings
+/settings/*
+!/settings/core/
+/settings/core/*
+!/settings/core/src/
+/settings/core/src/*
+!/settings/core/src/panel.rs
+!/settings/shared/
 __pycache__/
 *.pyc
 *.rsa

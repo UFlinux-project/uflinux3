@@ -32,58 +32,96 @@ pub fn build(app: &Rc<App>, page: &str, parent: &gtk::Box) {
         _ => {}
     }
 }
-pub fn quick(app: &Rc<App>, parent: &gtk::Box) {
-    parent.append(&title("Quick settings"));
-    toggle(
-        app,
-        Surface::Quick,
-        parent,
-        "Networking",
-        |s| !s.network.offline,
-        |enabled| Action::Networking { enabled },
-    );
-    toggle(
-        app,
-        Surface::Quick,
-        parent,
-        "Wi-Fi",
-        |s| {
-            s.network
-                .technologies
-                .iter()
-                .any(|t| t.kind == "wifi" && t.powered)
-        },
-        |enabled| Action::Wifi { enabled },
-    );
-    let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    actions.append(&button(app, "Scan", || Action::Scan));
-    let settings = gtk::Button::with_label("All settings");
+pub fn quick(app: &Rc<App>, parent: &gtk::Box, panel: &str) {
+    let (title_text, settings_page) = match panel {
+        "sound" => ("Sound", "audio"),
+        "power" => ("Power", "power"),
+        _ => ("Network", "network"),
+    };
+    parent.append(&title(title_text));
+    match panel {
+        "sound" => {
+            audio::basic(app, parent, Surface::Quick);
+            audio::applications(app, parent, Surface::Quick);
+        }
+        "power" => {
+            let status = description("");
+            parent.append(&status);
+            let target = status.downgrade();
+            app.bind_for(Surface::Quick, &status, move |state| {
+                if let Some(label) = target.upgrade() {
+                    let text = if state.power.batteries.is_empty() {
+                        "External power".into()
+                    } else {
+                        state
+                            .power
+                            .batteries
+                            .iter()
+                            .map(|battery| {
+                                format!(
+                                    "{}: {} · {}",
+                                    battery.name,
+                                    battery
+                                        .percent
+                                        .map(|p| format!("{p}%"))
+                                        .unwrap_or_else(|| "Unknown charge".into()),
+                                    battery.status
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    };
+                    label.set_text(&text);
+                }
+            });
+            displays::brightness(app, parent, Surface::Quick);
+            power::profile(app, parent, Surface::Quick);
+        }
+        _ => {
+            let status = description("");
+            parent.append(&status);
+            let target = status.downgrade();
+            app.bind_for(Surface::Quick, &status, move |state| {
+                if let Some(label) = target.upgrade() {
+                    label.set_text(&settings_core::panel::status(state)[0].1);
+                }
+            });
+            toggle(
+                app,
+                Surface::Quick,
+                parent,
+                "Networking",
+                |s| !s.network.offline,
+                |enabled| Action::Networking { enabled },
+            );
+            toggle(
+                app,
+                Surface::Quick,
+                parent,
+                "Wi-Fi",
+                |s| {
+                    s.network
+                        .technologies
+                        .iter()
+                        .any(|t| t.kind == "wifi" && t.powered)
+                },
+                |enabled| Action::Wifi { enabled },
+            );
+            parent.append(&button(app, "Scan", || Action::Scan));
+            network::list(app, parent, Surface::Quick, true);
+            let auth = column();
+            parent.append(&auth);
+            app.quick_auth.replace(Some(auth));
+        }
+    }
+    let settings = gtk::Button::with_label(&format!("{title_text} Settings…"));
     let weak = Rc::downgrade(app);
     settings.connect_clicked(move |_| {
         if let Some(app) = weak.upgrade() {
-            app.open_page("network");
+            app.open_page(settings_page);
         }
     });
-    actions.append(&settings);
-    parent.append(&actions);
-    network::list(app, parent, Surface::Quick, true);
-    let auth = column();
-    parent.append(&auth);
-    app.quick_auth.replace(Some(auth));
-    audio::basic(app, parent, Surface::Quick);
-    displays::brightness(app, parent, Surface::Quick);
-    let links = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    for (id, label) in [("displays", "Displays"), ("audio", "Sound")] {
-        let b = gtk::Button::with_label(label);
-        let weak = Rc::downgrade(app);
-        b.connect_clicked(move |_| {
-            if let Some(app) = weak.upgrade() {
-                app.open_page(id);
-            }
-        });
-        links.append(&b);
-    }
-    parent.append(&links);
+    parent.append(&settings);
 }
 pub fn dialog(app: &Rc<App>, name: &str) -> (gtk::ApplicationWindow, gtk::Box) {
     let window = gtk::ApplicationWindow::builder()

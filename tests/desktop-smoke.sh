@@ -58,7 +58,7 @@ kill -0 "$launcher"
 kill "$launcher"
 wait "$launcher" 2>/dev/null || :
 /usr/libexec/uflinux-start-panel --validate-config > "$results/config.log" 2>&1
-if grep -q 'type = "battery"' "$XDG_RUNTIME_DIR/uflinux-ironbar.toml"; then
+if grep -q 'type = "battery"' /etc/xdg/ironbar/config.toml; then
 	echo 'Battery-free default still contains the battery module' >&2
 	exit 1
 fi

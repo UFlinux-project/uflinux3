@@ -4,8 +4,9 @@
 .uflinux-settings .settings-row { padding: 10px 12px; border-bottom: 1px solid alpha(@theme_fg_color, 0.08); }
 .uflinux-settings .settings-group { border: 1px solid alpha(@theme_fg_color, 0.14); border-radius: 8px; }
 .uflinux-settings .description { opacity: 0.75; }
-.uflinux-settings .error { color: #c01c28; padding: 8px; }
-.uflinux-settings .quick { padding: 16px; }
+.uflinux-settings .error { color: @theme_fg_color; background: alpha(#c01c28, 0.18); border-radius: 6px; padding: 8px; opacity: 1; }
+.uflinux-settings .quick { padding: 0; }
+.uflinux-settings.status-shell { background: transparent; }
 .uflinux-settings .quick .settings-row { padding: 5px 0; }
 .uflinux-settings .quick .section-title { margin-top: 6px; }
 .uflinux-settings .display-box { background: #1a5b8c; color: white; padding: 20px; border: 2px solid #3584e4; }

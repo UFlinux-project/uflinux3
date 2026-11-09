@@ -18,6 +18,7 @@ pub struct App {
     pub application: gtk::Application,
     pub state: RefCell<Snapshot>,
     pub agent: RefCell<Option<auth::Agent>>,
+    pub authorization_active: Cell<bool>,
     full: RefCell<Option<gtk::ApplicationWindow>>,
     quick: RefCell<Option<gtk::ApplicationWindow>>,
     pub stack: RefCell<Option<gtk::Stack>>,
@@ -25,6 +26,7 @@ pub struct App {
     quick_bindings: RefCell<Vec<Binding>>,
     banner: RefCell<Vec<glib::WeakRef<gtk::Label>>>,
     quick_output: RefCell<String>,
+    quick_panel: RefCell<String>,
     started: Instant,
     auth_id: Cell<u64>,
     pub quick_auth: RefCell<Option<gtk::Box>>,
@@ -53,7 +55,11 @@ pub fn run() {
     let slot = controller.clone();
     application.connect_startup(move |application| {
         let css = gtk::CssProvider::new();
-        css.load_from_string(include_str!("../assets/style.css"));
+        css.load_from_string(&format!(
+            "{}\n{}",
+            crate::popup::CSS,
+            include_str!("../assets/style.css")
+        ));
         if let Some(display) = gtk::gdk::Display::default() {
             gtk::style_context_add_provider_for_display(
                 &display,
@@ -65,6 +71,7 @@ pub fn run() {
             application: application.clone(),
             state: RefCell::new(Snapshot::default()),
             agent: RefCell::new(None),
+            authorization_active: Cell::new(false),
             full: RefCell::new(None),
             quick: RefCell::new(None),
             stack: RefCell::new(None),
@@ -72,6 +79,7 @@ pub fn run() {
             quick_bindings: RefCell::new(Vec::new()),
             banner: RefCell::new(Vec::new()),
             quick_output: RefCell::new(String::new()),
+            quick_panel: RefCell::new(String::new()),
             started: began,
             auth_id: Cell::new(0),
             quick_auth: RefCell::new(None),
@@ -86,7 +94,8 @@ pub fn run() {
         let weak = Rc::downgrade(&app);
         action.connect_activate(move |_, _| {
             if let Some(app) = weak.upgrade() {
-                if let Some(window) = app.quick.borrow_mut().take() {
+                let window = app.quick.borrow_mut().take();
+                if let Some(window) = window {
                     window.close();
                 }
                 app.quick_bindings.borrow_mut().clear();
@@ -113,11 +122,16 @@ pub fn run() {
                 .and_then(|i| args.get(i + 1))
                 .cloned()
         };
-        if args.iter().any(|s| s == "--quick-settings") {
-            app.open_quick(value("--output").unwrap_or_default());
+        if args.iter().any(|s| s == "--quick-settings") || value("--panel").is_some() {
+            let panel = value("--panel").unwrap_or_else(|| "network".into());
+            if !["network", "sound", "power"].contains(&panel.as_str()) {
+                eprintln!("Unknown panel: {panel}");
+                return glib::ExitCode::FAILURE;
+            }
+            app.open_quick(value("--output").unwrap_or_default(), &panel);
         } else if value("--network-auth").is_some() {
             if app.parent().is_none() {
-                app.open_quick(String::new());
+                app.open_quick(String::new(), "network");
             }
             app.show_auth();
         } else {
@@ -255,6 +269,10 @@ impl App {
         });
     }
     pub fn open_page(self: &Rc<Self>, page: &str) {
+        let quick = self.quick.borrow_mut().take();
+        if let Some(window) = quick {
+            window.close();
+        }
         let page = if PAGES.iter().any(|p| p.0 == page) {
             page
         } else {
@@ -411,46 +429,67 @@ impl App {
     fn close_start(&self) {
         remote_action("org.uflinux.StartMenu", "/org/uflinux/StartMenu", "hide");
     }
-    pub fn open_quick(self: &Rc<Self>, output: String) {
+    pub fn open_quick(self: &Rc<Self>, output: String, panel: &str) {
         let previous = self.quick.borrow_mut().take();
         if let Some(window) = previous {
             window.close();
-            if *self.quick_output.borrow() == output {
+            if *self.quick_output.borrow() == output && *self.quick_panel.borrow() == panel {
                 return;
             }
         }
         self.quick_bindings.borrow_mut().clear();
         self.quick_output.replace(output.clone());
+        self.quick_panel.replace(panel.to_string());
         let window = gtk::ApplicationWindow::builder()
             .application(&self.application)
-            .title("Quick settings")
+            .title(match panel {
+                "sound" => "Sound",
+                "power" => "Power",
+                _ => "Network",
+            })
             .default_width(400)
             .resizable(false)
             .decorated(false)
             .build();
         self.close_start();
         window.add_css_class("uflinux-settings");
+        window.add_css_class("status-shell");
         if gtk4_layer_shell::is_supported() {
+            window.set_resizable(true);
+            window.set_default_size(0, 0);
             window.init_layer_shell();
+            window.set_namespace(Some("uflinux-status-menu"));
             window.set_layer(Layer::Overlay);
-            window.set_anchor(Edge::Bottom, true);
-            window.set_anchor(Edge::Right, true);
-            window.set_margin(Edge::Bottom, 48);
-            window.set_margin(Edge::Right, 8);
-            window.set_keyboard_mode(KeyboardMode::OnDemand);
-            if let Some(display) = gtk::gdk::Display::default() {
-                let monitors = display.monitors();
-                for index in 0..monitors.n_items() {
-                    if let Some(monitor) = monitors.item(index).and_downcast::<gtk::gdk::Monitor>()
-                    {
-                        if monitor.connector().as_deref() == Some(output.as_str()) {
-                            window.set_monitor(Some(&monitor));
-                            break;
-                        }
-                    }
-                }
+            window.set_exclusive_zone(-1);
+            for edge in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
+                window.set_anchor(edge, true);
             }
+            window.set_keyboard_mode(KeyboardMode::OnDemand);
         }
+        let monitor = crate::popup::select_monitor(&window, &output);
+        let geometry = monitor.as_ref().map(|m| m.geometry());
+        let available_height = geometry.map(|g| (g.height() - 64).max(160)).unwrap_or(560);
+        let available_width = geometry.map(|g| (g.width() - 16).max(200)).unwrap_or(400);
+        if let Some(monitor) = monitor {
+            let target = window.downgrade();
+            let id = monitor.connect_invalidate(move |_| {
+                if let Some(window) = target.upgrade() {
+                    window.close();
+                }
+            });
+            let id = RefCell::new(Some(id));
+            window.connect_close_request(move |_| {
+                if let Some(id) = id.borrow_mut().take() {
+                    monitor.disconnect(id);
+                }
+                glib::Propagation::Proceed
+            });
+        }
+        let root = gtk::Overlay::new();
+        let empty = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        empty.set_hexpand(true);
+        empty.set_vexpand(true);
+        root.set_child(Some(&empty));
         let content = widgets::column();
         content.add_css_class("quick");
         let banner = widgets::description("");
@@ -458,29 +497,53 @@ impl App {
         banner.add_css_class("error");
         content.append(&banner);
         self.banner.borrow_mut().push(banner.downgrade());
-        pages::quick(self, &content);
-        let selected_monitor = if gtk4_layer_shell::is_supported() {
-            window.monitor()
-        } else {
-            None
-        };
-        let available_height = selected_monitor
-            .or_else(|| {
-                gtk::gdk::Display::default()
-                    .and_then(|d| d.monitors().item(0))
-                    .and_downcast::<gtk::gdk::Monitor>()
-            })
-            .map(|m| m.geometry().height() - 80)
-            .unwrap_or(560)
-            .max(240);
+        pages::quick(self, &content, panel);
         let scroll = gtk::ScrolledWindow::builder()
             .hscrollbar_policy(gtk::PolicyType::Never)
-            .min_content_height(240)
-            .max_content_height(available_height)
+            .max_content_height(available_height - 24)
             .propagate_natural_height(true)
             .child(&content)
             .build();
-        window.set_child(Some(&scroll));
+        let card = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        card.add_css_class("uflinux-popup-card");
+        card.set_halign(gtk::Align::End);
+        card.set_valign(gtk::Align::End);
+        card.set_margin_end(8);
+        card.set_margin_start(8);
+        card.set_margin_bottom(48);
+        card.set_size_request(available_width.min(400), -1);
+        card.append(&scroll);
+        root.add_overlay(&card);
+        window.set_child(Some(&root));
+        if gtk4_layer_shell::is_supported() {
+            window.connect_realize(|window| {
+                if let Some(surface) = window.surface() {
+                    surface.connect_layout(|surface, width, height| {
+                        crate::popup::set_input_region(surface, width, height, 0);
+                    });
+                }
+            });
+            let gesture = gtk::GestureClick::new();
+            gesture.set_propagation_phase(gtk::PropagationPhase::Capture);
+            let target = window.downgrade();
+            let target_card = card.downgrade();
+            let target_root = root.downgrade();
+            gesture.connect_pressed(move |gesture, _, x, y| {
+                if let (Some(card), Some(root)) = (target_card.upgrade(), target_root.upgrade()) {
+                    if card.compute_bounds(&root).is_some_and(|r| {
+                        r.contains_point(&gtk::graphene::Point::new(x as f32, y as f32))
+                    }) {
+                        gesture.set_state(gtk::EventSequenceState::Denied);
+                    } else {
+                        gesture.set_state(gtk::EventSequenceState::Claimed);
+                        if let Some(window) = target.upgrade() {
+                            window.close();
+                        }
+                    }
+                }
+            });
+            root.add_controller(gesture);
+        }
         let keys = gtk::EventControllerKey::new();
         let target = window.downgrade();
         keys.connect_key_pressed(move |_, key, _, _| {
@@ -495,6 +558,7 @@ impl App {
         });
         window.add_controller(keys);
         let active = Rc::new(Cell::new(false));
+        let application = Rc::downgrade(self);
         let closing = Rc::new(Cell::new(false));
         let dismissing = closing.clone();
         let target = window.downgrade();
@@ -506,9 +570,16 @@ impl App {
                 // notification. Never recursively close it from its hide path.
                 let target = target.clone();
                 let closing = dismissing.clone();
+                let application = application.clone();
                 glib::idle_add_local_once(move || {
                     if let Some(window) = target.upgrade() {
-                        if !closing.get() && !window.is_active() && window.is_visible() {
+                        if !closing.get()
+                            && !application
+                                .upgrade()
+                                .is_some_and(|app| app.authorization_active.get())
+                            && !window.is_active()
+                            && window.is_visible()
+                        {
                             window.close();
                         }
                     }
@@ -526,14 +597,20 @@ impl App {
             glib::Propagation::Proceed
         });
         self.quick.replace(Some(window.clone()));
+        if panel == "network" && self.state.borrow().network.authentication.is_some() {
+            self.auth_id.set(0);
+            self.show_auth();
+        }
         window.present();
         self.report_first_frame(&window);
-        self.execute(
-            Action::System {
-                operation: SystemAction::DdcDiscover,
-            },
-            None,
-        );
+        if panel == "power" {
+            self.execute(
+                Action::System {
+                    operation: SystemAction::DdcDiscover,
+                },
+                None,
+            );
+        }
     }
     pub fn frame_start(&self) -> Instant {
         if self.first_frame.replace(false) {

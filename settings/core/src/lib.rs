@@ -4,6 +4,7 @@ pub mod clock;
 pub mod files;
 pub mod layout;
 pub mod model;
+pub mod panel;
 pub mod power;
 pub mod validate;
 

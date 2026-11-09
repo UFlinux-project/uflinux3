@@ -9,7 +9,7 @@ popup_autohide = true
 [[start]]
 type = "custom"
 name = "start-menu"
-bar = [{ type = "button", name = "start-button", widgets = [{ type = "image", src = "file:///usr/share/icons/hicolor/scalable/apps/uflinux.svg", size = 28 }], on_click = '!uflinux-start-menu --output "$IRONBAR_OUTPUT"', tooltip = "Start" }]
+bar = [{ type = "button", name = "start-button", widgets = [{ type = "image", src = "file:///usr/share/icons/hicolor/scalable/apps/uflinux.svg", size = 28 }, { type = "label", label = "Menu" }], on_click = '!uflinux-start-menu --output "$IRONBAR_OUTPUT"', tooltip = "Start" }]
 
 [[start]]
 type = "launcher"
@@ -25,14 +25,18 @@ icon_size = 18
 
 [[end]]
 type = "custom"
-name = "quick-settings"
-bar = [{ type = "button", label = "#uflinux_network · #uflinux_volume", on_click = '!uflinux-settings --quick-settings --output "$IRONBAR_OUTPUT"', tooltip = "Network, sound and brightness" }]
+name = "network-status"
+bar = [{ type = "button", name = "network-button", widgets = [{ type = "icon", icon = "#uflinux_network_icon", fallback = "network-offline-symbolic", size = 18 }], on_click = '!uflinux-settings --panel network --output "$IRONBAR_OUTPUT"', tooltip = "#uflinux_network_tooltip" }]
 
-# battery-start
 [[end]]
-type = "battery"
-format = "{percentage}%"
-# battery-end
+type = "custom"
+name = "sound-status"
+bar = [{ type = "button", name = "sound-button", widgets = [{ type = "icon", icon = "#uflinux_sound_icon", fallback = "audio-volume-muted-symbolic", size = 18 }], on_click = '!uflinux-settings --panel sound --output "$IRONBAR_OUTPUT"', tooltip = "#uflinux_sound_tooltip" }]
+
+[[end]]
+type = "custom"
+name = "power-status"
+bar = [{ type = "button", name = "power-button", widgets = [{ type = "icon", icon = "#uflinux_power_icon", fallback = "thunderbolt-symbolic", size = 18 }], on_click = '!uflinux-settings --panel power --output "$IRONBAR_OUTPUT"', tooltip = "#uflinux_power_tooltip" }]
 
 [[end]]
 type = "clock"
