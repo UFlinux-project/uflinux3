@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <labwc_config>
   <core><gap>0</gap><decoration>server</decoration></core>
-  <theme><name>UFLinux</name><icon>Papirus</icon><cornerRadius>0</cornerRadius><font place="ActiveWindow"><name>DejaVu Sans</name><size>10</size></font></theme>
+  <theme><name>labAdwaita</name><icon>Papirus</icon><font place="ActiveWindow"><name>DejaVu Sans</name><size>10</size></font></theme>
   <keyboard>
     <default/>
     <keybind key="Super_L" onRelease="yes"><action name="Execute" command="uflinux-start-menu"/></keybind>
@@ -9,7 +9,7 @@
     <keybind key="W-r"><action name="Execute" command="fuzzel"/></keybind>
     <keybind key="W-space"><action name="Execute" command="fuzzel"/></keybind>
     <keybind key="W-Return"><action name="Execute" command="foot"/></keybind>
-    <keybind key="W-e"><action name="Execute" command="thunar"/></keybind>
+    <keybind key="W-e"><action name="Execute" command="nemo"/></keybind>
     <keybind key="W-i"><action name="Execute" command="uflinux-settings"/></keybind>
     <keybind key="W-d"><action name="ToggleShowDesktop"/></keybind>
     <keybind key="A-Tab"><action name="NextWindow"/></keybind>

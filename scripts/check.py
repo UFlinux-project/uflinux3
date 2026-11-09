@@ -16,7 +16,7 @@ arches = json.loads((ROOT / "config/architectures.json").read_text())
 lock = json.loads((ROOT / "config/sources.lock.json").read_text())
 assert set(arches) == set(lock["rootfs"])
 assert set(arches) == {"x86", "x86_64", "aarch64", "armv7", "ppc64le", "s390x", "riscv64"}
-for path in [*ROOT.glob("scripts/*.py"), *ROOT.glob("tests/*.py"), ROOT / "aports/uflinux/uflinux-install"]:
+for path in [*ROOT.glob("scripts/*.py"), *ROOT.glob("tests/*.py"), ROOT / "aports/uflinux/uflinux-install", ROOT / "aports/uflinux/uflinux-install-gui-backend"]:
     ast.parse(path.read_text(), filename=str(path))
 for path in [*ROOT.glob("scripts/*.sh"), *ROOT.glob("tests/*.sh"), *ROOT.glob("profiles/*.sh"), *ROOT.glob("aports/*/APKBUILD"),
              *[ROOT / "aports/uflinux" / n for n in ("uflinux-session", "uflinux-autostart", "uflinux-start-panel", "uflinux-live.initd", "uflinux-compositor", "uflinux-network-init", "uflinux-bootsplash", "uflinux-splash.initd", "uflinux-splash-stop.initd")], *ROOT.glob("settings/data/*.initd"), ROOT / "settings/data/uflinux-power-button"]:
@@ -32,7 +32,7 @@ artwork = json.loads((ROOT / "config/artwork.lock.json").read_text())
 for name in artwork["logo"]["copies"]:
     assert hashlib.sha512((ROOT / name).read_bytes()).hexdigest() == artwork["logo"]["sha512"], "Imported logo differs from its pinned original"
 assert (ROOT / "LICENSE").read_bytes() == (ROOT / "aports/uflinux/LICENSE").read_bytes()
-for name in ("ironbar.toml", "greetd-installed.toml", "greetd-live.toml"):
+for name in ("ironbar.toml", "greetd-installed.toml", "greetd-live.toml", "regreet.toml"):
     tomllib.loads((ROOT / "aports/uflinux" / name).read_text())
 subprocess.run([sys.executable, str(ROOT / "scripts/update-checksums.py"), "--check"], check=True)
 subprocess.run([sys.executable, str(ROOT / "scripts/settings-source.py"), "--check"], check=True)
@@ -46,8 +46,12 @@ for name,digest in lock["connman"]["patches"].items():
     assert hashlib.sha512((ROOT / "aports/connman" / name).read_bytes()).hexdigest()==digest
 for name, digest in lock["ironbar"].get("patches", {}).items():
     assert hashlib.sha512((ROOT / "aports/ironbar" / name).read_bytes()).hexdigest() == digest
+regreet = (ROOT / "aports/uflinux-regreet/APKBUILD").read_text()
+assert lock["sources"]["uflinux-regreet"]["sha512"] in regreet
+for name, digest in lock["uflinux-regreet"]["patches"].items():
+    assert hashlib.sha512((ROOT / "aports/uflinux-regreet" / name).read_bytes()).hexdigest() == digest
 assert "libadwaita" not in (ROOT / "settings/Cargo.lock").read_text()
-for origin in ("connman", "ironbar", "uflinux-settings"):
+for origin in ("connman", "ironbar", "uflinux-regreet", "uflinux-settings"):
     recipe_arches = re.search(r'^arch="([^"]+)"$', (ROOT / "aports" / origin / "APKBUILD").read_text(), re.M)
     assert recipe_arches and set(recipe_arches.group(1).split()) == set(arches), f"{origin} architecture list differs from build matrix"
 for name, digest in lock["image"]["patches"].items():

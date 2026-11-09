@@ -25,6 +25,14 @@
     "gnome-backgrounds": {
       "url": "https://download.gnome.org/sources/gnome-backgrounds/3.38/gnome-backgrounds-3.38.0.tar.xz",
       "sha512": "01000409d6d54af81e520b8b292c24bb64e763a493c69cf71cabb9f885c7feee5a1805db40e2d0544834c40b7866f889c106e9816fd8e8b8f5273b0a099f1488"
+    },
+    "labwc-themes": {
+      "url": "https://codeload.github.com/labwc/labwc-themes/tar.gz/6a2e3634eef03e7f124359ad28ed5da2d931f96d",
+      "sha512": "ff78da5b5709a69cebbc11586d3a31d65229b6545d8d600c28fc93fc4b08332a8a9d9c21594e3680ee17f03a8e3fe5fc9b2cb8b3223e5d687aa680a2355b9747"
+    },
+    "uflinux-regreet": {
+      "url": "https://codeload.github.com/rharish101/ReGreet/tar.gz/refs/tags/0.2.0",
+      "sha512": "2bf74896c1757801d04145690a3d11d473cc1f5e6e3c9709bb26e57c0a7a3702d8062ca0c26c67bc1087197fc57a00f899144484bfc0e8a556c10a9d020f6bb8"
     }
   },
   "rootfs": {
@@ -107,6 +115,12 @@
       "implementation": "plymouth",
       "theme": "uflinux",
       "phase": "openrc"
+    }
+  },
+  "uflinux-regreet": {
+    "version": "0.2.0",
+    "patches": {
+      "fixed-session.patch": "be7418c7c810f9100f27ed9a05b244cb705f21d5d501066540a56ea5aa4c0307acc05dccb6ec5ec28f6870a0e3760b8b2039574d3d30421a46df5f91b93978d0"
     }
   }
 }

@@ -1,6 +1,219 @@
 use super::*;
 use std::cell::{Cell, RefCell};
 
+/// Compact controls for the status menu. Full Settings retains its detailed selectors.
+pub fn quick(app: &Rc<App>, parent: &gtk::Box) {
+    let unavailable = description("");
+    parent.append(&unavailable);
+    let target = unavailable.downgrade();
+    app.bind_for(Surface::Quick, &unavailable, move |state| {
+        if let Some(label) = target.upgrade() {
+            label.set_visible(!state.audio.available);
+            label.set_text("Audio is unavailable or still starting.");
+        }
+    });
+    quick_device(app, parent, false);
+    quick_device(app, parent, true);
+    let streams = column();
+    parent.append(&streams);
+    let target = streams.downgrade();
+    app.bind_for(Surface::Quick, &streams, move |state| {
+        if let Some(streams) = target.upgrade() {
+            streams.set_visible(!state.audio.streams.is_empty());
+        }
+    });
+    applications(app, &streams, Surface::Quick);
+}
+
+fn quick_device(app: &Rc<App>, parent: &gtk::Box, input: bool) {
+    let group = column();
+    parent.append(&group);
+    let target = group.downgrade();
+    app.bind_for(Surface::Quick, &group, move |state| {
+        if let Some(group) = target.upgrade() {
+            group.set_visible(if input {
+                !state.audio.inputs.is_empty()
+            } else {
+                !state.audio.outputs.is_empty()
+            });
+        }
+    });
+    let label = if input {
+        "Input volume"
+    } else {
+        "Output volume"
+    };
+    section(&group, if input { "Input" } else { "Output" });
+    let control = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    control.set_hexpand(true);
+    let scale = slider_control(
+        app,
+        Surface::Quick,
+        label,
+        move |state| {
+            let (devices, current) = if input {
+                (&state.audio.inputs, &state.audio.default_input)
+            } else {
+                (&state.audio.outputs, &state.audio.default_output)
+            };
+            devices
+                .iter()
+                .find(|device| &device.name == current)
+                .map(|device| device.volume)
+                .unwrap_or(0.)
+        },
+        move |percent| Action::SetVolume {
+            input,
+            device: String::new(),
+            percent,
+        },
+    );
+    control.append(&scale);
+    let popover = gtk::Popover::new();
+    let weak = Rc::downgrade(app);
+    popover.connect_show(move |_| {
+        if let Some(app) = weak.upgrade() {
+            app.submenu_epoch
+                .set(app.submenu_epoch.get().wrapping_add(1));
+            app.submenu_open.set(true);
+        }
+    });
+    let weak = Rc::downgrade(app);
+    popover.connect_closed(move |_| {
+        // The compositor can report focus loss while the popup is being dismissed.
+        let epoch = weak.upgrade().map(|app| app.submenu_epoch.get());
+        let weak = weak.clone();
+        glib::timeout_add_local_once(std::time::Duration::from_millis(250), move || {
+            if let Some(app) = weak.upgrade() {
+                if Some(app.submenu_epoch.get()) == epoch {
+                    app.submenu_open.set(false);
+                }
+            }
+        });
+    });
+    let list = column();
+    list.add_css_class("audio-devices");
+    let scroll = gtk::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .max_content_height(300)
+        .propagate_natural_height(true)
+        .child(&list)
+        .build();
+    popover.set_child(Some(&scroll));
+    let menu = gtk::MenuButton::builder()
+        .icon_name("go-next-symbolic")
+        .popover(&popover)
+        .build();
+    let accessible = if input {
+        "Choose input device"
+    } else {
+        "Choose output device"
+    };
+    menu.set_tooltip_text(Some(accessible));
+    menu.update_property(&[gtk::accessible::Property::Label(accessible)]);
+    control.append(&menu);
+    group.append(&row(label, &control));
+    let target = list.downgrade();
+    let popover = popover.downgrade();
+    let weak = Rc::downgrade(app);
+    let last = RefCell::new(Vec::<(String, String, bool)>::new());
+    app.bind_for(Surface::Quick, &list, move |state| {
+        let (devices, current) = if input {
+            (&state.audio.inputs, &state.audio.default_input)
+        } else {
+            (&state.audio.outputs, &state.audio.default_output)
+        };
+        let next = devices
+            .iter()
+            .map(|device| {
+                (
+                    device.name.clone(),
+                    device.description.clone(),
+                    &device.name == current,
+                )
+            })
+            .collect::<Vec<_>>();
+        if *last.borrow() == next {
+            return;
+        }
+        last.replace(next.clone());
+        let Some(list) = target.upgrade() else {
+            return;
+        };
+        clear(&list);
+        for (name, description, selected) in next {
+            let content = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+            let label = gtk::Label::new(Some(if description.is_empty() {
+                &name
+            } else {
+                &description
+            }));
+            label.set_xalign(0.);
+            label.set_hexpand(true);
+            label.set_ellipsize(gtk::pango::EllipsizeMode::End);
+            content.append(&label);
+            if selected {
+                content.append(&gtk::Image::from_icon_name("object-select-symbolic"));
+            }
+            let button = gtk::Button::builder().child(&content).build();
+            button.add_css_class("flat");
+            let accessible = format!(
+                "{}{}",
+                if description.is_empty() {
+                    &name
+                } else {
+                    &description
+                },
+                if selected { " (selected)" } else { "" }
+            );
+            button.update_property(&[gtk::accessible::Property::Label(&accessible)]);
+            let weak = weak.clone();
+            let popover = popover.clone();
+            button.connect_clicked(move |_| {
+                if let Some(app) = weak.upgrade() {
+                    app.execute(
+                        Action::SetDefault {
+                            input,
+                            device: name.clone(),
+                        },
+                        None,
+                    );
+                }
+                if let Some(popover) = popover.upgrade() {
+                    popover.popdown();
+                }
+            });
+            list.append(&button);
+        }
+    });
+    toggle(
+        app,
+        Surface::Quick,
+        &group,
+        if input {
+            "Mute microphone"
+        } else {
+            "Mute output"
+        },
+        move |state| {
+            let (devices, current) = if input {
+                (&state.audio.inputs, &state.audio.default_input)
+            } else {
+                (&state.audio.outputs, &state.audio.default_output)
+            };
+            devices
+                .iter()
+                .find(|device| &device.name == current)
+                .is_some_and(|device| device.muted)
+        },
+        move |muted| Action::SetMute {
+            input,
+            device: String::new(),
+            muted,
+        },
+    );
+}
+
 pub fn page(app: &Rc<App>, parent: &gtk::Box) {
     parent.append(&description(
         "PipeWire audio with WirePlumber session management.",

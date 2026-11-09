@@ -10,8 +10,25 @@ collection, which increases image size and live-session RAM use. Installation
 uses the signed media repository by default. Add
 `--online` to allow official Alpine mirrors for packages absent from the media.
 
-Prepare and mount the partitions yourself before running the installer. Formatting
-commands destroy data; the installer intentionally does not run them.
+The graphical installer opens automatically in the live desktop. You can also open
+**Install UFLinux** from the application menu. Choose a language, keyboard, source,
+disk, account and time zone, then review the proposed changes. Nothing is written
+to the target until you acknowledge the changes and select **Install**. Network
+configuration is managed separately through Settings before starting an online
+installation.
+
+The guided option erases the whole selected disk and creates an XFS root and a 1 GiB
+boot filesystem. On PowerPC it also creates a PReP partition. The prepared option
+uses an existing empty XFS root and a compatible boot partition on the same disk;
+it does not format or repartition them, but boot files and bootloader sectors may
+be replaced. The GUI excludes mounted, in-use and live-media disks. DASD and
+board-specific U-Boot layouts are not supported. Closing the window during an
+installation hides it; reopen **Install UFLinux** to see its progress.
+
+## Command-line installation
+
+For the CLI installer, prepare and mount the partitions yourself. Formatting
+commands destroy data; the CLI installer intentionally does not run them.
 
 Required layout:
 
@@ -57,7 +74,7 @@ initramfs configuration, and installs the appropriate bootloader. UEFI uses
 systemd-boot with its kernel and initramfs directly on the ESP, so package updates
 update the files that firmware will actually boot. The installed
 system gets a new regular user, password-authenticated `doas`, locked root, and a
-normal greetd login. Live credentials, live autologin, and live-only services are
+a ReGreet login using the adw-gtk3 dark theme. ReGreet starts the UFLinux desktop directly without a session selector. Live credentials, live autologin, and live-only services are
 excluded. If installation fails, do not boot the partial target; inspect the
 reported failure and clean/reprepare the target before retrying.
 

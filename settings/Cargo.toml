@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "daemon", "system", "ui", "start-menu"]
+members = ["core", "daemon", "system", "ui", "start-menu", "installer"]
 resolver = "2"
 
 [workspace.package]

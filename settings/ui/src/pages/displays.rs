@@ -389,9 +389,19 @@ pub fn page(app: &Rc<App>, parent: &gtk::Box) {
     );
 }
 pub fn brightness(app: &Rc<App>, parent: &gtk::Box, surface: Surface) {
-    section(parent, "Brightness");
+    let container = column();
+    parent.append(&container);
+    if matches!(surface, Surface::Quick) {
+        let target = container.downgrade();
+        app.bind_for(surface, &container, move |state| {
+            if let Some(container) = target.upgrade() {
+                container.set_visible(!state.displays.brightness.is_empty());
+            }
+        });
+    }
+    section(&container, "Brightness");
     let group = column();
-    parent.append(&group);
+    container.append(&group);
     let target = group.downgrade();
     let weak = Rc::downgrade(app);
     let signature = RefCell::new(String::new());

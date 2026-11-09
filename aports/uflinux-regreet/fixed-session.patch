@@ -1,0 +1,113 @@
+diff --git a/src/gui/component.rs b/src/gui/component.rs
+index 6b210dd..66cc6da 100644
+--- a/src/gui/component.rs
++++ b/src/gui/component.rs
+@@ -136,7 +136,7 @@ impl AsyncComponent for Greeter {
+                 #[template_child]
+                 session_label {
+                     #[track(model.updates.changed(Updates::input_mode()))]
+-                    set_visible: !model.updates.is_input(),
++                    set_visible: false,
+                 },
+                 #[template_child]
+                 usernames_box {
+@@ -174,7 +174,7 @@ impl AsyncComponent for Greeter {
+                         model.updates.changed(Updates::manual_sess_mode())
+                         || model.updates.changed(Updates::input_mode())
+                     )]
+-                    set_visible: !model.updates.manual_sess_mode && !model.updates.is_input(),
++                    set_visible: false,
+                     #[track(model.updates.changed(Updates::active_session_id()))]
+                     set_active_id: model.updates.active_session_id.as_deref(),
+                 },
+@@ -184,7 +184,7 @@ impl AsyncComponent for Greeter {
+                         model.updates.changed(Updates::manual_sess_mode())
+                         || model.updates.changed(Updates::input_mode())
+                     )]
+-                    set_visible: model.updates.manual_sess_mode && !model.updates.is_input(),
++                    set_visible: false,
+                 },
+                 #[template_child]
+                 input_label {
+@@ -254,7 +254,7 @@ impl AsyncComponent for Greeter {
+                 #[template_child]
+                 sess_toggle {
+                     #[track(model.updates.changed(Updates::input_mode()))]
+-                    set_visible: !model.updates.is_input(),
++                    set_visible: false,
+                     connect_clicked => Self::Input::ToggleManualSess,
+                 },
+                 #[template_child]
+diff --git a/src/gui/model.rs b/src/gui/model.rs
+index e9415da..2a3ab9f 100644
+--- a/src/gui/model.rs
++++ b/src/gui/model.rs
+@@ -470,63 +470,11 @@ impl Greeter {
+         &mut self,
+         sender: &AsyncComponentSender<Self>,
+     ) -> (Option<String>, Option<SessionInfo>) {
+-        let info = self.sess_info.as_ref().expect("No session info set yet");
+-        if self.updates.manual_sess_mode {
+-            debug!(
+-                "Retrieved session command '{}' through manual entry",
+-                info.sess_text
+-            );
+-            if let Some(cmd) = shlex::split(info.sess_text.as_str()) {
+-                (
+-                    None,
+-                    Some(SessionInfo {
+-                        command: cmd,
+-                        sess_type: SessionType::Unknown,
+-                    }),
+-                )
+-            } else {
+-                // This must be an invalid command.
+-                self.display_error(
+-                    sender,
+-                    "Invalid session command",
+-                    &format!("Invalid session command: {}", info.sess_text),
+-                );
+-                (None, None)
+-            }
+-        } else if let Some(session) = &info.sess_id {
+-            // Get the currently selected session.
+-            debug!("Retrieved current session: {session}");
+-            if let Some(sess_info) = self.sys_util.get_sessions().get(session.as_str()) {
+-                (Some(session.to_string()), Some(sess_info.clone()))
+-            } else {
+-                // Shouldn't happen, unless there are no sessions available.
+-                let error_msg = format!("Session '{session}' not found");
+-                self.display_error(sender, &error_msg, &error_msg);
+-                (None, None)
+-            }
+-        } else {
+-            let username = if let Some(username) = self.get_current_username() {
+-                username
+-            } else {
+-                // This shouldn't happen, because a session should've been created with a username.
+-                unimplemented!("Trying to create session without a username");
+-            };
+-            warn!("No entry found; using default login shell of user: {username}",);
+-            if let Some(cmd) = self.sys_util.get_shells().get(username.as_str()) {
+-                (
+-                    None,
+-                    Some(SessionInfo {
+-                        command: cmd.clone(),
+-                        sess_type: SessionType::Unknown,
+-                    }),
+-                )
+-            } else {
+-                // No login shell exists.
+-                let error_msg = "No session or login shell found";
+-                self.display_error(sender, error_msg, error_msg);
+-                (None, None)
+-            }
+-        }
++        let _ = sender;
++        (None, Some(SessionInfo {
++            command: vec!["/usr/bin/uflinux-session".to_string()],
++            sess_type: SessionType::Wayland,
++        }))
+     }
+ 
+     /// Start the session for the selected user.

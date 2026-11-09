@@ -14,11 +14,14 @@ sources = shlex.split(re.search(r'^source="([^"]+)"', text, re.M).group(1))
 lock = json.loads((path.parents[2] / "config/sources.lock.json").read_text())
 checksums = []
 for source in sources:
-    if source.startswith("https://"):
-        spec = next((spec for spec in lock["sources"].values() if spec["url"] == source), None)
+    alias, separator, url = source.partition("::")
+    if not separator:
+        url = source
+    if url.startswith("https://"):
+        spec = next((spec for spec in lock["sources"].values() if spec["url"] == url), None)
         if not spec or "sha512" not in spec:
             raise SystemExit("Remote package sources require a locked SHA-512: " + source)
-        name, digest = Path(urlsplit(source).path).name, spec["sha512"]
+        name, digest = (alias if separator else Path(urlsplit(url).path).name), spec["sha512"]
     else:
         name = source
         digest = hashlib.sha512((path.parent / name).read_bytes()).hexdigest()

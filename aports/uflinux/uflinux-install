@@ -207,7 +207,7 @@ def write(root, name, value, mode=0o644):
 
 def make_overlay(directory, args, repositories=None, uefi=False):
     write(directory, "etc/hostname", args.hostname + "\n")
-    write(directory, "etc/apk/world", "alpine-base\nuflinux\nxfsprogs\nlinux-firmware\n" + ("systemd-boot\n" if uefi else ""))
+    write(directory, "etc/apk/world", "alpine-base\nuflinux\nxfsprogs\nlinux-firmware\n" + ("firefox\nublock-origin\n" if args.arch in {"x86", "x86_64", "aarch64", "armv7", "ppc64le", "riscv64"} else "") + ("systemd-boot\n" if uefi else "") + ("musl-locales\nmusl-locales-lang\nglib-lang\ngtk4.0-lang\nlabwc-lang\n" if getattr(args, "gui_locale", False) else ""))
     write(directory, "etc/shadow", "root:!:19000:0:99999:7:::\n", 0o600)
     write(directory, "etc/network/interfaces", "auto lo\niface lo inet loopback\n")
     serial = {"aarch64": "ttyAMA0", "armv7": "ttyAMA0", "ppc64le": "hvc0", "s390x": "ttysclp0"}.get(args.arch, "ttyS0")
@@ -321,7 +321,10 @@ def install(args, plan, password):
     elif plan["loader"] == "syslinux":
         install_bios_mbr(plan["boot_disk"], plan["mbr_code"])
     write(target, "etc/apk/repositories", full_repositories)
-    run("chroot", str(target), "adduser", "-D", "-s", "/bin/ash", "-G", "users", args.user)
+    user_command = ["chroot", str(target), "adduser", "-D", "-s", "/bin/ash", "-G", "users"]
+    if getattr(args, "display_name", None):
+        user_command.extend(["-g", args.display_name])
+    run(*user_command, args.user)
     run("chroot", str(target), "addgroup", args.user, "wheel")
     run("chroot", str(target), "addgroup", args.user, "netdev")
     run("chroot", str(target), "chpasswd", input=f"{args.user}:{password}\n")

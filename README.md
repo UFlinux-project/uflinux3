@@ -25,10 +25,14 @@ only after the full matrix passes. A configured test is not evidence of a
 successful run: use the workflow results and attached build records to determine
 which architectures have actually passed.
 
-The desktop includes Foot, Thunar, Fuzzel, Mako, ConnMan with iwd, PipeWire with
+The desktop includes Foot, Nemo, Fuzzel, Mako, Transmission, Celluloid, GNOME Disks, File Roller,
+and ConnMan with iwd, PipeWire with
 pipewire-pulse, WirePlumber, and UFLinux Settings in Rust and plain GTK4. BusyBox
 ntpd handles time synchronization. The taskbar opens a combined quick-settings
-flyout. GTK3 and GTK4 apps use Alpine’s adw-gtk3 dark theme. It has no browser or office suite by default.
+flyout. GTK3 and GTK4 apps use Alpine’s adw-gtk3 dark theme. Firefox and uBlock Origin are included on x86, x86_64, aarch64, armv7, ppc64le,
+and riscv64. Firefox uses a streamlined toolbar with horizontal tabs and a hidden
+bookmarks bar; users can change these defaults. Alpine 3.24 does not provide
+Firefox for s390x.
 Settings offers TLP Power saver, Balanced and Performance modes. Physical
 power-button actions are configured in Settings and handled by BusyBox acpid.
 The live login is **live / live**, with passwordless local `doas`; root is locked

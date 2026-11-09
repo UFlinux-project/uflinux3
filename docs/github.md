@@ -32,7 +32,7 @@ Only push events for valid version tags can publish. Manual runs never become
 release builds by supplying a private key. Protect the default branch and release
 tags according to the maintainer access you intend to grant.
 
-Compilation uses four independent package-origin jobs per architecture, with
+Compilation uses five independent package-origin jobs per architecture, with
 separate caches and development keys and a maximum of eight concurrent jobs.
 The image job checks completeness, build identity, archive hashes and native
 reproducibility reports before signing. It downloads compile artifacts directly

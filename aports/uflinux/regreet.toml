@@ -1,0 +1,8 @@
+[GTK]
+theme_name = "adw-gtk3-dark"
+application_prefer_dark_theme = true
+icon_theme_name = "Papirus"
+
+[commands]
+reboot = ["loginctl", "reboot"]
+poweroff = ["loginctl", "poweroff"]

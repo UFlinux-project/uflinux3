@@ -24,7 +24,7 @@ class ShardTests(unittest.TestCase):
             root = out / 'package-shards/x86_64' / origin
             packages = root / 'packages/x86_64'
             packages.mkdir(parents=True)
-            upstream = {'connman': builder.LOCK['connman']['version'],
+            upstream = {'uflinux-regreet': builder.LOCK['uflinux-regreet']['version'], 'connman': builder.LOCK['connman']['version'],
                         'ironbar': builder.LOCK['ironbar']['version'],
                         'uflinux-settings': builder.LOCK['settings']['version'], 'uflinux': '0.1.0'}[origin]
             revision = '1' if origin == 'connman' else '0'
@@ -62,7 +62,7 @@ class ShardTests(unittest.TestCase):
             packages = out / 'packages/x86_64'
             self.assertEqual(len(list(packages.glob('*.apk'))), sum(map(len, builder.PACKAGE_NAMES.values())))
             keys = json.loads((packages / 'build-keys.json').read_text())
-            self.assertEqual(len(set(keys.values())), 4)
+            self.assertEqual(len(set(keys.values())), len(builder.PACKAGE_NAMES))
             proof = json.loads((out / 'metadata/x86_64/reproducibility.json').read_text())
             self.assertEqual(len(proof['baseline']), sum(map(len, builder.PACKAGE_NAMES.values())))
             self.assertEqual(proof['baseline'], proof['rebuilt'])
@@ -112,14 +112,14 @@ class InputArchiveTests(unittest.TestCase):
                 target.mkdir(parents=True)
                 for name in ('build-apks.tar.gz','sources.tar.gz'):
                     (target/name).write_bytes(b'input')
-                if origin in {'ironbar','uflinux-settings'}:
+                if origin in {'ironbar','uflinux-regreet','uflinux-settings'}:
                     (target/'cargo-sources.tar.gz').write_bytes(b'cargo')
             (directory/'image-apks.tar.gz').write_bytes(b'image')
             command=[sys.executable,str(builder.PROJECT/'scripts/release-inputs.py'),'--arch','x86_64','--version','0.1.0']
             subprocess.run(command,cwd=root,check=True,capture_output=True)
             entries=(root/'out/SHA256SUMS-x86_64-inputs').read_text().splitlines()
-            self.assertEqual(len(entries),11)
-            self.assertEqual(len(list((root/'out').glob('uflinux-*.tar.gz'))),11)
+            self.assertEqual(len(entries),14)
+            self.assertEqual(len(list((root/'out').glob('uflinux-*.tar.gz'))),14)
             (directory/'ironbar/cargo-sources.tar.gz').unlink()
             rejected=subprocess.run(command,cwd=root,capture_output=True)
             self.assertNotEqual(rejected.returncode,0)

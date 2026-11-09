@@ -21,8 +21,11 @@ profile_uflinux() {
 	# The diskless live root includes Alpine's full firmware collection.
 	initfs_cmdline="$initfs_cmdline rootflags=mode=0755,size=75%"
 	modloop_addons="$modloop_addons uflinux-initramfs"
-	apks="$apks uflinux uflinux-live uflinux-installer linux-lts linux-firmware
+	apks="$apks uflinux uflinux-live uflinux-installer uflinux-installer-ui musl-locales musl-locales-lang glib-lang gtk4.0-lang labwc-lang linux-lts linux-firmware
 		systemd-boot xfsprogs e2fsprogs dosfstools util-linux vulkan-loader mesa-vulkan-ati"
+	case "$ARCH" in
+		x86|x86_64|aarch64|armv7|ppc64le|riscv64) apks="$apks firefox ublock-origin" ;;
+	esac
 	case "$ARCH" in
 		x86|x86_64|aarch64|armv7|riscv64) apks="$apks efibootmgr" ;;
 	esac

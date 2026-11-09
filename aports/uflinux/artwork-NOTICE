@@ -26,3 +26,7 @@ backgrounds-AUTHORS and backgrounds-COPYING_CCBYSA3 alongside this file.
 CC BY-SA 3.0: https://creativecommons.org/licenses/by-sa/3.0/
 CC0: https://creativecommons.org/publicdomain/zero/1.0/
 These image licenses are separate from UFLinux's GPL-3.0-only program code.
+
+labAdwaita is provided unmodified by the labwc themes contributors:
+https://github.com/labwc/labwc-themes/tree/6a2e3634eef03e7f124359ad28ed5da2d931f96d/labAdwaita
+It is licensed under CC BY-SA 4.0; see labwc-themes-LICENSE.

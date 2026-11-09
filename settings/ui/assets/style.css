@@ -9,6 +9,7 @@
 .uflinux-settings.status-shell { background: transparent; }
 .uflinux-settings .quick .settings-row { padding: 5px 0; }
 .uflinux-settings .quick .section-title { margin-top: 6px; }
+.uflinux-settings .audio-devices { min-width: 200px; padding: 6px; }
 .uflinux-settings .display-box { background: #1a5b8c; color: white; padding: 20px; border: 2px solid #3584e4; }
 .uflinux-settings .suggested-action { background: #1c71d8; color: white; }
 .uflinux-settings .network-name { font-weight: bold; }

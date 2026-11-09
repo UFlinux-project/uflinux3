@@ -9,4 +9,8 @@ mako &
 /usr/libexec/uflinux-settingsd &
 uflinux-start-menu --daemon &
 /usr/libexec/uflinux-start-panel &
+if [ -f /run/uflinux-live ] && [ ! -e "$XDG_RUNTIME_DIR/uflinux-installer-started" ]; then
+	touch "$XDG_RUNTIME_DIR/uflinux-installer-started"
+	uflinux-installer &
+fi
 wait

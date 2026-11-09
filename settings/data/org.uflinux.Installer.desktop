@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Install UFLinux
+Name[cs]=Nainstalovat UFLinux
+Comment=Install UFLinux on this computer
+Comment[cs]=Nainstalovat UFLinux do tohoto počítače
+Exec=uflinux-installer
+Icon=uflinux
+Terminal=false
+Categories=System;Settings;
+StartupNotify=true

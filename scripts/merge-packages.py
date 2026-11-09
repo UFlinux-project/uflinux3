@@ -15,7 +15,7 @@ def collect(out, arch, version):
     out = Path(out).resolve()
     shards = out / 'package-shards' / arch
     if {p.name for p in shards.iterdir()} != set(PACKAGE_NAMES):
-        raise ValueError('All four package shards are required')
+        raise ValueError('All package shards are required')
     keys, packages, records, baseline = {}, {}, {}, {}
     identity = None
     for origin, expected_names in PACKAGE_NAMES.items():
@@ -30,7 +30,7 @@ def collect(out, arch, version):
         identity = current_identity
         recipe = (PROJECT / 'aports' / origin / 'APKBUILD').read_text()
         revision = re.search(r'^pkgrel=([0-9]+)$', recipe, re.M)[1]
-        upstream = {'connman': LOCK['connman']['version'], 'ironbar': LOCK['ironbar']['version'],
+        upstream = {'uflinux-regreet': LOCK['uflinux-regreet']['version'], 'connman': LOCK['connman']['version'], 'ironbar': LOCK['ironbar']['version'],
                     'uflinux-settings': LOCK['settings']['version'], 'uflinux': version}[origin]
         names, payloads = set(), {}
         key = (source / 'build.rsa.pub').read_text()
@@ -51,7 +51,7 @@ def collect(out, arch, version):
             raise ValueError('Incomplete or unexpected package set for ' + origin)
         inputs = shard / 'inputs' / arch
         required = {'build-apks.tar.gz', 'sources.tar.gz'}
-        if origin in {'ironbar', 'uflinux-settings'}:
+        if origin in {'ironbar', 'uflinux-regreet', 'uflinux-settings'}:
             required.add('cargo-sources.tar.gz')
         if not required.issubset({p.name for p in inputs.glob('*.tar.gz')}):
             raise ValueError('Missing rebuild inputs for ' + origin)
@@ -95,7 +95,7 @@ def collect(out, arch, version):
             'arch': arch, 'version': version, 'fresh_compiler_target': True,
             'signature_streams_excluded': True, 'baseline': baseline, 'rebuilt': baseline,
             'matched': True, 'package_shards': list(PACKAGE_NAMES)}, indent=2) + '\n')
-    print(f'Collected {len(packages)} APKs from four independent {arch} jobs')
+    print(f'Collected {len(packages)} APKs from {len(PACKAGE_NAMES)} independent {arch} jobs')
 
 
 def main():

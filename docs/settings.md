@@ -22,7 +22,9 @@ uflinux-settingsctl power-profile balanced
 Other page names are `displays`, `audio`, `power`, `default-apps`, `datetime`, `appearance`
 and `about`. The Network panel provides connection selection, credentials and
 radio controls. Sound provides input, output and application audio controls;
-Power provides battery status, brightness and power modes. Advanced options are
+Power provides battery status, brightness and power modes. Controls for absent
+hardware are hidden; use the arrow beside an input or output volume slider to
+choose its audio device. Advanced options are
 available from each panel's Settings link. `--quick-settings` is an alias for the
 Network panel. Escape, an outside click or a repeated taskbar click dismisses the
 active panel. Ironbar supplies the originating monitor. The GUI reuses its

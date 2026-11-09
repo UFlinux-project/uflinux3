@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import time
 import wave
+import pyatspi
 from gi.repository import Gio, GLib
 
 bus=Gio.bus_get_sync(Gio.BusType.SESSION)
@@ -24,13 +25,52 @@ def wait(predicate):
     raise AssertionError('Audio subscriptions did not converge')
 
 previous=state()['default_output']
-module=subprocess.check_output(['pactl','load-module','module-null-sink','sink_name=uflinux_alternate'],text=True).strip()
+module=subprocess.check_output(['pactl','load-module','module-null-sink','sink_name=uflinux_alternate',
+    'sink_properties=device.description=UFLinux-Alternate-Output'],text=True).strip()
 children=[]
 unloaded=False
 try:
     wait(lambda s:any(d['name']=='uflinux_alternate' for d in s['outputs']))
-    execute({'action':'set-default','input':False,'device':'uflinux_alternate'})
+    # Exercise the taskbar selector through GTK, including its live selected marker.
+    subprocess.run(['uflinux-settings','--panel','sound','--output','HEADLESS-1'],check=True)
+    def find_control(name):
+        queue=[app for app in pyatspi.Registry.getDesktop(0) if app.name=='uflinux-settings']
+        while queue:
+            item=queue.pop(0)
+            try:
+                if (item.name==name and item.getRoleName() in ('button','push button','toggle button')
+                        and item.getState().contains(pyatspi.STATE_SHOWING)
+                        and item.queryAction().nActions): return item
+                queue.extend(list(item))
+            except (RuntimeError,LookupError): pass
+        return None
+    def wait_control(name):
+        for _ in range(100):
+            while GLib.MainContext.default().pending(): GLib.MainContext.default().iteration(False)
+            item=find_control(name)
+            if item: return item
+            time.sleep(.05)
+        raise AssertionError('Missing accessible sound control: '+name)
+    def click(item):
+        queue=[item]
+        while queue:
+            item=queue.pop(0)
+            try:
+                action=item.queryAction()
+                if action.nActions:
+                    assert action.doAction(0)
+                    return
+            except (NotImplementedError,RuntimeError): pass
+            queue.extend(list(item))
+        raise AssertionError('Control has no accessible action')
+    click(wait_control('Choose output device'))
+    click(wait_control('UFLinux-Alternate-Output'))
     wait(lambda s:s['default_output']=='uflinux_alternate')
+    click(wait_control('Choose output device'))
+    wait_control('UFLinux-Alternate-Output (selected)')
+    # Close the popover and panel before continuing the backend checks.
+    click(wait_control('Choose output device'))
+    subprocess.run(['uflinux-settings','--panel','sound','--output','HEADLESS-1'],check=True)
     execute({'action':'set-volume','input':False,'device':'','percent':34})
     execute({'action':'set-mute','input':False,'device':'','muted':True})
     wait(lambda s:any(d['name']=='uflinux_alternate' and d['muted'] and abs(d['volume']-34)<1 for d in s['outputs']))

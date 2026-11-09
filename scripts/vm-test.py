@@ -107,7 +107,7 @@ def transfer(child, source, destination):
 def graphical_login(state):
     """Type into the installed greeter; leave installed autologin disabled."""
     with qmp(state) as request:
-        for text in ("alice\n", "uflinux-test-password\n"):
+        for text in ("\n", "uflinux-test-password\n"):
             for character in text:
                 key = {"\n": "ret", "-": "minus"}.get(character, character)
                 request("send-key", {"keys": [{"type": "qcode", "data": key}], "hold-time": 30})

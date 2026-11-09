@@ -28,12 +28,12 @@ Stages share `--workdir` (default `.state`) and `--outdir` (default `out`). Down
 APK, Cargo, and compiler caches use `--cache` (default `.cache/build`). A lockfile
 change requires a fresh work directory, but verified downloads can be reused.
 
-GitHub compiles four independent origins per architecture: `connman`, `ironbar`,
-`uflinux-settings` and `uflinux`. PR/main builds schedule four compile jobs;
-manual/tag runs schedule 28, with at most eight compile jobs running together.
+GitHub compiles five independent origins per architecture: `connman`, `ironbar`,
+`uflinux-regreet`, `uflinux-settings` and `uflinux`. PR/main builds schedule five compile jobs;
+manual/tag runs schedule 35, with at most eight compile jobs running together.
 Each origin has its own VM, development signing key, timeout and cache. Heavy Rust
 builds and their native clean-rebuild comparisons run independently. Signing and
-ISO assembly wait for a complete validated set of 22 APKs.
+ISO assembly wait for a complete validated set of APKs.
 
 For an individual package build, use the same entry point:
 

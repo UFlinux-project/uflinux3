@@ -1,0 +1,38 @@
+# Maintainer: UFLinux contributors <noreply@example.invalid>
+pkgname=uflinux-regreet
+pkgver=0.2.0
+pkgrel=0
+pkgdesc="ReGreet login greeter configured for UFLinux"
+url="https://github.com/rharish101/ReGreet"
+arch="x86 x86_64 aarch64 armv7 ppc64le s390x riscv64"
+license="GPL-3.0-or-later"
+depends="greetd"
+makedepends="cargo cargo-auditable gtk4.0-dev"
+source="$pkgname-$pkgver.tar.gz::https://codeload.github.com/rharish101/ReGreet/tar.gz/refs/tags/$pkgver
+	fixed-session.patch"
+builddir="$srcdir/ReGreet-$pkgver"
+options="net"
+
+prepare() {
+	default_prepare
+	cargo fetch --locked --target="$CTARGET"
+	cargo clean -p regreet
+}
+
+build() {
+	cargo auditable build --release --frozen --features gtk4_8
+}
+
+check() {
+	cargo test --frozen --features gtk4_8
+}
+
+package() {
+	install -Dm755 "${CARGO_TARGET_DIR:-target}/release/regreet" "$pkgdir/usr/bin/regreet"
+	install -dm755 -o greetd -g greetd "$pkgdir/var/lib/regreet" "$pkgdir/var/log/regreet"
+}
+
+sha512sums="
+2bf74896c1757801d04145690a3d11d473cc1f5e6e3c9709bb26e57c0a7a3702d8062ca0c26c67bc1087197fc57a00f899144484bfc0e8a556c10a9d020f6bb8  uflinux-regreet-0.2.0.tar.gz
+be7418c7c810f9100f27ed9a05b244cb705f21d5d501066540a56ea5aa4c0307acc05dccb6ec5ec28f6870a0e3760b8b2039574d3d30421a46df5f91b93978d0  fixed-session.patch
+"

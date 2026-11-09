@@ -14,7 +14,7 @@ bar = [{ type = "button", name = "start-button", widgets = [{ type = "image", sr
 [[start]]
 type = "launcher"
 disable_popup = true
-favorites = ["foot", "thunar"]
+favorites = ["foot", "nemo"]
 show_names = false
 show_icons = true
 icon_size = 24

@@ -2,6 +2,9 @@
 set -eu
 export XDG_CURRENT_DESKTOP=labwc XDG_SESSION_DESKTOP=labwc XDG_SESSION_TYPE=wayland
 export LIBSEAT_BACKEND=logind
+if [ -r /etc/uflinux-locale ]; then
+	IFS= read -r LANG < /etc/uflinux-locale || :
+fi
 export LANG=${LANG:-C.UTF-8}
 # Respect existing XDG paths and initialize standard places before any UI caches them.
 xdg-user-dirs-update || :

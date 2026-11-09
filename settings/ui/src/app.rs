@@ -19,6 +19,8 @@ pub struct App {
     pub state: RefCell<Snapshot>,
     pub agent: RefCell<Option<auth::Agent>>,
     pub authorization_active: Cell<bool>,
+    pub submenu_open: Cell<bool>,
+    pub submenu_epoch: Cell<u64>,
     full: RefCell<Option<gtk::ApplicationWindow>>,
     quick: RefCell<Option<gtk::ApplicationWindow>>,
     pub stack: RefCell<Option<gtk::Stack>>,
@@ -72,6 +74,8 @@ pub fn run() {
             state: RefCell::new(Snapshot::default()),
             agent: RefCell::new(None),
             authorization_active: Cell::new(false),
+            submenu_open: Cell::new(false),
+            submenu_epoch: Cell::new(0),
             full: RefCell::new(None),
             quick: RefCell::new(None),
             stack: RefCell::new(None),
@@ -565,7 +569,12 @@ impl App {
         window.connect_is_active_notify(move |window| {
             if window.is_active() {
                 active.set(true);
-            } else if active.get() && !dismissing.get() {
+            } else if active.get()
+                && !dismissing.get()
+                && !application
+                    .upgrade()
+                    .is_some_and(|app| app.submenu_open.get())
+            {
                 // GtkWindow destruction hides the window and can emit this
                 // notification. Never recursively close it from its hide path.
                 let target = target.clone();
@@ -593,6 +602,9 @@ impl App {
                 app.quick.borrow_mut().take();
                 app.quick_auth.borrow_mut().take();
                 app.quick_bindings.borrow_mut().clear();
+                app.submenu_open.set(false);
+                app.submenu_epoch
+                    .set(app.submenu_epoch.get().wrapping_add(1));
             }
             glib::Propagation::Proceed
         });

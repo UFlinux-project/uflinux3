@@ -10,7 +10,7 @@ depends="$pkgname-daemon=$pkgver-r$pkgrel $pkgname-system=$pkgver-r$pkgrel"
 makedepends="cargo cargo-auditable gtk4.0-dev gtk4-layer-shell-dev pulseaudio-dev polkit-dev
 	eudev-dev vulkan-loader-dev mesa-dev pkgconf"
 subpackages="$pkgname-dbg $pkgname-doc $pkgname-daemon:daemon $pkgname-system:system
-	$pkgname-system-openrc:system_openrc"
+	$pkgname-system-openrc:system_openrc uflinux-installer-ui:installer_ui"
 options="net"
 # Generated from the repository by scripts/settings-source.py, independently verified.
 source="$pkgname-$pkgver.tar"
@@ -26,8 +26,8 @@ prepare() {
 	default_prepare
 	cargo fetch --locked --target="$CTARGET"
 	# Source bundles normalize timestamps. Never reuse stale workspace binaries.
-	cargo clean -p uflinux-start-menu -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
-	cargo clean --release -p uflinux-start-menu -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
+	cargo clean -p uflinux-installer -p uflinux-start-menu -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
+	cargo clean --release -p uflinux-installer -p uflinux-start-menu -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
 }
 build() {
 	# abuild enables Rust debug info when a -dbg subpackage exists.
@@ -40,6 +40,8 @@ check() {
 }
 package() {
 	local target="${CARGO_TARGET_DIR:-target}/release"
+	install -Dm755 "$target/uflinux-installer" "$pkgdir/usr/bin/uflinux-installer"
+	install -Dm644 data/org.uflinux.Installer.desktop "$pkgdir/usr/share/applications/org.uflinux.Installer.desktop"
 	install -Dm755 "$target/uflinux-start-menu" "$pkgdir/usr/bin/uflinux-start-menu"
 	install -Dm644 data/org.uflinux.StartMenu.service "$pkgdir/usr/share/dbus-1/services/org.uflinux.StartMenu.service"
 	install -Dm755 "$target/uflinux-settings" "$pkgdir/usr/bin/uflinux-settings"
@@ -65,6 +67,11 @@ package() {
 	install -Dm644 data/uflinux-logind-power.conf "$pkgdir/etc/elogind/logind.conf.d/90-uflinux-power.conf"
 	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 	install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
+installer_ui() {
+	pkgdesc="Live UFLinux GTK4 installer"
+	depends="uflinux-installer gtk4.0"
+	amove usr/bin/uflinux-installer usr/share/applications/org.uflinux.Installer.desktop
 }
 daemon() {
 	pkgdesc="Headless UFLinux session settings service and command-line controls"

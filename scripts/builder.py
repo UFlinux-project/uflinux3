@@ -27,9 +27,10 @@ LOCK = json.loads((PROJECT / "config/sources.lock.json").read_text())
 ARCHES = json.loads((PROJECT / "config/architectures.json").read_text())
 PACKAGE_NAMES = {
     "connman": {"connman", "connman-dbg", "connman-dev", "connman-doc", "connman-openrc"},
+    "uflinux-regreet": {"uflinux-regreet"},
     "ironbar": {"ironbar", "ironbar-dbg", "ironbar-doc"},
     "uflinux-settings": {"uflinux-settings", "uflinux-settings-daemon", "uflinux-settings-dbg",
-                         "uflinux-settings-doc", "uflinux-settings-system", "uflinux-settings-system-openrc"},
+                         "uflinux-settings-doc", "uflinux-settings-system", "uflinux-settings-system-openrc", "uflinux-installer-ui"},
     "uflinux": {"uflinux", "uflinux-defaults", "uflinux-desktop", "uflinux-installer",
                 "uflinux-live", "uflinux-live-openrc", "uflinux-release", "uflinux-bootsplash-openrc",
                 "uflinux-initramfs"},
@@ -422,14 +423,16 @@ class Builder:
         apkbuild.write_text(re.sub(r"^pkgver=.*$", "pkgver=" + self.args.version, apkbuild.read_text(), flags=re.M))
         # Only fetch the selected origin's sources in a package shard.
         selected = (self.args.package,) if getattr(self.args, "package", None) else tuple(PACKAGE_NAMES)
-        for origin in ("ironbar", "connman"):
+        for origin in ("ironbar", "connman", "uflinux-regreet"):
             if origin in selected:
                 archive = download(LOCK["sources"][origin], self.cache / "downloads")
-                suffix = "tar.gz" if origin == "ironbar" else "tar.xz"
+                suffix = "tar.xz" if origin == "connman" else "tar.gz"
                 shutil.copy2(archive, self.root / "var/cache/distfiles" / f"{origin}-{LOCK[origin]['version']}.{suffix}")
         if "uflinux" in selected:
             artwork = download(LOCK["sources"]["gnome-backgrounds"], self.cache / "downloads")
             shutil.copy2(artwork, self.root / "var/cache/distfiles/gnome-backgrounds-3.38.0.tar.xz")
+            theme = download(LOCK["sources"]["labwc-themes"], self.cache / "downloads")
+            shutil.copy2(theme, self.root / "var/cache/distfiles/labwc-themes-6a2e3634.tar.gz")
         if "uflinux-settings" in selected:
             import importlib.util
             spec = importlib.util.spec_from_file_location("settings_source", PROJECT / "scripts/settings-source.py")
@@ -453,7 +456,7 @@ class Builder:
             self.build_origin(package, env)
         from sbom import apk_metadata
         versions = {}
-        for origin, version in (("connman",LOCK["connman"]["version"]),("ironbar", LOCK["ironbar"]["version"]), ("uflinux-settings", LOCK["settings"]["version"]), ("uflinux", self.args.version)):
+        for origin, version in (("uflinux-regreet", LOCK["uflinux-regreet"]["version"]), ("connman",LOCK["connman"]["version"]),("ironbar", LOCK["ironbar"]["version"]), ("uflinux-settings", LOCK["settings"]["version"]), ("uflinux", self.args.version)):
             if origin not in selected:
                 continue
             recipe = (source / origin / "APKBUILD").read_text()
@@ -665,7 +668,7 @@ class Builder:
         if repo.exists():
             shutil.rmtree(repo)
         shutil.copytree(self.out / "repository" / self.args.arch, repo)
-        self.chroot("apk", "add", "--repository", "/repo", "uflinux", "uflinux-live", "uflinux-installer")
+        self.chroot("apk", "add", "--repository", "/repo", "uflinux", "uflinux-live", "uflinux-installer", "uflinux-installer-ui")
         # Damaging a signed archive must fail verification before installation.
         sample = sorted(repo.glob("uflinux-defaults-*.apk"))[0]
         damaged = bytearray(sample.read_bytes())
@@ -698,7 +701,7 @@ class Builder:
             results = self.root / "tmp/uflinux-settings-smoke-results"
             if results.exists():
                 shutil.copytree(results, report / "settings", dirs_exist_ok=True)
-        self.chroot("python3", "-m", "unittest", "discover", "-s", "/project/tests", "-p", "test_installer.py")
+        self.chroot("python3", "-m", "unittest", "discover", "-s", "/project/tests", "-p", "test_installer*.py")
         self.chroot("python3", "/project/tests/power-acpid-smoke.py")
         self.chroot("scanelf", "--needed", "/usr/bin/ironbar", stdout=(report / "elf.txt").open("w"))
         self.chroot("ldd", "/usr/bin/ironbar", stdout=(report / "libraries.txt").open("w"))
@@ -713,7 +716,7 @@ class Builder:
         if machine != expected or elf_type != 3:
             raise RuntimeError("Ironbar must be a position-independent executable for the target architecture")
         settings_binaries = {}
-        for relative in ("usr/bin/uflinux-start-menu", "usr/bin/uflinux-settings", "usr/bin/uflinux-settingsctl",
+        for relative in ("usr/bin/uflinux-installer", "usr/bin/uflinux-start-menu", "usr/bin/uflinux-settings", "usr/bin/uflinux-settingsctl",
                          "usr/libexec/uflinux-settingsd", "usr/libexec/uflinux-settings-system", "usr/sbin/connmand"):
             path = self.root / relative
             data = path.read_bytes()[:64]

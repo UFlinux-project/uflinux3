@@ -213,10 +213,23 @@ try:
     wait(lambda: find('Network', 'frame'), 'Network panel did not appear')
     pointer(100, 100)
     wait(lambda: not find('Network', 'frame'), 'Outside click did not dismiss the Network panel')
-    for panel, title, control in [('network', 'Network', 'Networking'), ('sound', 'Sound', 'Output volume'), ('power', 'Power', 'Power mode')]:
+    for panel, title, control in [('network', 'Network', 'Network Settings…'), ('sound', 'Sound', 'Sound Settings…'), ('power', 'Power', 'Power Settings…')]:
         command('uflinux-settings', '--panel', panel, '--output', 'HEADLESS-1')
-        wait(lambda: find(title, 'frame'), title + ' panel did not appear')
+        frame = wait(lambda: find(title, 'frame'), title + ' panel did not appear')
         wait(lambda: find(control), title + ' control missing')
+        snapshot = json.loads(subprocess.check_output(['uflinux-settingsctl', 'status'], text=True))
+        def shown(name):
+            return any(a.name == name and a.getState().contains(pyatspi.STATE_SHOWING) for a in tree(frame))
+        if panel == 'network':
+            wifi = any(t['kind'] == 'wifi' for t in snapshot['network']['technologies']) or snapshot['network']['wifi_hardware_blocked'] or snapshot['network']['wifi_software_blocked']
+            wait(lambda: shown('Wi-Fi') == wifi, 'Wi-Fi visibility did not match the hardware')
+            assert shown('Scan') == wifi, 'Wi-Fi scan was shown without Wi-Fi hardware'
+        elif panel == 'sound':
+            wait(lambda: shown('Choose input device') == bool(snapshot['audio']['inputs']), 'Input visibility did not match the hardware')
+            wait(lambda: shown('Choose output device') == bool(snapshot['audio']['outputs']), 'Output visibility did not match the hardware')
+        else:
+            wait(lambda: shown('Brightness') == bool(snapshot['displays']['brightness']), 'Brightness visibility did not match the hardware')
+            wait(lambda: shown('Power mode') == snapshot['power']['available'], 'Power profile visibility did not match availability')
     command('uflinux-settings', '--panel', 'power', '--output', 'HEADLESS-1')
     wait(lambda: not find('Power', 'frame'), 'Power panel did not toggle closed')
     open_menu()

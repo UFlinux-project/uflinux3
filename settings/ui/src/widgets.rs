@@ -107,6 +107,17 @@ pub fn slider(
     get: impl Fn(&Snapshot) -> f64 + 'static,
     action: impl Fn(f64) -> Action + 'static,
 ) {
+    let scale = slider_control(app, surface, name, get, action);
+    parent.append(&row(name, &scale));
+}
+
+pub fn slider_control(
+    app: &Rc<App>,
+    surface: Surface,
+    name: &str,
+    get: impl Fn(&Snapshot) -> f64 + 'static,
+    action: impl Fn(f64) -> Action + 'static,
+) -> gtk::Scale {
     let scale = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0., 100., 1.);
     scale.set_hexpand(true);
     scale.set_width_request(150);
@@ -146,7 +157,7 @@ pub fn slider(
             }
         }
     });
-    parent.append(&row(name, &scale));
+    scale
 }
 pub fn choose(
     parent: &gtk::Box,

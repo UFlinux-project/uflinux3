@@ -1,0 +1,293 @@
+#!/usr/bin/python3
+"""Read-only discovery and tightly validated GUI installation backend."""
+import fcntl
+import hashlib
+import importlib.machinery
+import importlib.util
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import subprocess
+import sys
+import tempfile
+from types import SimpleNamespace
+
+cli_path = Path('/usr/sbin/uflinux-install')
+if not cli_path.exists():
+    cli_path = Path(__file__).with_name('uflinux-install')
+loader = importlib.machinery.SourceFileLoader('uflinux_cli', str(cli_path))
+spec = importlib.util.spec_from_loader(loader.name, loader)
+cli = importlib.util.module_from_spec(spec)
+loader.exec_module(cli)
+
+MAX_REQUEST = 65536
+MIN_ROOT = 8 * 1024**3
+FIELDS = 'PATH,TYPE,SIZE,RO,MODEL,SERIAL,WWN,MAJ:MIN,FSTYPE,UUID,PARTTYPE,PARTUUID,MOUNTPOINTS,PKNAME'
+
+
+def discover():
+    data = json.loads(cli.output('lsblk', '--json', '--tree', '--bytes', '--paths', '--output', FIELDS))
+    for device in data['blockdevices']:
+        if device.get('type') == 'disk':
+            device['diskseq'] = disk_sequence(device.get('path', ''))
+    arch = cli.output('apk', '--print-arch')
+    mode = 'uefi' if Path('/sys/firmware/efi').exists() else ('bios' if arch in ('x86', 'x86_64') else 'native')
+    disks = [{'device': device, 'fingerprint': fingerprint(device)} for device in data['blockdevices'] if safe_disk(device)]
+    return {'version': 1, 'arch': arch, 'mode': mode, 'devices': data['blockdevices'], 'disks': disks}
+
+
+def disk_sequence(path):
+    try:
+        sequence = (Path('/sys/class/block') / Path(path).name / 'diskseq').read_text().strip()
+        return int(sequence) if sequence.isdecimal() else None
+    except OSError:
+        return None
+
+
+def fingerprint(device):
+    return hashlib.sha256(json.dumps(device, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def flatten(devices):
+    for device in devices:
+        yield device
+        yield from flatten(device.get('children', []))
+
+
+def safe_disk(disk):
+    if disk.get('type') != 'disk' or disk.get('ro') or not disk.get('diskseq') or not disk.get('path', '').startswith('/dev/') or Path(disk.get('path', '')).name.startswith('dasd'):
+        return False
+    for device in flatten([disk]):
+        if device.get('type') not in ('disk', 'part') or device.get('ro'):
+            return False
+        if any(device.get('mountpoints') or []):
+            return False
+        name = Path(device['path']).name
+        block = Path('/sys/class/block') / name
+        holders = block / 'holders'
+        if not block.exists() or not holders.is_dir() or any(holders.iterdir()):
+            return False
+        try:
+            info = os.stat(device['path'])
+            if not stat.S_ISBLK(info.st_mode) or device.get('maj:min') != f'{os.major(info.st_rdev)}:{os.minor(info.st_rdev)}':
+                return False
+        except OSError:
+            return False
+    try:
+        swaps = Path('/proc/swaps').read_text().splitlines()[1:]
+        paths = {os.path.realpath(d['path']) for d in flatten([disk])}
+        if any(os.path.realpath(line.split()[0]) in paths for line in swaps if line.split()):
+            return False
+    except OSError:
+        return False
+    return True
+
+
+def storage_plan(arch, mode):
+    if mode == 'uefi' and arch in ('x86', 'x86_64', 'aarch64', 'armv7', 'riscv64'):
+        return ['size=1G,type=U', 'type=L'], 1, 2
+    if mode == 'bios' and arch in ('x86', 'x86_64'):
+        return ['size=1G,type=L,attrs=LegacyBIOSBootable', 'type=L'], 1, 2
+    if mode == 'native' and arch == 'ppc64le':
+        return ['size=8M,type=9e1a2d38-c612-4316-aa26-8b49521e5a8b', 'size=1G,type=L', 'type=L'], 2, 3
+    if mode == 'native' and arch == 's390x':
+        return ['size=1G,type=L', 'type=L'], 1, 2
+    raise cli.InstallError('Unsupported architecture or firmware mode')
+
+
+def partition_path(disk, number):
+    return disk + ('p' if disk[-1].isdigit() else '') + str(number)
+
+
+def validate_request(request, state):
+    if not isinstance(request, dict) or set(request) != {'version', 'storage', 'account', 'locale', 'keyboard', 'timezone', 'online'} or request['version'] != 1:
+        raise cli.InstallError('Invalid installer request')
+    account = request['account']
+    if not isinstance(account, dict) or set(account) != {'name', 'user', 'hostname', 'password'} or not all(isinstance(x, str) for x in account.values()):
+        raise cli.InstallError('Invalid account')
+    if not re.fullmatch(r'[a-z_][a-z0-9_-]{0,30}', account['user']) or account['user'] in {'root', 'live', 'greetd'}:
+        raise cli.InstallError('Invalid user name')
+    if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,62}', account['hostname']):
+        raise cli.InstallError('Invalid hostname')
+    if not 8 <= len(account['password']) <= 1024 or any(c in account['password'] for c in ':\n\r\0'):
+        raise cli.InstallError('Invalid password')
+    if not 1 <= len(account['name']) <= 128 or any(c in account['name'] for c in ':\n\r\0'):
+        raise cli.InstallError('Invalid display name')
+    if request['locale'] not in ('en_US.UTF-8', 'cs_CZ.UTF-8'):
+        raise cli.InstallError('Unsupported language')
+    if not isinstance(request['keyboard'], str) or not re.fullmatch(r'[a-z0-9_]{1,32}', request['keyboard']):
+        raise cli.InstallError('Invalid keyboard layout')
+    timezone = request['timezone']
+    if not isinstance(timezone, str) or not re.fullmatch(r'[A-Za-z0-9_+.-]+(?:/[A-Za-z0-9_+.-]+)*', timezone) or '..' in timezone:
+        raise cli.InstallError('Invalid timezone')
+    zone = (Path('/usr/share/zoneinfo') / timezone).resolve()
+    if not zone.is_relative_to('/usr/share/zoneinfo') or not zone.is_file():
+        raise cli.InstallError('Timezone not installed')
+    if not isinstance(request['online'], bool):
+        raise cli.InstallError('Invalid package source')
+    storage = request['storage']
+    if not isinstance(storage, dict) or set(storage) != {'mode', 'disk', 'fingerprint', 'root', 'boot'} or storage['mode'] not in ('erase', 'prepared'):
+        raise cli.InstallError('Invalid storage request')
+    disks = [d for d in state['devices'] if d.get('path') == storage['disk']]
+    if len(disks) != 1 or fingerprint(disks[0]) != storage['fingerprint']:
+        raise cli.InstallError('Disk changed since review; review storage again')
+    disk = disks[0]
+    if not safe_disk(disk):
+        raise cli.InstallError('Disk is mounted, in use, read-only, or is live media')
+    layout, boot_number, root_number = storage_plan(state['arch'], state['mode'])
+    if storage['mode'] == 'erase':
+        if disk.get('size', 0) < MIN_ROOT + 1024**3 + 32 * 1024**2:
+            raise cli.InstallError('Disk is too small for an 8 GiB XFS root')
+        if storage['root'] or storage['boot']:
+            raise cli.InstallError('Unexpected partition selection')
+        return disk, layout, partition_path(disk['path'], boot_number), partition_path(disk['path'], root_number)
+    entries = {d.get('path'): d for d in flatten([disk])}
+    root, boot = entries.get(storage['root']), entries.get(storage['boot'])
+    boot_type = 'vfat' if state['mode'] == 'uefi' else 'ext4'
+    if not root or not boot or root is boot or root.get('type') != 'part' or boot.get('type') != 'part' or root.get('fstype') != 'xfs' or boot.get('fstype') != boot_type:
+        raise cli.InstallError('Select separate XFS root and compatible boot partitions on the selected disk')
+    if root.get('size', 0) < MIN_ROOT:
+        raise cli.InstallError('Root filesystem must be at least 8 GiB')
+    return disk, layout, boot['path'], root['path']
+
+
+def event(kind, message):
+    print(json.dumps({'version': 1, 'event': kind, 'message': message}), flush=True)
+
+
+secret = ''
+
+
+def run_with_events(*args, **kwargs):
+    # Existing output() calls need their captured result for parsing.
+    if 'stdout' in kwargs:
+        return subprocess.run(args, check=True, text=True, **kwargs)
+    payload = kwargs.pop('input', None)
+    child = subprocess.Popen(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             stdin=subprocess.PIPE if payload is not None else subprocess.DEVNULL, **kwargs)
+    if payload is not None:
+        try:
+            child.stdin.write(payload)
+        finally:
+            child.stdin.close()
+    # Never echo output from the password-setting command.
+    sensitive = 'chpasswd' in args
+    while True:
+        line = child.stdout.readline(4096)
+        if not line:
+            break
+        line = line.rstrip('\r\n')
+        if line and not sensitive:
+            event('log', line.replace(secret, '[redacted]')[:1024] if secret else line[:1024])
+    result = child.wait()
+    if result:
+        raise subprocess.CalledProcessError(result, args)
+    return subprocess.CompletedProcess(args, result)
+
+
+def prepare_boot_directory(target):
+    unexpected = {p.name for p in target.iterdir()} - {'boot', 'lost+found'}
+    if unexpected:
+        raise cli.InstallError('Target root must be empty apart from boot and lost+found')
+    boot_dir = target / 'boot'
+    if boot_dir.is_symlink() or (boot_dir.exists() and not boot_dir.is_dir()):
+        raise cli.InstallError('Target boot must be a normal directory')
+    boot_dir.mkdir(exist_ok=True)
+
+
+def execute(request):
+    if os.geteuid() != 0 or not Path('/run/uflinux-live').exists():
+        raise cli.InstallError('The GUI backend requires the UFLinux live session')
+    with open('/run/uflinux-install.lock', 'w') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise cli.InstallError('Another UFLinux installation is already running') from exc
+        state = discover()
+        disk, layout, boot, root = validate_request(request, state)
+        sources = Path('/etc/apk/repositories').read_text().splitlines()
+        media = [line.strip() for line in sources if line.startswith('/') and (Path(line.strip()) / '.boot_repository').is_file()]
+        if not media:
+            raise cli.InstallError('Signed installation media repository is unavailable')
+        if state['mode'] == 'uefi' and not Path('/sys/firmware/efi/efivars').is_dir():
+            raise cli.InstallError('UEFI variables are unavailable')
+        if request['storage']['mode'] == 'prepared':
+            if state['mode'] == 'uefi':
+                if cli.output('blkid', '--probe', '-s', 'VERSION', '-o', 'value', boot) != 'FAT32':
+                    raise cli.InstallError('The EFI system partition must be FAT32')
+                cli.efi_partition(boot)
+            elif state['mode'] == 'bios':
+                table = json.loads(cli.output('sfdisk', '--json', disk['path']))['partitiontable']
+                cli.bios_mbr_code(table, boot)
+            elif state['arch'] == 'ppc64le':
+                types = {str(d.get('parttype', '')).lower() for d in flatten([disk])}
+                if not types.intersection({'0x41', '41', '9e1a2d38-c612-4316-aa26-8b49521e5a8b'}):
+                    raise cli.InstallError('PowerPC requires a PReP boot partition')
+        global secret
+        secret = request['account']['password']
+        cli.run = run_with_events
+        event('phase', 'Preparing storage')
+        if request['storage']['mode'] == 'erase':
+            cli.run('sfdisk', '--wipe', 'always', disk['path'], input='label: gpt\n' + '\n'.join(layout) + '\n')
+            cli.run('blockdev', '--rereadpt', disk['path'])
+            cli.run('udevadm', 'settle')
+            cli.run('mkfs.xfs', '-f', root)
+            if state['mode'] == 'uefi':
+                cli.run('mkfs.vfat', '-F', '32', boot)
+            else:
+                cli.run('mkfs.ext4', '-F', boot)
+        with tempfile.TemporaryDirectory(prefix='uflinux-target-', dir='/run') as temporary:
+            target = Path(temporary)
+            root_mounted = boot_mounted = False
+            try:
+                cli.run('mount', root, str(target))
+                root_mounted = True
+                prepare_boot_directory(target)
+                cli.run('mount', boot, str(target / 'boot'))
+                boot_mounted = True
+                args = SimpleNamespace(target=str(target), user=request['account']['user'], hostname=request['account']['hostname'], boot_disk=disk['path'] if state['mode'] != 'uefi' else None, boot_mode=state['mode'], online=request['online'], gui_locale=True, display_name=request['account']['name'])
+                plan = cli.preflight(args)
+                event('phase', 'Installing system packages and bootloader')
+                cli.install(args, plan, request['account']['password'])
+                event('phase', 'Applying personal settings')
+                cli.write(target, 'etc/uflinux-locale', request['locale'] + '\n')
+                environment = target / 'etc/xdg/labwc/environment'
+                with environment.open('a') as stream:
+                    stream.write('\nXKB_DEFAULT_LAYOUT=' + request['keyboard'] + '\n')
+                cli.write(target, 'etc/timezone', request['timezone'] + '\n')
+                localtime = target / 'etc/localtime'
+                localtime.unlink(missing_ok=True)
+                localtime.symlink_to('/usr/share/zoneinfo/' + request['timezone'])
+                cli.run('sync')
+            finally:
+                try:
+                    if boot_mounted:
+                        cli.run('umount', str(target / 'boot'))
+                finally:
+                    if root_mounted:
+                        cli.run('umount', str(target))
+    event('complete', 'Installation complete')
+
+
+def main():
+    if sys.argv[1:] == ['--discover']:
+        print(json.dumps(discover()))
+        return 0
+    if sys.argv[1:] != ['--install']:
+        raise cli.InstallError('Invalid backend operation')
+    raw = sys.stdin.buffer.read(MAX_REQUEST + 1)
+    if len(raw) > MAX_REQUEST:
+        raise cli.InstallError('Installer request too large')
+    request = json.loads(raw)
+    execute(request)
+    return 0
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except (cli.InstallError, subprocess.CalledProcessError, OSError, ValueError, KeyError, TypeError) as exc:
+        event('error', str(exc))
+        sys.exit(1)
