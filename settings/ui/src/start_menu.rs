@@ -493,9 +493,11 @@ impl Menu {
                 return glib::Propagation::Proceed;
             };
             if key == gtk::gdk::Key::Escape {
-                let confirmation = menu.confirm.borrow().clone();
+                // Popdown animates; clear the logical state before another Escape arrives.
+                let confirmation = menu.confirm.borrow_mut().take();
                 if let Some(popover) = confirmation {
                     popover.popdown();
+                    menu.search.grab_focus();
                 } else if !menu.search.text().is_empty() {
                     menu.search.set_text("");
                     menu.rebuild();

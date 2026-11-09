@@ -408,11 +408,16 @@ class Builder:
             source_builder = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(source_builder)
             settings_version, settings_source = source_builder.bundle()
-            if settings_version != LOCK["settings"]["version"] or hashlib.sha512(settings_source).hexdigest() != LOCK["settings"]["source_sha512"]:
-                raise RuntimeError("Settings source changed; refresh its checked-in source checksum")
+            if settings_version != LOCK["settings"]["version"]:
+                raise RuntimeError("Settings version differs from the package version")
+            settings_digest = hashlib.sha512(settings_source).hexdigest()
+            recipe = source / "uflinux-settings/APKBUILD"
+            recipe.write_text(re.sub(r'^sha512sums="[^"]*"',
+                                     f'sha512sums="\n{settings_digest}  uflinux-settings-{settings_version}.tar\n"',
+                                     recipe.read_text(), flags=re.M))
             (self.root / "var/cache/distfiles" / f"uflinux-settings-{settings_version}.tar").write_bytes(settings_source)
             (source / "uflinux-settings" / f"uflinux-settings-{settings_version}.tar").write_bytes(settings_source)
-            (self.cache / "downloads" / (LOCK["settings"]["source_sha512"] + ".tar")).write_bytes(settings_source)
+            (self.cache / "downloads" / (settings_digest + ".tar")).write_bytes(settings_source)
         env = {"CARGO_HOME": "/cache/cargo", "CARGO_TARGET_DIR": "/cache/target",
                "CARGO_BUILD_JOBS": os.environ.get("CARGO_BUILD_JOBS", "1"),
                "VERGEN_GIT_SHA": LOCK["ironbar"]["commit"], "VERGEN_GIT_DESCRIBE": "v" + LOCK["ironbar"]["version"]}

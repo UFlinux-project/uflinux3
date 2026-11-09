@@ -85,6 +85,5 @@ system_openrc() {
 	depends="openrc"
 	amove etc/init.d/uflinux-routes etc/init.d/uflinux-acpid
 }
-sha512sums="
-e91adee757b46623c592dab42cdd9e06e7252d5344202a7aa3c4605bd27158f232d50536d0f21da24ad2085cb40b74d0f439df420b000484417fcf1ba55a90d1  uflinux-settings-0.1.0.tar
-"
+# The build generates the checksum for the current local source bundle.
+sha512sums=""

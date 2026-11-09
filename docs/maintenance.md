@@ -71,8 +71,9 @@ baseline ISO size, stripped Ironbar size, boot time, and desktop RSS from attach
 records. No unmeasured minimum-memory or performance claim is implied by the
 word "lightweight".
 
-Settings changes require `cargo fmt`, frozen workspace tests, and regenerating
-the deterministic source checksum with `scripts/settings-source.py --update`.
+Settings changes require `cargo fmt` and frozen workspace tests. The build
+calculates the local source checksum; update the Settings version with
+`scripts/settings-source.py --update` when needed.
 Check Ironbar's patch against the pinned upstream revision before upgrading it;
 keep its originating-monitor environment test. Do not re-enable the removed
 NetworkManager/volume modules while using the combined Settings backend.

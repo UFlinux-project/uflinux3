@@ -126,6 +126,12 @@ try:
     wait(lambda: not find('Cancel', 'push button') and not find('Cancel', 'button'), 'Escape did not cancel confirmation')
     command('wtype', '-k', 'Escape')
     wait(lambda: not menu(), 'Escape did not close the empty menu')
+    # Consecutive key events must not depend on the popdown animation finishing.
+    open_menu()
+    click(wait(lambda: find('Log out'), 'Logout control missing'))
+    wait(lambda: find('Cancel', 'push button') or find('Cancel', 'button'), 'Logout confirmation missing')
+    command('wtype', '-k', 'Escape', '-k', 'Escape')
+    wait(lambda: not menu(), 'Rapid Escape presses did not cancel confirmation and close Start')
     open_menu(); close_menu()
     # A typed, confirmed request is denied by the private test-bus fixture.
     open_menu()

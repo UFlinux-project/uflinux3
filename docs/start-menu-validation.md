@@ -58,7 +58,7 @@ The final development ISO is
 50a87786a52f14ff735b1d680b58cafd5deeaf4dea5d5cf03d58622c4707ad3c
 ```
 
-Settings source SHA-512 is pinned in `config/sources.lock.json` and the APKBUILD.
+At the time of this build, Settings source SHA-512 was pinned in the source manifest and APKBUILD.
 The stripped GUI executable is 1,107,968 bytes; Ironbar remains 6,703,128 bytes.
 All 22 custom APKs remain present. This local incremental artifact reuses the
 previously tested ConnMan and Ironbar packages and rebuilds Settings and desktop

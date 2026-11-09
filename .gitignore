@@ -3,6 +3,7 @@
 /out/
 /out-settings/
 /dist/
+/settings
 __pycache__/
 *.pyc
 *.rsa

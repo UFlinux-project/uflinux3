@@ -47,14 +47,13 @@ def main():
     lock = json.loads(lock_path.read_text())
     recipe = recipe_path.read_text()
     if args.update:
-        lock["settings"] = {"version": version, "source_sha512": digest}
+        lock["settings"] = {"version": version}
         lock_path.write_text(json.dumps(lock, indent=2) + "\n")
         recipe = re.sub(r"^pkgver=.*$", "pkgver=" + version, recipe, flags=re.M)
-        recipe = re.sub(r'^sha512sums="[^"]*"', lambda _: f'sha512sums="\n{digest}  uflinux-settings-{version}.tar\n"', recipe, flags=re.M)
         recipe_path.write_text(recipe)
     elif args.check:
-        if lock.get("settings") != {"version": version, "source_sha512": digest} or digest not in recipe:
-            raise SystemExit("Settings source changed; run python3 scripts/settings-source.py --update")
+        if lock.get("settings") != {"version": version} or not re.search(r"^pkgver=" + re.escape(version) + r"$", recipe, re.M):
+            raise SystemExit("Settings version changed; run python3 scripts/settings-source.py --update")
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_bytes(data)

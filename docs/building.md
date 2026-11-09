@@ -156,12 +156,12 @@ After editing Settings source or data, run:
 
 ```sh
 cargo fmt --manifest-path settings/Cargo.toml --all
-python3 scripts/settings-source.py --update
 python3 scripts/check.py
 ```
 
 The source bundle is a sorted, uncompressed USTAR archive with normalized headers;
-its SHA-512 is locked in both the manifest and APKBUILD. `--check` never updates it.
+the build calculates its SHA-512 and inserts it into the staged APKBUILD. Run
+`python3 scripts/settings-source.py --update` when changing the Settings version.
 Build preparation removes only project-crate compiler artifacts to avoid stale
 Cargo fingerprints from normalized source timestamps; dependency caches survive.
 CI cache keys track upstream inputs, build settings and Cargo locks independently

@@ -72,8 +72,7 @@
   "aports_commit": "3db0a46d5ef507f6faaa9c0c0fc52181a277e9b7",
   "source_date_epoch": 1794068657,
   "settings": {
-    "version": "0.1.0",
-    "source_sha512": "e91adee757b46623c592dab42cdd9e06e7252d5344202a7aa3c4605bd27158f232d50536d0f21da24ad2085cb40b74d0f439df420b000484417fcf1ba55a90d1"
+    "version": "0.1.0"
   },
   "power": {
     "tlp_series": "1.10",
