@@ -9,8 +9,9 @@ import time
 import sys
 
 def diagnostics(kind,error,traceback):
-    log=Path('/run/uflinux-settings-ui.log')
-    if log.exists(): print('Settings UI log:\n'+log.read_text(),file=sys.stderr)
+    for name in ('uflinux-settings-ui.log', 'uflinux-start-menu.log'):
+        log=Path('/run') / name
+        if log.exists(): print(name+':\n'+log.read_text(),file=sys.stderr)
     if 'frontend' in globals(): print('Primary GUI exit status:',frontend.poll(),file=sys.stderr)
     result=subprocess.run(['dmesg'],text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     print('Kernel log tail:\n'+result.stdout[-6000:],file=sys.stderr)
@@ -81,21 +82,50 @@ def gui_pid():
             pass
     raise AssertionError("Settings GUI exited unexpectedly")
 
-# Restart the independent resident launcher with measurement enabled.
+# Wait for autostart to finish registering its actions before asking it to quit.
+# A quit sent during GTK startup can otherwise be lost, and a new --daemon may
+# forward to the old instance instead of becoming the measured resident process.
+def launcher_status():
+    return subprocess.check_output(['uflinux-start-menu', '--status'], env=environment,
+        preexec_fn=demote, text=True, timeout=10).strip()
+
+def launcher_pids():
+    result = []
+    for path in Path('/proc').glob('[0-9]*/exe'):
+        try:
+            if path.resolve().name == 'uflinux-start-menu' and path.parent.stat().st_uid == user.pw_uid:
+                result.append(int(path.parent.name))
+        except OSError:
+            pass
+    return result
+
+deadline = time.monotonic() + 90
+while time.monotonic() < deadline:
+    if launcher_status() == 'ready=true visible=false':
+        break
+    time.sleep(.25)
+else:
+    raise AssertionError('Autostart launcher did not become ready: ' + launcher_status())
+old_launchers = launcher_pids()
+assert old_launchers, 'Ready launcher process was not found'
 run('uflinux-start-menu', '--quit')
-time.sleep(.3)
+deadline = time.monotonic() + 30
+while time.monotonic() < deadline and any(Path(f'/proc/{pid}/exe').exists() for pid in old_launchers):
+    time.sleep(.1)
+assert not any(Path(f'/proc/{pid}/exe').exists() for pid in old_launchers), 'Autostart launcher did not exit'
+
 menu_log = Path('/run/uflinux-start-menu.log')
 with menu_log.open('w') as log:
     launcher = subprocess.Popen(['uflinux-start-menu', '--daemon'],
         env=environment, preexec_fn=demote, stdout=log, stderr=log)
-def launcher_status():
-    return subprocess.check_output(['uflinux-start-menu', '--status'], env=environment,
-        preexec_fn=demote, text=True, timeout=10)
-for _ in range(100):
+deadline = time.monotonic() + 90
+status = 'not queried'
+while time.monotonic() < deadline:
     assert launcher.poll() is None, 'Resident launcher exited during preparation'
-    if launcher_status() == 'ready=true visible=false\n': break
-    time.sleep(.1)
-else: raise AssertionError('The launcher did not prepare its hidden screen')
+    status = launcher_status()
+    if status == 'ready=true visible=false': break
+    time.sleep(.25)
+else: raise AssertionError('The launcher did not prepare its hidden screen: ' + status)
 run('uflinux-start-menu', '--output', snapshot['displays']['outputs'][0]['name'])
 for _ in range(100):
     if 'UFLINUX_START_MENU_FIRST_FRAME_MS=' in menu_log.read_text(): break
@@ -106,7 +136,7 @@ launcher_pss = pss(launcher.pid)
 launcher_first_ms = float(menu_log.read_text().split('UFLINUX_START_MENU_FIRST_FRAME_MS=')[-1].splitlines()[0])
 run('uflinux-start-menu', '--hide')
 assert launcher.poll() is None, 'Hiding the launcher exited its resident process'
-assert launcher_status() == 'ready=true visible=false\n'
+assert launcher_status() == 'ready=true visible=false'
 
 started = time.monotonic()
 with Path('/run/uflinux-settings-ui.log').open('w') as log:
