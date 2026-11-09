@@ -140,7 +140,6 @@ jobs:
         if: matrix.arch == 'x86_64'
         run: sudo --preserve-env=SOURCE_DATE_EPOCH,APK_REPOSITORY_URL,GITHUB_REPOSITORY,GITHUB_SHA python3 tests/signing-smoke.py --arch x86_64 --version '${{ needs.checks.outputs.version }}'
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: always()
         with:
           name: image-${{ matrix.arch }}
           retention-days: 7

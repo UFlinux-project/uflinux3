@@ -1,6 +1,7 @@
 """Fail closed when independent package jobs are missing, mixed or modified."""
 import importlib.util
 import json
+import re
 import subprocess
 from pathlib import Path
 import sys
@@ -46,6 +47,12 @@ class ShardTests(unittest.TestCase):
             inputs.mkdir(parents=True)
             for name in ('build-apks.tar.gz', 'sources.tar.gz', 'cargo-sources.tar.gz'):
                 (inputs / name).write_bytes(b'fixture retained archive')
+
+    def test_uflinux_recipe_packages_match_shard_allowlist(self):
+        recipe = (builder.PROJECT / 'aports/uflinux/APKBUILD').read_text()
+        subpackages = re.search(r'^subpackages="([^"]+)"', recipe, re.M).group(1)
+        declared = {'uflinux'} | {entry.split(':', 1)[0] for entry in subpackages.split()}
+        self.assertEqual(builder.PACKAGE_NAMES['uflinux'], declared)
 
     def test_complete_set_retains_independent_keys_inputs_and_proofs(self):
         with tempfile.TemporaryDirectory() as temporary:

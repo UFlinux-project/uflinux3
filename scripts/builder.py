@@ -31,7 +31,8 @@ PACKAGE_NAMES = {
     "uflinux-settings": {"uflinux-settings", "uflinux-settings-daemon", "uflinux-settings-dbg",
                          "uflinux-settings-doc", "uflinux-settings-system", "uflinux-settings-system-openrc"},
     "uflinux": {"uflinux", "uflinux-defaults", "uflinux-desktop", "uflinux-installer",
-                "uflinux-live", "uflinux-live-openrc", "uflinux-release", "uflinux-bootsplash-openrc"},
+                "uflinux-live", "uflinux-live-openrc", "uflinux-release", "uflinux-bootsplash-openrc",
+                "uflinux-initramfs"},
 }
 
 
