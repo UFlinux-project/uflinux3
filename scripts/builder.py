@@ -31,8 +31,26 @@ PACKAGE_NAMES = {
     "uflinux-settings": {"uflinux-settings", "uflinux-settings-daemon", "uflinux-settings-dbg",
                          "uflinux-settings-doc", "uflinux-settings-system", "uflinux-settings-system-openrc"},
     "uflinux": {"uflinux", "uflinux-defaults", "uflinux-desktop", "uflinux-installer",
-                "uflinux-live", "uflinux-live-openrc", "uflinux-release"},
+                "uflinux-live", "uflinux-live-openrc", "uflinux-release", "uflinux-bootsplash-openrc"},
 }
+
+
+def image_compression(initramfs, modloop):
+    with Path(initramfs).open("rb") as stream:
+        if stream.read(4) != b"\x28\xb5\x2f\xfd":
+            raise ValueError("Initramfs is not a Zstandard frame")
+    with Path(modloop).open("rb") as stream:
+        header = stream.read(32)
+    if len(header) < 32 or header[:4] != b"hsqs":
+        raise ValueError("Modloop is not a SquashFS filesystem")
+    if struct.unpack_from("<H", header, 20)[0] != 6:
+        raise ValueError("Modloop does not use Zstandard compression")
+    if struct.unpack_from("<I", header, 12)[0] != LOCK["image"]["modloop_block_bytes"]:
+        raise ValueError("Modloop block size differs from the image lock")
+    return {"initramfs_compression": "zstd", "modloop_compression": "zstd",
+            "modloop_block_bytes": LOCK["image"]["modloop_block_bytes"],
+            "initramfs_bytes": Path(initramfs).stat().st_size,
+            "modloop_bytes": Path(modloop).stat().st_size}
 
 
 def package_output(out, arch, package=None):
@@ -476,11 +494,20 @@ class Builder:
         self.chroot("abuild-sign", "-t", "RSA256", relative + "/APKINDEX.tar.gz")
 
     def image(self):
-        self.tools("xorriso", "mtools", "squashfs-tools", "util-linux", "syslinux" if self.args.arch in {"x86", "x86_64"} else "util-linux")
+        self.tools("xorriso", "mtools", "squashfs-tools", "zstd", "util-linux", "syslinux" if self.args.arch in {"x86", "x86_64"} else "util-linux")
         if self.args.arch == "s390x":
             self.chroot("apk", "add", "s390-tools")
         else:
             self.chroot("apk", "add", "grub", "grub-ieee1275" if self.args.arch == "ppc64le" else "grub-efi")
+        for name, digest in LOCK["image"]["patches"].items():
+            if hashlib.sha512((PROJECT / "patches" / name).read_bytes()).hexdigest() != digest:
+                raise RuntimeError("Image compression patch differs from the source lock: " + name)
+        # Keep Alpine's installed helper intact; use a patched image-only copy.
+        image_tools = self.root / "opt/uflinux/bin"
+        image_tools.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(self.root / "usr/sbin/update-kernel", image_tools / "update-kernel")
+        self.chroot("patch", "--batch", "--fuzz=0", "-d", "/opt/uflinux/bin", "-p1",
+                    "-i", "/project/patches/update-kernel-zstd.patch")
         self.signing_key(release=self.args.release)
         final = self.out / "repository" / self.args.arch
         if not final.is_dir():
@@ -527,7 +554,8 @@ class Builder:
                    "--outdir", "/image-out", "--workdir", "/image-work", "--checksum",
                    "--repository", "/repo", "--repository", f"{LOCK['alpine']['mirror']}/{LOCK['alpine']['branch']}/main",
                    "--repository", f"{LOCK['alpine']['mirror']}/{LOCK['alpine']['branch']}/community"]
-        self.chroot(*command)
+        self.chroot(*command, extra_env={"PATH": "/opt/uflinux/bin:" + self.env["PATH"],
+                                         "complevel_zstd": "-" + str(LOCK["image"]["initramfs_level"])})
         target = self.out / "images" / self.args.arch
         target.mkdir(parents=True, exist_ok=True)
         for path in (self.root / "image-out").glob("*"):
@@ -549,6 +577,7 @@ class Builder:
         for path in caches.glob("*.apk"):
             promote_apk(path, self.cache / self.args.arch / "image-apk")
         archive_tree(caches, self.out / "inputs" / self.args.arch / "image-apks.tar.gz", self.epoch)
+        self.verify_image_compression()
         extracted = self.root / "iso-apks"
         if extracted.exists():
             shutil.rmtree(extracted)
@@ -557,6 +586,20 @@ class Builder:
         self.chroot("apk", "verify", *["/iso-apks/" + path.name for path in sorted(extracted.glob("*.apk"))])
         from sbom import generate
         generate(extracted, self.out / "metadata" / self.args.arch / f"uflinux-{self.args.version}-{self.args.arch}.spdx.json", self.args.version, self.args.arch, self.epoch)
+
+    def verify_image_compression(self):
+        compression_dir = self.root / "compression-check"
+        compression_dir.mkdir(exist_ok=True)
+        for name in ("initramfs-lts", "modloop-lts"):
+            (compression_dir / name).unlink(missing_ok=True)
+            self.chroot("xorriso", "-osirrox", "on", "-indev",
+                        "/image-out/uflinux-" + self.args.version + "-" + self.args.arch + ".iso",
+                        "-extract", "/boot/" + name, "/compression-check/" + name)
+        compression = image_compression(compression_dir / "initramfs-lts", compression_dir / "modloop-lts")
+        self.chroot("zstd", "--test", "/compression-check/initramfs-lts")
+        report = self.out / "checks" / self.args.arch / "compression.json"
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(json.dumps(compression, indent=2) + "\n")
 
     def verify(self):
         (self.out / "checks" / self.args.arch / "verified.json").unlink(missing_ok=True)
@@ -571,7 +614,7 @@ class Builder:
 
     def verify_installed(self):
         (self.out / "checks" / self.args.arch / "verified.json").unlink(missing_ok=True)
-        self.tools("pax-utils", "file", "dbus", "shadow", "wayland-utils", "wlrctl", "grim", "procps", "pulseaudio-utils", "libnotify", "py3-gobject3", "py3-atspi", "wtype", "gcc", "musl-dev", "wayland-dev", "desktop-file-utils")
+        self.tools("pax-utils", "file", "dbus", "shadow", "wayland-utils", "wlrctl", "wlr-randr", "grim", "procps", "pulseaudio-utils", "libnotify", "py3-gobject3", "py3-atspi", "wtype", "gcc", "musl-dev", "wayland-dev", "desktop-file-utils")
         self.put("etc/apk/keys/uflinux.rsa.pub", (self.out / "repository/uflinux.rsa.pub").read_text())
         repo = self.root / "repo" / self.args.arch
         if repo.exists():
@@ -621,7 +664,7 @@ class Builder:
         byte_order = "<" if header[5] == 1 else ">"
         elf_type, machine = struct.unpack_from(byte_order + "HH", header, 16)
         expected = {"x86": 3, "x86_64": 62, "armv7": 40, "aarch64": 183,
-                    "ppc64le": 21, "s390x": 22, "riscv64": 243, "loongarch64": 258}[self.args.arch]
+                    "ppc64le": 21, "s390x": 22, "riscv64": 243}[self.args.arch]
         if machine != expected or elf_type != 3:
             raise RuntimeError("Ironbar must be a position-independent executable for the target architecture")
         settings_binaries = {}
@@ -653,7 +696,8 @@ class Builder:
         try:
             (self.root / "run/dbus").mkdir(parents=True, exist_ok=True)
             for name, command in (("system-bus", ["dbus-daemon", "--system", "--nofork", "--nopidfile"]),
-                                  ("connman-fixture", ["python3", "/project/tests/mock-connman.py"])):
+                                  ("connman-fixture", ["python3", "/project/tests/mock-connman.py"]),
+                                  ("login1-fixture", ["python3", "/project/tests/mock-login1.py"])):
                 log = (report / (name + ".log")).open("w")
                 logs.append(log)
                 process = subprocess.Popen(["chroot", str(self.root), "/usr/bin/env", "-i",

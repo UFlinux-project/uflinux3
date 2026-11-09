@@ -27,7 +27,7 @@ also cannot configure secrets, configure Pages or create release tags.
 
 Pushes to main and manual dispatch build development images without release
 secrets. A version tag builds the release package set and exposes the key only to
-trusted signing/assembly/publication jobs. Publication is gated on all eight
+trusted signing/assembly/publication jobs. Publication is gated on all seven
 architecture checks and native integration/reproducibility records. Pages keeps
 three release generations and checks the complete bundle's size before deployment.
 See [the full publishing guide](github.md) for key rotation, retention and rollback.

@@ -29,11 +29,13 @@ printf '%s\n' "${UFLINUX_REPOSITORY_URL:?}" \
 for entry in \
 	'devfs sysinit' 'dmesg sysinit' 'udev sysinit' 'udev-trigger sysinit' \
 	'udev-settle sysinit' 'hwdrivers sysinit' 'modloop sysinit' \
-	'hwclock boot' 'modules boot' 'sysctl boot' 'hostname boot' \
+	'uflinux-splash sysinit' 'uflinux-splash-stop default' 'hwclock boot' 'modules boot' 'sysctl boot' 'hostname boot' \
 	'bootmisc boot' 'syslog boot' 'dbus default' 'elogind default' \
 	'iwd default' 'connman default' 'ntpd default' 'tlp default' 'uflinux-acpid default' 'uflinux-routes default' \
 	'uflinux-live default' 'greetd default' \
 	'killprocs shutdown' 'mount-ro shutdown'; do
+	# Intentional service/runlevel pair splitting.
+	# shellcheck disable=SC2086
 	set -- $entry
 	mkdir -p "$tmp/etc/runlevels/$2"
 	ln -s "/etc/init.d/$1" "$tmp/etc/runlevels/$2/$1"

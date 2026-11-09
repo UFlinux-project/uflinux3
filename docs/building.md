@@ -30,10 +30,10 @@ change requires a fresh work directory, but verified downloads can be reused.
 
 GitHub compiles four independent origins per architecture: `connman`, `ironbar`,
 `uflinux-settings` and `uflinux`. PR/main builds schedule four compile jobs;
-manual/tag runs schedule 32, with at most eight compile jobs running together.
+manual/tag runs schedule 28, with at most eight compile jobs running together.
 Each origin has its own VM, development signing key, timeout and cache. Heavy Rust
 builds and their native clean-rebuild comparisons run independently. Signing and
-ISO assembly wait for a complete validated set of 21 APKs.
+ISO assembly wait for a complete validated set of 22 APKs.
 
 For an individual package build, use the same entry point:
 
@@ -66,7 +66,7 @@ Each native origin must have its clean-rebuild report before collection succeeds
 See [local parallel-build validation](parallel-build-validation.md) for completed
 checks and their scope.
 
-Twenty-one custom APKs are built: patched ConnMan (runtime/OpenRC/dev/docs/debug),
+Twenty-two custom APKs are built: patched ConnMan (runtime/OpenRC/dev/docs/debug),
 Ironbar, Settings components and the distribution packages. ConnMan's pinned
 upstream source and Alpine compatibility patches are retained with build inputs.
 
@@ -79,7 +79,13 @@ upstream source and Alpine compatibility patches are retained with build inputs.
 - `sign`: verifies the incoming development signatures, replaces only the APK v2
   signature stream, signs indexes, and verifies the resulting packages.
 - `image`: uses Alpine mkimage, a custom profile, an APK cache, and a reproducible
-  configuration overlay. The small apk-tools 3 compatibility patch is in `patches`.
+  configuration overlay. Initramfs and the signed modloop use Zstandard level 19;
+  SquashFS uses 128 KiB blocks without XZ-specific BCJ filters. An image-only copy
+  of Alpine’s `update-kernel` selects these formats and requires kernel Zstandard
+  support. The installed upstream helper remains intact. Both image formats and
+  the initramfs stream are checked after ISO extraction. Compression settings and
+  the helper patch checksum are recorded in the source lock. The apk-tools 3 and
+  compression patches are in `patches`; see [compression details](compression.md).
 - `verify`: installs the custom packages through apk, validates Ironbar's actual
   configuration, tests a headless desktop and toplevel controls, and exercises the
   installer safeguards. Firmware boot and disk installation are separate VM jobs.
@@ -164,7 +170,7 @@ Settings requires Alpine's GTK4/layer-shell, PulseAudio client, polkit-agent,
 elogind, Vulkan/EGL and GLib development packages listed in its APKBUILD.
 
 The Power panel uses Alpine's TLP 1.10 series, with the three-profile interface
-introduced in 1.9. Power packages are checked for all eight architectures. Tests
+introduced in 1.9. Power packages are checked for all seven architectures. Tests
 run the actual BusyBox ACPI parser in a private chroot with synthetic input events;
 the installed x86_64 VM verifies real TLP transitions, shared Ironbar status and
 physical-key Do nothing/Shut down behavior. TLP is never executed on the build
@@ -180,3 +186,9 @@ measurement; Python is not an installed-desktop dependency.
 
 To preserve an older development ISO, choose a separate `--outdir out-settings`
 and fresh `--workdir .state/settings`. Do not reuse results after changing inputs.
+
+OpenRC starts independent services in parallel for both live and installed
+systems. `uflinux-defaults` supplies `rc_parallel="YES"` in
+`/etc/rc.conf.d/uflinux.conf`; dependencies still determine service ordering.
+Edit this file to set `rc_parallel="NO"` when diagnosing boot issues. APK preserves
+local edits during upgrades. This setting takes effect on the next boot.

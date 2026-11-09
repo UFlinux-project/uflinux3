@@ -21,7 +21,7 @@ profile_uflinux() {
 	apks="$apks uflinux uflinux-live uflinux-installer linux-lts linux-firmware-none
 		grub-efi xfsprogs e2fsprogs dosfstools util-linux vulkan-loader mesa-vulkan-ati"
 	case "$ARCH" in
-		x86|x86_64|loongarch64) apks="$apks mesa-vulkan-intel mesa-vulkan-nouveau mesa-vulkan-virtio" ;;
+		x86|x86_64) apks="$apks mesa-vulkan-intel mesa-vulkan-nouveau mesa-vulkan-virtio" ;;
 		aarch64) apks="$apks mesa-vulkan-asahi mesa-vulkan-broadcom mesa-vulkan-freedreno mesa-vulkan-imagination mesa-vulkan-intel mesa-vulkan-nouveau mesa-vulkan-panfrost mesa-vulkan-virtio" ;;
 	esac
 	case "$ARCH" in
@@ -38,7 +38,7 @@ profile_uflinux() {
 			kernel_cmdline="$kernel_cmdline console=ttysclp0"
 			;;
 		aarch64|armv7) kernel_cmdline="$kernel_cmdline console=tty0 console=ttyAMA0,115200" ;;
-		riscv64|loongarch64) kernel_cmdline="$kernel_cmdline console=tty0 console=ttyS0,115200" ;;
+		riscv64) kernel_cmdline="$kernel_cmdline console=tty0 console=ttyS0,115200" ;;
 	esac
 }
 

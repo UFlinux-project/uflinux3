@@ -44,6 +44,23 @@ def panel_profile():
         client.settimeout(2);client.connect(environment['XDG_RUNTIME_DIR']+'/ironbar-ipc.sock')
         client.sendall(b'{"command":"var","subcommand":"get","key":"uflinux_power"}\n')
         return json.loads(client.makefile('r').readline()).get('value','')
+# Prior authentication tests may leave a full Settings window open. Close only
+# this disposable test user's frontend before starting an independently logged UI.
+for entry in Path('/proc').glob('[0-9]*/exe'):
+    try:
+        if entry.resolve().name=='uflinux-settings' and entry.parent.stat().st_uid==user.pw_uid:
+            os.kill(int(entry.parent.name),15)
+    except OSError: pass
+time.sleep(.5)
+environment['UFLINUX_SETTINGS_BENCH']='1'
+menu_log=Path('/run/uflinux-power-menu.log')
+with menu_log.open('w') as log:
+    gui=subprocess.Popen(['uflinux-settings','--start-menu'],env=environment,preexec_fn=demote,stdout=log,stderr=log)
+for _ in range(100):
+    assert gui.poll() is None, 'Power menu exited before profile tests'
+    if 'UFLINUX_START_PROFILE=balanced' in menu_log.read_text(): break
+    time.sleep(.1)
+else: raise AssertionError('Start menu did not receive initial profile')
 seen=[]
 for profile,code,label in [('power-saver','SAV','Power saver'),('balanced','BAL','Balanced'),('performance','PRF','Performance')]:
     observed=operation({'operation':'set-power-profile','profile':profile})
@@ -51,11 +68,12 @@ for profile,code,label in [('power-saver','SAV','Power saver'),('balanced','BAL'
     assert 'TLP_PROFILE_DEFAULT='+code in Path('/etc/tlp.d/90-uflinux-profile.conf').read_text()
     assert json.loads(Path('/etc/uflinux/power.json').read_text())['profile']==profile
     for _ in range(50):
-        if shared_profile()==profile and panel_profile()==label:break
+        if shared_profile()==profile and panel_profile()==label and menu_log.read_text().split('UFLINUX_START_PROFILE=')[-1].splitlines()[0]==profile:break
         time.sleep(0.1)
     else:raise AssertionError('Settings and Ironbar did not receive the power-profile update')
     seen.append(profile)
 operation({'operation':'set-power-profile','profile':'balanced'})
+gui.terminate();gui.wait(timeout=10)
 for action in ('suspend','nothing','poweroff'):
     observed=operation({'operation':'set-power-buttons','on_ac':action,'on_battery':action})
     assert observed['policy']['on_ac']==action and observed['policy']['on_battery']==action
@@ -64,4 +82,4 @@ operation({'operation':'set-power-buttons','on_ac':'nothing','on_battery':'nothi
 version=subprocess.check_output(['tlp-stat','--version'],text=True,timeout=10).strip()
 print('UFLINUX_POWER_VM:'+json.dumps({'profiles':seen,'persistent_configuration':True,
     'button_policies':['suspend','nothing','poweroff'],'tlp_version':version,'busybox_acpid':True,
-    'settings_and_ironbar_synchronized':True}),flush=True)
+    'settings_and_ironbar_synchronized':True,'start_menu_synchronized':True}),flush=True)

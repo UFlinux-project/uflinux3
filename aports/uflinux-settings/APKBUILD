@@ -4,7 +4,7 @@ pkgver=0.1.0
 pkgrel=0
 pkgdesc="Lightweight GTK4 settings and quick controls for UFLinux"
 url="${UFLINUX_PROJECT_URL:-https://github.com}"
-arch="x86 x86_64 aarch64 armv7 ppc64le s390x riscv64 loongarch64"
+arch="x86 x86_64 aarch64 armv7 ppc64le s390x riscv64"
 license="GPL-3.0-only"
 depends="$pkgname-daemon=$pkgver-r$pkgrel $pkgname-system=$pkgver-r$pkgrel"
 makedepends="cargo cargo-auditable gtk4.0-dev gtk4-layer-shell-dev pulseaudio-dev polkit-dev
@@ -67,7 +67,7 @@ daemon() {
 	pkgdesc="Headless UFLinux session settings service and command-line controls"
 	depends="dbus elogind swaybg mesa-vulkan-ati"
 	case "$CARCH" in
-		x86|x86_64|loongarch64) depends="$depends mesa-vulkan-intel mesa-vulkan-nouveau mesa-vulkan-virtio" ;;
+		x86|x86_64) depends="$depends mesa-vulkan-intel mesa-vulkan-nouveau mesa-vulkan-virtio" ;;
 		aarch64) depends="$depends mesa-vulkan-asahi mesa-vulkan-broadcom mesa-vulkan-freedreno mesa-vulkan-imagination mesa-vulkan-intel mesa-vulkan-nouveau mesa-vulkan-panfrost mesa-vulkan-virtio" ;;
 	esac
 	amove usr/libexec/uflinux-settingsd usr/bin/uflinux-settingsctl usr/share/dbus-1/services/org.uflinux.Settings1.service
@@ -86,5 +86,5 @@ system_openrc() {
 	amove etc/init.d/uflinux-routes etc/init.d/uflinux-acpid
 }
 sha512sums="
-25103769374cc3ff221755c876b25b5d34ec51eabb210c51ba9b50c52b6fd19259ab379f7f7122328b8578e5f3eab19383e7e95f3aab8a290ed48fa9f8b88860  uflinux-settings-0.1.0.tar
+e91adee757b46623c592dab42cdd9e06e7252d5344202a7aa3c4605bd27158f232d50536d0f21da24ad2085cb40b74d0f439df420b000484417fcf1ba55a90d1  uflinux-settings-0.1.0.tar
 "

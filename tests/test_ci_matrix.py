@@ -13,17 +13,17 @@ class MatrixTests(unittest.TestCase):
             self.assertEqual(result['release'],'false')
     def test_manual_runs_cover_all_architectures_without_release_secrets(self):
         result=ci.configuration('workflow_dispatch','refs/heads/main')
-        self.assertEqual(len(result['matrix']['include']),8)
+        self.assertEqual(len(result['matrix']['include']),7)
         self.assertEqual(result['release'],'false')
     def test_only_valid_pushed_version_tags_enable_release(self):
         result=ci.configuration('push','refs/tags/v0.1.0')
-        self.assertEqual(len(result['matrix']['include']),8)
+        self.assertEqual(len(result['matrix']['include']),7)
         self.assertEqual(result['release'],'true')
         for tag in ('vlatest','v0.1.0;id','v0.1.0\nmalformed'):
             with self.assertRaises(ValueError):ci.configuration('push','refs/tags/'+tag)
 
     def test_each_architecture_has_four_independent_jobs(self):
-        for event,ref,count in [('pull_request','refs/heads/main',4),('workflow_dispatch','refs/heads/main',32)]:
+        for event,ref,count in [('pull_request','refs/heads/main',4),('workflow_dispatch','refs/heads/main',28)]:
             result=ci.configuration(event,ref)
             jobs=result['packages']['include']
             self.assertEqual(len(jobs),count)

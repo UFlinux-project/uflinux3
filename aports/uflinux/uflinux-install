@@ -140,7 +140,8 @@ def make_overlay(directory, args, repositories=None):
         shutil.copy2(key, keys / key.name)
     for service, level in [("devfs", "sysinit"), ("dmesg", "sysinit"),
                            ("udev", "sysinit"), ("udev-trigger", "sysinit"), ("udev-settle", "sysinit"),
-                           ("hwdrivers", "sysinit"), ("hwclock", "boot"), ("modules", "boot"),
+                           ("hwdrivers", "sysinit"), ("uflinux-splash", "sysinit"),
+                           ("uflinux-splash-stop", "default"), ("hwclock", "boot"), ("modules", "boot"),
                            ("sysctl", "boot"), ("hostname", "boot"), ("bootmisc", "boot"),
                            ("syslog", "boot"), ("dbus", "default"), ("elogind", "default"),
                            ("iwd", "default"), ("connman", "default"), ("ntpd", "default"),

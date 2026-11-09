@@ -1,0 +1,38 @@
+--- a/update-kernel
++++ b/update-kernel
+@@ -27,7 +27,7 @@
+ MEDIA=
+ MNTDIR=
+ PACKAGES=
+-MKINITFS_ARGS=
++MKINITFS_ARGS="-C zstd"
+ REPOSITORIES_FILE=/etc/apk/repositories
+ KEYS_DIR=/etc/apk/keys
+ CACHE_DIR=/etc/apk/cache
+@@ -358,13 +358,19 @@
+ 	cp -RP "$ROOTFS"/lib/firmware/intel/sof* "$MODLOOP"/modules/firmware/intel/
+ fi
+ 
+-case $ARCH in
+-	armhf) mksfs="-Xbcj arm" ;;
+-	armv7|aarch64) mksfs="-Xbcj arm,armthumb" ;;
+-	x86|x86_64) mksfs="-Xbcj x86" ;;
+-	*) mksfs=
+-esac
+-mksquashfs $MODLOOP "$STAGING/$MODIMG" $MKSQUASHFS_OPTS -comp xz -exit-on-error $mksfs
++# Refuse an image that its selected kernel cannot decompress.
++kconfig=
++for candidate in "$BOOT/config-$KVER" "$BOOT/config-$FLAVOR" "$BOOT/config"; do
++	if [ -f "$candidate" ]; then kconfig="$candidate"; break; fi
++done
++if [ -z "$kconfig" ] || ! grep -qx 'CONFIG_RD_ZSTD=y' "$kconfig" \
++	|| ! grep -qx 'CONFIG_SQUASHFS_ZSTD=y' "$kconfig"; then
++	error "Kernel must support Zstandard initramfs and SquashFS"
++	exit 1
++fi
++# BCJ filters are XZ-specific. Keep bounded 128 KiB blocks for low-RAM readers.
++mksquashfs $MODLOOP "$STAGING/$MODIMG" $MKSQUASHFS_OPTS \
++	-comp zstd -Xcompression-level 19 -b 131072 -exit-on-error
+ 
+ if [ -n "$MODLOOPSIGN" ]; then
+ 	sign_modloop "$STAGING/$MODIMG"

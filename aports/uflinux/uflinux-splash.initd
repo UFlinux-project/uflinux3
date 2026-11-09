@@ -1,0 +1,20 @@
+#!/sbin/openrc-run
+# shellcheck shell=sh disable=SC2034
+# GPL-3.0-only
+name="UFLinux bootsplash"
+description="Display the UFLinux leaf and animated loading spinner"
+depend() {
+	need udev hwdrivers
+	after udev-settle
+	before bootmisc
+}
+start() {
+	ebegin "Starting $name"
+	/usr/libexec/uflinux-bootsplash start
+	eend 0
+}
+stop() {
+	ebegin "Stopping $name"
+	/usr/libexec/uflinux-bootsplash stop
+	eend 0
+}

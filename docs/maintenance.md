@@ -88,7 +88,7 @@ this tested revision so an unrelated official package cannot silently drop the f
 The x86_64 native VM job exercises simulated Wi-Fi and BusyBox NTP before disk
 installation. Both x86_64 firmware modes reboot the installed desktop with
 512 MiB and no swap. Publication requires these results for the exact ISO hash,
-in addition to all eight package/desktop and architecture-specific boot reports.
+in addition to all seven package/desktop and architecture-specific boot reports.
 Review PSS, idle CPU, mapped-frame latency, binary/ISO size and physical hardware
 coverage separately. The original development ISO's historical record is not a
 substitute for validating a changed desktop stack.

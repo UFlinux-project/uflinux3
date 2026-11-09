@@ -3,6 +3,8 @@ set -eu
 export XDG_CURRENT_DESKTOP=labwc XDG_SESSION_DESKTOP=labwc XDG_SESSION_TYPE=wayland
 export LIBSEAT_BACKEND=logind
 export LANG=${LANG:-C.UTF-8}
+# Respect existing XDG paths and initialize standard places before any UI caches them.
+xdg-user-dirs-update || :
 # PAM/elogind owns XDG_RUNTIME_DIR. Do not create a shared fallback in /tmp.
 : "${XDG_RUNTIME_DIR:?A PAM/elogind login session is required}"
 exec dbus-run-session -- /usr/libexec/uflinux-compositor

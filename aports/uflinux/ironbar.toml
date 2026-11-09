@@ -9,22 +9,7 @@ popup_autohide = true
 [[start]]
 type = "custom"
 name = "start-menu"
-bar = [{ type = "button", name = "start-button", widgets = [{ type = "image", src = "file:///usr/share/icons/hicolor/scalable/apps/uflinux.svg", size = 28 }], on_click = "popup:toggle", tooltip = "Start" }]
-popup = [{ type = "box", name = "start-popup", orientation = "vertical", widgets = [
-  { type = "label", label = "UFLinux" },
-  { type = "button", label = "All applications", on_click = "!fuzzel" },
-  { type = "button", label = "Settings", on_click = "!uflinux-settings" },
-  { type = "label", label = "Power mode · #uflinux_power" },
-  { type = "button", label = "#uflinux_power_saver", on_click = "!uflinux-settingsctl power-profile power-saver" },
-  { type = "button", label = "#uflinux_power_balanced", on_click = "!uflinux-settingsctl power-profile balanced" },
-  { type = "button", label = "#uflinux_power_performance", on_click = "!uflinux-settingsctl power-profile performance" },
-  { type = "button", label = "Power settings…", on_click = "!uflinux-settings --page power" },
-  { type = "label", label = "⏻ Power" },
-  { type = "button", label = "Suspend", on_click = "!loginctl suspend" },
-  { type = "button", label = "Log out", on_click = "!labwc --exit" },
-  { type = "button", label = "Restart", on_click = "!loginctl reboot" },
-  { type = "button", label = "Shut down", on_click = "!loginctl poweroff" }
-] }]
+bar = [{ type = "button", name = "start-button", widgets = [{ type = "image", src = "file:///usr/share/icons/hicolor/scalable/apps/uflinux.svg", size = 28 }], on_click = '!uflinux-settings --start-menu --output "$IRONBAR_OUTPUT"', tooltip = "Start" }]
 
 [[start]]
 type = "launcher"

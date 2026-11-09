@@ -1,0 +1,40 @@
+#!/bin/sh
+# GPL-3.0-only. Optional graphical boot decoration must never block startup.
+set -u
+state=/run/uflinux-splash
+stop_splash() {
+	[ -e "$state/started" ] || return 0
+	timeout 2 plymouth quit >/dev/null 2>&1 || :
+	# Restrict cleanup to this daemon's executable and private, root-owned pidfile.
+	start-stop-daemon --stop --quiet --exec /usr/sbin/plymouthd \
+		--pidfile "$state/pid" --retry TERM/1/KILL/1 >/dev/null 2>&1 || :
+	rm -f "$state/started" "$state/pid"
+	printf '%s\n' stopped > "$state/completed"
+}
+case "${1:-}" in
+	start)
+		case " $(cat /proc/cmdline) " in
+			*" splash=no "*|*" nosplash "*|*" plymouth.enable=0 "*) exit 0 ;;
+		esac
+		[ -c /dev/tty1 ] || exit 0
+		graphics=no
+		for device in /dev/dri/card* /dev/fb[0-9]; do
+			[ ! -c "$device" ] || graphics=yes
+		done
+		[ "$graphics" = yes ] || exit 0
+		[ ! -e "$state/started" ] || exit 0
+		umask 077
+		mkdir -p "$state" || exit 0
+		# Serial boot logs remain available; Plymouth owns only the local VT.
+		touch "$state/started" || exit 0
+		if ! timeout 4 plymouthd --mode=boot --tty=/dev/tty1 --no-boot-log \
+			--ignore-serial-consoles --graphical-boot --pid-file="$state/pid" \
+			>"$state/daemon.log" 2>&1 || ! timeout 2 plymouth show-splash >>"$state/daemon.log" 2>&1; then
+			stop_splash
+			logger -t uflinux-bootsplash 'Splash unavailable; continuing normal boot (see /run/uflinux-splash/daemon.log)'
+		fi
+		;;
+	stop) stop_splash ;;
+	*) echo 'Usage: uflinux-bootsplash start|stop' >&2; exit 2 ;;
+esac
+exit 0

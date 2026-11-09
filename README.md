@@ -4,8 +4,9 @@ A minimal Alpine Linux desktop with labwc and a Windows 10-inspired Ironbar task
 The initial source baseline is Alpine **3.24.4** and Ironbar **0.19.1**.
 
 The repository builds real Alpine packages and ISO images for `x86`, `x86_64`,
-`aarch64`, `armv7`, `ppc64le`, `s390x`, `riscv64`, and `loongarch64`.
+`aarch64`, `armv7`, `ppc64le`, `s390x`, and `riscv64`.
 `armhf` is excluded because Alpine does not provide a standard ISO profile for it.
+The [startup animation](docs/bootsplash.md) reuses the original UFLinux leaf logo.
 
 ```sh
 python3 scripts/check.py
@@ -46,6 +47,8 @@ or format disks. Architecture boot requirements still apply.
 - [Initial local validation results](docs/validation.md)
 - [Settings architecture, controls and resource targets](docs/settings.md)
 - [Settings validation results](docs/settings-validation.md)
+- [Start menu controls](docs/start-menu.md)
+- [Start menu validation](docs/start-menu-validation.md)
 - [Physical hardware validation and evidence](docs/hardware-validation.md)
 - [Original UFLinux artwork and attribution](docs/artwork.md)
 - [Maintenance, signing, and key rotation](docs/maintenance.md)

@@ -9,7 +9,6 @@
 | ppc64le | qemu-ppc64le | pseries / POWER9 | Open Firmware |
 | s390x | qemu-s390x | s390-ccw-virtio | native IPL / zipl |
 | riscv64 | qemu-riscv64 | virt | OpenSBI and UEFI |
-| loongarch64 | qemu-loongarch64 | virt | UEFI |
 
 This table describes the configured build/test matrix, not completed physical
 hardware certification. Publication requires green test reports for all rows.

@@ -1,0 +1,12 @@
+#!/sbin/openrc-run
+# shellcheck shell=sh disable=SC2034
+# GPL-3.0-only
+name="UFLinux bootsplash handoff"
+description="Release the display before greetd starts"
+depend() {
+	after uflinux-splash uflinux-live dbus elogind connman iwd tlp
+	before greetd
+}
+start() {
+	/usr/libexec/uflinux-bootsplash stop
+}

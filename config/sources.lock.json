@@ -55,10 +55,6 @@
     "riscv64": {
       "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/riscv64/alpine-minirootfs-3.24.4-riscv64.tar.gz",
       "sha256": "010683db6c73b3ad1c334fc8f93f64ae748ef67ae6d69e964929aeaf8517bff3"
-    },
-    "loongarch64": {
-      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/loongarch64/alpine-minirootfs-3.24.4-loongarch64.tar.gz",
-      "sha256": "19b35a5f16364e553fea080c8829e8ee7f39d5082bae90a923138af2bac33626"
     }
   },
   "ironbar": {
@@ -77,7 +73,7 @@
   "source_date_epoch": 1794068657,
   "settings": {
     "version": "0.1.0",
-    "source_sha512": "25103769374cc3ff221755c876b25b5d34ec51eabb210c51ba9b50c52b6fd19259ab379f7f7122328b8578e5f3eab19383e7e95f3aab8a290ed48fa9f8b88860"
+    "source_sha512": "e91adee757b46623c592dab42cdd9e06e7252d5344202a7aa3c4605bd27158f232d50536d0f21da24ad2085cb40b74d0f439df420b000484417fcf1ba55a90d1"
   },
   "power": {
     "tlp_series": "1.10",
@@ -96,6 +92,21 @@
       "implicit.patch": "e4095b51de42b31da6bc892e70be6dbcb34451348e90f50f1779c31a11a6b69013f50bafe156aacdfce4b49c2abdbd56cea62ecec20427bf2f6f942777f3c270",
       "iwd-external-credentials.patch": "19c2df18ceb4feda3bb3d261c8e82258765d1a42c481b572e3b35d2563e833d5f3750892ed2c97f9e00f25f7710dfd29a761b1da9184c1d02b28cf20ed0e496a",
       "libresolv.patch": "122b48fc9e25354e25ba3a3e0864bdd84da84457fed94aeea726bcb189b2f05f2cc361ae15f44af5c49bcee572e91e4c0488ef3b0bc79d20f6efe15853fb6b3a"
+    }
+  },
+  "image": {
+    "initramfs_compression": "zstd",
+    "initramfs_level": 19,
+    "modloop_compression": "zstd",
+    "modloop_level": 19,
+    "modloop_block_bytes": 131072,
+    "patches": {
+      "update-kernel-zstd.patch": "6308a4b5b29fb25e75dffb5399bb521f63ecf33d27e8ee80a91ce83de70c0c7b6f844ec0d88bade46a35f3f85b75c8cbae61a26ffef35fb2c871904f9e9845a3"
+    },
+    "bootsplash": {
+      "implementation": "plymouth",
+      "theme": "uflinux",
+      "phase": "openrc"
     }
   }
 }

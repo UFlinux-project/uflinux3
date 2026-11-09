@@ -42,7 +42,7 @@ repositories and restores the live repository file on success or failure. The
 installed system receives the full stable update repository list. Concurrent
 installations are rejected with a lock; `--dry-run` does not change repositories.
 
-UEFI is detected from the running firmware by default. ARM, RISC-V, and LoongArch
+UEFI is detected from the running firmware by default. ARM and RISC-V
 installations in this version require UEFI; board-specific U-Boot and Raspberry Pi
 installation are outside this ISO installer. An ESP must be FAT32, not just a
 filesystem identified as vfat.

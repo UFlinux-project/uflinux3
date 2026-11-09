@@ -47,6 +47,14 @@ impl Drop for Agent {
     }
 }
 thread_local! {static DIALOG:RefCell<Option<gtk::Window>>=const{RefCell::new(None)};}
+pub fn active() -> bool {
+    DIALOG.with(|dialog| {
+        dialog
+            .borrow()
+            .as_ref()
+            .is_some_and(|window| window.is_visible())
+    })
+}
 unsafe extern "C" fn event(
     kind: c_int,
     text: *const c_char,

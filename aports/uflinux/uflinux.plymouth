@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=UFLinux
+Description=Original UFLinux leaf with a lightweight loading spinner
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/uflinux
+ScriptFile=/usr/share/plymouth/themes/uflinux/uflinux.script

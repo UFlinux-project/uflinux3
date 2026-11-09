@@ -15,11 +15,11 @@ ROOT = Path(__file__).resolve().parents[1]
 arches = json.loads((ROOT / "config/architectures.json").read_text())
 lock = json.loads((ROOT / "config/sources.lock.json").read_text())
 assert set(arches) == set(lock["rootfs"])
-assert set(arches) == {"x86", "x86_64", "aarch64", "armv7", "ppc64le", "s390x", "riscv64", "loongarch64"}
+assert set(arches) == {"x86", "x86_64", "aarch64", "armv7", "ppc64le", "s390x", "riscv64"}
 for path in [*ROOT.glob("scripts/*.py"), *ROOT.glob("tests/*.py"), ROOT / "aports/uflinux/uflinux-install"]:
     ast.parse(path.read_text(), filename=str(path))
 for path in [*ROOT.glob("scripts/*.sh"), *ROOT.glob("tests/*.sh"), *ROOT.glob("profiles/*.sh"), *ROOT.glob("aports/*/APKBUILD"),
-             *[ROOT / "aports/uflinux" / n for n in ("uflinux-session", "uflinux-autostart", "uflinux-start-panel", "uflinux-live.initd", "uflinux-compositor", "uflinux-network-init")], *ROOT.glob("settings/data/*.initd"), ROOT / "settings/data/uflinux-power-button"]:
+             *[ROOT / "aports/uflinux" / n for n in ("uflinux-session", "uflinux-autostart", "uflinux-start-panel", "uflinux-live.initd", "uflinux-compositor", "uflinux-network-init", "uflinux-bootsplash", "uflinux-splash.initd", "uflinux-splash-stop.initd")], *ROOT.glob("settings/data/*.initd"), ROOT / "settings/data/uflinux-power-button"]:
     subprocess.run(["sh", "-n", str(path)], check=True)
 for path in (ROOT / "aports/uflinux").glob("*.xml"):
     ET.parse(path)
@@ -47,6 +47,11 @@ for name,digest in lock["connman"]["patches"].items():
 for name, digest in lock["ironbar"].get("patches", {}).items():
     assert hashlib.sha512((ROOT / "aports/ironbar" / name).read_bytes()).hexdigest() == digest
 assert "libadwaita" not in (ROOT / "settings/Cargo.lock").read_text()
+for origin in ("connman", "ironbar", "uflinux-settings"):
+    recipe_arches = re.search(r'^arch="([^"]+)"$', (ROOT / "aports" / origin / "APKBUILD").read_text(), re.M)
+    assert recipe_arches and set(recipe_arches.group(1).split()) == set(arches), f"{origin} architecture list differs from build matrix"
+for name, digest in lock["image"]["patches"].items():
+    assert hashlib.sha512((ROOT / "patches" / name).read_bytes()).hexdigest() == digest
 profile=tomllib.loads((ROOT / "settings/Cargo.toml").read_text())["profile"]["release"]
 recipe=(ROOT / "aports/uflinux-settings/APKBUILD").read_text()
 for setting in ("opt-level","lto","codegen-units","panic","debug"):

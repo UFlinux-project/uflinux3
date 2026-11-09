@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+"""Real GTK/labwc launcher interactions in the private desktop smoke session."""
+import json
+import os
+from pathlib import Path
+import subprocess
+import time
+import sys
+import pyatspi
+from gi.repository import GLib
+
+results = Path('/tmp/uflinux-settings-smoke-results')
+results.mkdir(exist_ok=True)
+log = results / 'start-menu.log'
+def command(*args):
+    with log.open('a') as stream:
+        subprocess.run(args, check=True, stdout=stream, stderr=stream, timeout=20)
+def wait(predicate, description):
+    for _ in range(100):
+        while GLib.MainContext.default().pending(): GLib.MainContext.default().iteration(False)
+        try:
+            result = predicate()
+            if result: return result
+        except (RuntimeError, LookupError, AttributeError): pass
+        time.sleep(.05)
+    raise AssertionError(description)
+def tree(root=None):
+    queue = list(root) if root is not None else [a for a in pyatspi.Registry.getDesktop(0) if a.name == 'uflinux-settings']
+    found = []
+    while queue:
+        item = queue.pop(0); found.append(item)
+        try: queue.extend(list(item))
+        except Exception: pass
+        assert len(found) < 6000, 'Unbounded launcher widget tree'
+    return found
+def find(name, role=None):
+    return next((a for a in tree() if a.name == name and (role is None or a.getRoleName() == role)), None)
+def menu(): return find('Start menu', 'frame')
+def click(item):
+    action = item.queryAction(); assert action.nActions, item.name
+    assert action.doAction(0)
+def diagnostics(kind, error, traceback):
+    try:
+        command('grim', str(results / 'start-menu-failure.png'))
+        (results / 'start-menu-tree.json').write_text(json.dumps([(a.name, a.getRoleName()) for a in tree()], ensure_ascii=False, indent=2))
+    except Exception: pass
+    sys.__excepthook__(kind, error, traceback)
+sys.excepthook = diagnostics
+def open_menu():
+    assert not menu(), 'An earlier Start menu remained open'
+    command('uflinux-settings', '--start-menu', '--output', 'HEADLESS-1')
+    wait(menu, 'Start menu did not appear')
+    wait(lambda: find('Search applications'), 'Search field is missing')
+    wait(lambda: not find('Loading applications…'), 'Application catalog did not load')
+    command('grim', str(results / 'start-menu-default.png'))
+def search(text):
+    field = wait(lambda: find('Search applications'), 'Search field is missing')
+    assert field.queryEditableText().setTextContents(text)
+    time.sleep(.3)
+def close_menu():
+    command('uflinux-settings', '--start-menu')
+    wait(lambda: not menu(), 'Super-style toggle failed to close Start')
+def pointer(x, y, width=1280, height=720):
+    command('/tmp/uflinux-ui-driver/pointer-driver', str(x), str(y), str(x), str(y), str(width), str(height))
+
+data = Path(os.environ['XDG_DATA_HOME'])
+apps = data / 'applications'; apps.mkdir(parents=True, exist_ok=True)
+helpers = data / 'launch helpers'; helpers.mkdir(exist_ok=True)
+helper = helpers / 'record-launch'
+helper.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$XDG_RUNTIME_DIR/start-launch-args"\n')
+helper.chmod(0o755)
+marker = Path(os.environ['XDG_RUNTIME_DIR']) / 'start-launch-args'
+created = []
+def fixture(key, name, extra='', executable=None):
+    path = apps / ('uflinux-launcher-test-' + key + '.desktop')
+    path.write_text('[Desktop Entry]\nType=Application\nName=' + name + '\nComment=Launch catalog fixture\nKeywords=Unicode;Documents;\nIcon=utilities-terminal\nExec=' + (executable or '"' + str(helper) + '" "argument with spaces" %U') + '\n' + extra)
+    created.append(path)
+fixture('visible', 'UFLinux Fixture Straße')
+fixture('hidden', 'UFLinux Fixture Hidden', 'Hidden=true\n')
+fixture('nodisplay', 'UFLinux Fixture NoDisplay', 'NoDisplay=true\n')
+fixture('only', 'UFLinux Fixture GNOME', 'OnlyShowIn=GNOME;\n')
+fixture('not', 'UFLinux Fixture NotHere', 'NotShowIn=labwc;\n')
+fixture('try', 'UFLinux Fixture MissingTryExec', 'TryExec=/uflinux-test-does-not-exist\n')
+broken = apps / 'org.uflinux.NonexistentFixture.desktop'
+broken.write_text('[Desktop Entry]\nType=Application\nName=UFLinux Fixture Broken\nDBusActivatable=true\n')
+created.append(broken)
+command('update-desktop-database', str(apps))
+try:
+    open_menu()
+    assert find('Home', 'push button') or find('Home', 'button')
+    click(find('All Applications', 'button') or find('All Applications', 'push button'))
+    wait(lambda: find('Back to favorites'), 'Application browser did not open')
+    command('wtype', '-k', 'Escape')
+    wait(lambda: find('Favorites'), 'Escape did not return to favorites')
+    search('STRASSE documents')
+    wait(lambda: find('UFLinux Fixture Straße'), 'Unicode/token search missed the visible fixture')
+    assert not find('UFLinux Fixture Hidden')
+    command('wtype', '-k', 'Down')
+    command('wtype', '-k', 'Return')
+    wait(lambda: marker.exists(), 'GIO did not launch the desktop file')
+    assert marker.read_text() == 'argument with spaces\n', 'Exec arguments or %U expansion changed'
+    wait(lambda: not menu(), 'Launching an application did not close Start')
+    open_menu(); search('UFLinux Fixture')
+    wait(lambda: find('UFLinux Fixture Straße'), 'Visible desktop entry disappeared')
+    for name in ('Hidden', 'NoDisplay', 'GNOME', 'NotHere', 'MissingTryExec'):
+        assert not find('UFLinux Fixture ' + name), 'Desktop visibility policy ignored: ' + name
+    # Application-monitor refresh while the popup stays open.
+    fixture('added', 'UFLinux Fixture Added')
+    wait(lambda: find('UFLinux Fixture Added'), 'New desktop file was not discovered while open')
+    search('UFLinux Fixture Broken')
+    wait(lambda: find('UFLinux Fixture Broken'), 'Broken launcher fixture is not listed')
+    command('wtype', '-k', 'Return')
+    wait(lambda: any('Could not launch application' in (a.name or '') for a in tree()), 'Launch error was not shown inline')
+    assert menu(), 'Failed launch dismissed the menu'
+    command('wtype', '-k', 'Escape')
+    wait(lambda: find('Favorites'), 'Escape did not clear search')
+    # Never actually end a session in this headless build harness.
+    logout = wait(lambda: find('Log out'), 'Logout control missing')
+    click(logout)
+    cancel = wait(lambda: find('Cancel', 'push button') or find('Cancel', 'button'), 'Logout did not ask for confirmation')
+    click(cancel)
+    assert menu(), 'Cancelling logout dismissed the menu'
+    assert not Path('/tmp/uflinux-login1-actions.log').read_text(), 'Cancelling an action issued a power request'
+    click(logout)
+    command('wtype', '-k', 'Escape')
+    wait(lambda: not find('Cancel', 'push button') and not find('Cancel', 'button'), 'Escape did not cancel confirmation')
+    command('wtype', '-k', 'Escape')
+    wait(lambda: not menu(), 'Escape did not close the empty menu')
+    open_menu(); close_menu()
+    # A typed, confirmed request is denied by the private test-bus fixture.
+    open_menu()
+    restart = wait(lambda: find('Restart', 'button') or find('Restart', 'push button'), 'Restart control missing')
+    click(restart)
+    confirms = wait(lambda: [a for a in tree() if a.name=='Restart' and a.getRoleName() in ('button','push button') and a!=restart], 'Restart confirmation missing')
+    click(confirms[-1])
+    wait(lambda: any('Fixture denied power operation' in (a.name or '') for a in tree()), 'Authorization denial was not shown inline')
+    assert menu(), 'Denial dismissed Start'
+    calls = [json.loads(line) for line in Path('/tmp/uflinux-login1-actions.log').read_text().splitlines()]
+    assert calls == [{'method':'Reboot','interactive':True}], calls
+    close_menu()
+    # Modifier-only binds must not steal existing combinations.
+    command('wtype', '-k', 'Super_L'); wait(menu, 'Left Super did not open Start')
+    command('wtype', '-k', 'Super_L'); wait(lambda: not menu(), 'Left Super did not toggle Start closed')
+    command('wtype', '-k', 'Super_R'); wait(menu, 'Right Super did not open Start')
+    command('wtype', '-k', 'Super_R'); wait(lambda: not menu(), 'Right Super did not toggle Start closed')
+    command('wtype', '-M', 'logo', '-k', 'i', '-m', 'logo')
+    time.sleep(.3); assert not menu(), 'Super+I incorrectly triggered the modifier-only menu'
+    open_menu()
+    command('uflinux-settings', '--quick-settings', '--output', 'HEADLESS-1')
+    wait(lambda: not menu(), 'Quick settings did not replace Start')
+    command('uflinux-settings', '--quick-settings', '--output', 'HEADLESS-1')
+    open_menu()
+    pointer(1060, 700)
+    wait(lambda: find('Quick settings', 'frame'), 'Other taskbar controls were blocked by Start')
+    assert not menu(), 'Taskbar quick-settings click left Start open'
+    command('uflinux-settings', '--quick-settings', '--output', 'HEADLESS-1')
+    open_menu()
+    command('grim', str(results / 'start-menu.png'))
+    # A genuine outside click dismisses the transparent layer.
+    pointer(900, 80)
+    wait(lambda: not menu(), 'Clicking outside the card did not dismiss it')
+    # Click Ironbar's real Start button, then the same point again. The second
+    # click is captured by the dismissal layer, without reopening on release.
+    pointer(25, 700)
+    wait(menu, 'Ironbar Start button did not open the launcher')
+    pointer(25, 700)
+    time.sleep(.5); assert not menu(), 'Repeated Start click reopened instead of toggling closed'
+    # The selected monitor disappearing must close its layer immediately.
+    command('wtype', '-M', 'ctrl', '-M', 'alt', '-k', 'F10', '-m', 'alt', '-m', 'ctrl')
+    wait(lambda: 'UF-TEST' in subprocess.check_output(['wlr-randr'], text=True), 'Virtual monitor was not added')
+    command('uflinux-settings', '--start-menu', '--output', 'UF-TEST')
+    wait(menu, 'Start did not open on the second output')
+    command('wtype', '-M', 'ctrl', '-M', 'alt', '-k', 'F11', '-m', 'alt', '-m', 'ctrl')
+    wait(lambda: not menu(), 'Start survived removal of its monitor')
+    command('wlr-randr', '--output', 'HEADLESS-1', '--scale', '1.25')
+    open_menu(); command('grim', str(results / 'start-menu-scaled.png')); close_menu()
+    command('wlr-randr', '--output', 'HEADLESS-1', '--scale', '1')
+    # Exercise bounded height on a small output, then restore its mode.
+    command('wlr-randr', '--output', 'HEADLESS-1', '--custom-mode', '640x480@60Hz')
+    open_menu(); command('grim', str(results / 'start-menu-small.png')); close_menu()
+    command('wlr-randr', '--output', 'HEADLESS-1', '--custom-mode', '1280x720@60Hz')
+    (results / 'start-menu.json').write_text(json.dumps({'gio_launch': True, 'unicode_search': True, 'visibility': True,
+        'catalog_refresh': True, 'inline_errors': True, 'confirmation_cancel': True, 'super_keys': True,
+        'outside_click': True, 'ironbar_toggle': True, 'small_display': True, 'fractional_scaling': True, 'output_removal': True, 'application_browser': True}, indent=2) + '\n')
+except BaseException:
+    diagnostics(*sys.exc_info())
+    sys.excepthook = sys.__excepthook__
+    raise
+finally:
+    for path in created: path.unlink(missing_ok=True)
+    marker.unlink(missing_ok=True)
+    if menu(): close_menu()
+    command('uflinux-settings', '--page', 'network')
+print('Start menu catalog, GIO launch, search, confirmation, keyboard and pointer interactions passed')

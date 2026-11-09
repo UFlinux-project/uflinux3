@@ -52,7 +52,7 @@ class ControlTests(unittest.TestCase):
 
 class BootTests(unittest.TestCase):
     def test_live_budget_does_not_change_installed_acceptance_budget(self):
-        for arch in ("x86", "x86_64", "armv7", "aarch64", "s390x", "ppc64le", "riscv64", "loongarch64"):
+        for arch in ("x86", "x86_64", "armv7", "aarch64", "s390x", "ppc64le", "riscv64"):
             self.assertEqual(memory_mib(arch), 3072 if arch == "armv7" else 4096)
             self.assertEqual(memory_mib(arch, installed=True), 512 if arch == "x86_64" else 2048)
 

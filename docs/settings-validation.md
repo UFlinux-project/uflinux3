@@ -5,8 +5,8 @@ The earlier ISO in `out/` is unchanged; its results are in
 [the original validation record](validation.md). New images, signed APKs,
 inventories, screenshots and reports are written to `out-settings/`.
 
-The eight-architecture CI matrix is configured. Only x86_64 has been compiled
-and exercised locally. Dependency availability checks passed for all eight
+The seven-architecture CI matrix is configured. Only x86_64 has been compiled
+and exercised locally. Historical dependency availability checks passed for the then-supported eight
 architectures; this does not establish their boot or graphical hardware support.
 No GitHub Release or public Pages repository has been published from this workspace.
 

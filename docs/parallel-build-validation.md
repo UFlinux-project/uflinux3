@@ -25,7 +25,7 @@ reproducibility and desktop reports are in `.cache/parallel-out/`.
 
 These were native local builds with retained dependency caches. They establish
 that the four jobs can execute independently and combine correctly; they are
-not cold-runner speed benchmarks. The updated GitHub workflow and seven other
+not cold-runner speed benchmarks. The updated GitHub workflow and six other
 architectures still need execution on GitHub. Actual concurrency depends on
 available runner slots, with a workflow maximum of eight compile jobs.
 

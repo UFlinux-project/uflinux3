@@ -53,11 +53,11 @@ class ShardTests(unittest.TestCase):
             self.fixture(out)
             merge.collect(out, 'x86_64', '0.1.0')
             packages = out / 'packages/x86_64'
-            self.assertEqual(len(list(packages.glob('*.apk'))), 21)
+            self.assertEqual(len(list(packages.glob('*.apk'))), sum(map(len, builder.PACKAGE_NAMES.values())))
             keys = json.loads((packages / 'build-keys.json').read_text())
             self.assertEqual(len(set(keys.values())), 4)
             proof = json.loads((out / 'metadata/x86_64/reproducibility.json').read_text())
-            self.assertEqual(len(proof['baseline']), 21)
+            self.assertEqual(len(proof['baseline']), sum(map(len, builder.PACKAGE_NAMES.values())))
             self.assertEqual(proof['baseline'], proof['rebuilt'])
             self.assertTrue((out / 'inputs/x86_64/ironbar/cargo-sources.tar.gz').exists())
 

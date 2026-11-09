@@ -81,6 +81,24 @@ def gui_pid():
             pass
     raise AssertionError("Settings GUI exited unexpectedly")
 
+# Measure a genuinely cold launcher with no Settings window or resident GUI.
+menu_log = Path('/run/uflinux-start-menu.log')
+with menu_log.open('w') as log:
+    launcher = subprocess.Popen(['uflinux-settings', '--start-menu', '--output', snapshot['displays']['outputs'][0]['name']],
+        env=environment, preexec_fn=demote, stdout=log, stderr=log)
+for _ in range(100):
+    assert launcher.poll() is None, 'The Start menu failed to start'
+    if 'UFLINUX_START_MENU_FIRST_FRAME_MS=' in menu_log.read_text(): break
+    time.sleep(.1)
+else: raise AssertionError('The Start menu did not draw a frame')
+time.sleep(.5)
+launcher_pss = pss(gui_pid())
+launcher_cold_ms = float(menu_log.read_text().split('UFLINUX_START_MENU_FIRST_FRAME_MS=')[-1].splitlines()[0])
+run('uflinux-settings', '--start-menu')
+launcher.wait(timeout=10)
+assert not any(path for path in Path('/proc').glob('[0-9]*/exe')
+    if path.exists() and path.resolve().name == 'uflinux-settings' and path.parent.stat().st_uid == user.pw_uid), 'Launcher left a GUI process running'
+
 started = time.monotonic()
 with Path('/run/uflinux-settings-ui.log').open('w') as log:
     frontend=subprocess.Popen(["uflinux-settings", "--quick-settings", "--output", snapshot["displays"]["outputs"][0]["name"]],
@@ -98,6 +116,18 @@ for page in ("network", "displays", "audio", "power", "default-apps", "datetime"
     run("uflinux-settings", "--page", page)
     time.sleep(0.4)
 full_pss = pss(gui_pid())
+# Keep full Settings alive while repeatedly constructing and releasing the card.
+primary = gui_pid()
+launcher_samples = []
+for _ in range(10):
+    run('uflinux-settings', '--start-menu')
+    time.sleep(.2)
+    assert gui_pid() == primary, 'Start did not reuse the Settings process'
+    launcher_samples.append(pss(primary))
+    run('uflinux-settings', '--start-menu')
+    time.sleep(.1)
+repeated_closed_pss = pss(primary)
+assert repeated_closed_pss - full_pss <= 12 * 1024**2, 'Repeated launcher use retained excessive memory'
 run("uflinux-settingsctl", "volume", "-5")
 run("uflinux-settingsctl", "mute")
 run("uflinux-settingsctl", "mute")
@@ -106,6 +136,8 @@ assert list(processes("labwc")) and list(processes("ironbar"))
 messages = subprocess.check_output(["dmesg"], text=True)
 assert "Out of memory" not in messages and "Killed process" not in messages
 metrics = {"ram_mib": 512, "swap": False, "displays": 1, "service_pss_bytes": pss(service),
+           "launcher_pss_bytes": launcher_pss, "launcher_cold_frame_ms": launcher_cold_ms,
+           "launcher_repeated_peak_pss_bytes": max(launcher_samples), "launcher_closed_pss_bytes": repeated_closed_pss,
            "flyout_pss_bytes": flyout_pss, "full_ui_pss_bytes": full_pss,
            "exercise_seconds": round(time.monotonic() - started, 2), "oom": False,
            "renderer": snapshot["displays"]["renderer"], "scope": "QEMU software-rendered installed x86_64; native latency measured separately"}
@@ -117,6 +149,7 @@ for path in Path('/proc').glob('[0-9]*/exe'):
 metrics['helper_pss_bytes']=sum(pss(pid) for pid in helpers)
 metrics['background_pss_bytes']=metrics['service_pss_bytes']+metrics['helper_pss_bytes']
 assert metrics["background_pss_bytes"] <= 16 * 1024**2, metrics
+assert launcher_pss <= 80 * 1024**2, metrics
 assert flyout_pss <= 50 * 1024**2, metrics
 assert full_pss <= 80 * 1024**2, metrics
 Path("/run/uflinux-settings-installed.json").write_text("UFLINUX_INSTALLED_METRICS:" + json.dumps(metrics) + "\n")

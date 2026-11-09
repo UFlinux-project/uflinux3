@@ -27,7 +27,7 @@
    ```
 
 Pull requests and main pushes build x86_64; manual runs and version tags use all
-eight architectures.
+seven architectures.
 Only push events for valid version tags can publish. Manual runs never become
 release builds by supplying a private key. Protect the default branch and release
 tags according to the maintainer access you intend to grant.

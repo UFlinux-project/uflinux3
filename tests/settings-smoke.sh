@@ -99,6 +99,7 @@ PY
 /usr/bin/uflinux-settings --quick-settings --output HEADLESS-1
 wait "$gui"
 gui=''
+python3 "$(dirname "$0")/start-menu-bench.py"
 G_DEBUG=fatal-criticals UFLINUX_SETTINGS_BENCH=1 /usr/bin/uflinux-settings --page network > "$results/ui.log" 2>&1 &
 gui=$!
 for _attempt in $(seq 1 30); do
@@ -110,6 +111,7 @@ done
 grep -q org.uflinux.Settings "$results/windows.txt"
 sh "$(dirname "$0")/build-ui-driver.sh" /tmp/uflinux-ui-driver
 python3 "$(dirname "$0")/settings-ui-protocol.py"
+python3 "$(dirname "$0")/start-menu-ui.py"
 for page in network displays audio power default-apps datetime appearance about; do
 	/usr/bin/uflinux-settings --page "$page"
 	sleep 1

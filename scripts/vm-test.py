@@ -26,7 +26,6 @@ FIRMWARE = {
     "aarch64": (["/usr/share/AAVMF/AAVMF_CODE.fd"], ["/usr/share/AAVMF/AAVMF_VARS.fd"]),
     "armv7": (["/usr/share/AAVMF/AAVMF32_CODE.fd"], ["/usr/share/AAVMF/AAVMF32_VARS.fd"]),
     "riscv64": (["/usr/share/qemu-efi-riscv64/RISCV_VIRT_CODE.fd"], ["/usr/share/qemu-efi-riscv64/RISCV_VIRT_VARS.fd"]),
-    "loongarch64": (["/usr/share/qemu-efi-loongarch64/*CODE*.fd", "/usr/share/qemu-efi-loongarch64/QEMU_EFI.fd"], ["/usr/share/qemu-efi-loongarch64/*VARS*.fd"]),
 }
 
 
@@ -61,14 +60,11 @@ def command(args, state, installed=False):
     if args.mode == "uefi":
         code_patterns, vars_patterns = FIRMWARE[arch]
         code = locate(code_patterns, "UEFI firmware")
-        if arch == "loongarch64" and Path(code).name == "QEMU_EFI.fd":
-            cmd += ["-bios", code]
-        else:
-            variables = state / "vars.fd"
-            if not variables.exists():
-                shutil.copyfile(locate(vars_patterns, "UEFI variable template"), variables)
-            cmd += ["-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={code}",
-                    "-drive", f"if=pflash,format=raw,unit=1,file={variables}"]
+        variables = state / "vars.fd"
+        if not variables.exists():
+            shutil.copyfile(locate(vars_patterns, "UEFI variable template"), variables)
+        cmd += ["-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={code}",
+                "-drive", f"if=pflash,format=raw,unit=1,file={variables}"]
     device_suffix = "ccw" if arch == "s390x" else "pci"
     cmd += ["-drive", f"if=none,id=target,format=raw,file={state / 'target.raw'}",
             "-device", f"virtio-blk-{device_suffix},drive=target,serial=uflinux-test,bootindex={'1' if installed else '2'}",
@@ -127,6 +123,34 @@ def start(args, state, log, installed=False):
     return child
 
 
+def splash_smoke(child, state, out):
+    # Verify real boot handoff, then reopen only inside this disposable guest to
+    # capture two frames without inserting any artificial production boot delay.
+    guest(child, "test -f /run/uflinux-splash/completed; ! pgrep -x plymouthd; rc-service greetd stop")
+    try:
+        guest(child, "/usr/libexec/uflinux-bootsplash start; test -f /run/uflinux-splash/started; plymouth --ping")
+        frames = []
+        with qmp(state) as request:
+            for number in (1, 2):
+                time.sleep(0.4)
+                path = out / f"bootsplash-{number}.ppm"
+                request("screendump", {"filename": str(path)})
+                frames.append(path.read_bytes())
+        if frames[0] == frames[1]:
+            raise RuntimeError("Boot spinner did not animate between captured frames")
+        magic, dimensions, maximum, pixels = frames[0].split(b"\n", 3)
+        if magic != b"P6" or maximum != b"255":
+            raise RuntimeError("Unexpected QEMU splash screenshot format")
+        blue = sum(b > 120 and g > 50 and r < 80 for r, g, b in zip(pixels[::3], pixels[1::3], pixels[2::3]))
+        white = sum(min(r, g, b) > 200 for r, g, b in zip(pixels[::3], pixels[1::3], pixels[2::3]))
+        if blue < 20 or white < 300:
+            raise RuntimeError("Splash screenshot lacks the blue spinner or original white leaf")
+    finally:
+        guest(child, "/usr/libexec/uflinux-bootsplash stop; ! pgrep -x plymouthd; rc-service greetd start")
+    return {"animated_frames": True, "original_logo_visible": True, "handoff_without_daemon": True,
+            "dimensions": dimensions.decode(), "blue_pixels": blue, "white_pixels": white}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--arch", choices=ARCHES, required=True)
@@ -149,6 +173,7 @@ def main():
     settings_metrics = None
     network_clock = None
     power_report = None
+    splash_report = None
     try:
         with tempfile.TemporaryDirectory(prefix="uflinux-vm-") as temporary, (out / "console.log").open("w") as log:
             state = Path(temporary)
@@ -167,10 +192,13 @@ def main():
             guest(child, "df -h /; df -i /")
             guest(child, "test -e /run/uflinux-live; test $(id -un) = root; ! rc-service sshd status")
             guest(child, "apk info -e uflinux ironbar labwc")
+            guest(child, '. /etc/rc.conf.d/uflinux.conf; test "$rc_parallel" = YES')
             guest(child, "ironbar -c /etc/xdg/ironbar/config.toml -t /etc/xdg/ironbar/style.css --validate-config")
             guest(child, "apk info -e connman iwd busybox-openrc uflinux-settings uflinux-settings-daemon uflinux-settings-system; connmanctl state; connmanctl services; rc-service ntpd status; ! pgrep -x NetworkManager; ! pgrep -x chronyd; ! pgrep -x openntpd; ! pgrep -x wpa_supplicant")
             if args.arch in {"x86", "x86_64", "aarch64"}:
                 guest(child, "for n in $(seq 1 30); do pgrep -x labwc >/dev/null && pgrep -x ironbar >/dev/null && break; sleep 1; done; if ! pgrep -x labwc || ! pgrep -x ironbar; then rc-status; cat /var/log/messages; exit 1; fi")
+            if args.arch == "x86_64":
+                splash_report = splash_smoke(child, state, out)
             if args.network_tests:
                 if args.arch != "x86_64":
                     raise RuntimeError("The real Wi-Fi fixture is configured for x86_64 QEMU")
@@ -219,11 +247,14 @@ def main():
             login(child, "alice", "uflinux-test-password")
             guest(child, "awk '$2 == \"/\" && $3 == \"xfs\" {ok=1} END {exit !ok}' /proc/mounts; test ! -e /run/uflinux-live; ! id live; apk info -e uflinux ironbar labwc", admin=False)
             # Authenticate doas normally before invoking the root-only test harness.
+            guest(child, '. /etc/rc.conf.d/uflinux.conf; test "$rc_parallel" = YES', admin=False)
             child.sendline("doas true")
             child.expect(r"[Pp]assword:")
             child.sendline("uflinux-test-password")
             child.expect(r"[$#] ")
             if args.arch == "x86_64":
+                guest(child, "test -f /run/uflinux-splash/completed; ! pgrep -x plymouthd")
+                splash_report["installed_handoff_without_daemon"] = True
                 graphical_login(state)
                 transfer(child, ROOT / "tests/settings-installed.py", "/run/uflinux-settings-installed.py")
                 guest(child, "python3 /run/uflinux-settings-installed.py")
@@ -233,6 +264,15 @@ def main():
                     raise RuntimeError("Installed Settings metrics were not recorded")
                 settings_metrics = json.loads(records.group(1))
                 (out / "settings-512m.json").write_text(json.dumps(settings_metrics, indent=2) + "\n")
+                # A real modifier-release opens the installed launcher on the
+                # compositor-selected monitor; preserve a clean desktop screenshot.
+                with qmp(state) as request:
+                    request("send-key", {"keys":[{"type":"qcode","data":"meta_l"}],"hold-time":100})
+                time.sleep(3)
+                with qmp(state) as request:
+                    request("screendump", {"filename":str(out / "start-menu.ppm")})
+                    request("send-key", {"keys":[{"type":"qcode","data":"meta_l"}],"hold-time":100})
+                time.sleep(1)
                 # Launch from labwc so the agent belongs to the actual graphical session.
                 with qmp(state) as request:
                     request("send-key", {"keys":[{"type":"qcode","data":"meta_l"},{"type":"qcode","data":"i"}]})
@@ -283,6 +323,7 @@ def main():
             "installed_memory_mib": memory_mib(args.arch, installed=True),
             "firmware_lock": firmware_lock if args.arch in {"x86", "armv7"} else None,
             "iso_boot": True, "xfs_install_reboot": True, "unrelated_partition_preserved": True,
+            "bootsplash": splash_report,
             "settings_512m": settings_metrics, "network_clock": network_clock, "power": power_report}, indent=2) + "\n")
         return 0
     except (OSError, RuntimeError, subprocess.CalledProcessError, pexpect.ExceptionPexpect) as exc:

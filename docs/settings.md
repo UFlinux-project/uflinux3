@@ -9,6 +9,7 @@ Image previews are bounded; arbitrary remote wallpapers are not downloaded.
 ```sh
 uflinux-settings --page network
 uflinux-settings --quick-settings --output DP-1
+uflinux-settings --start-menu --output DP-1
 uflinux-settingsctl status
 uflinux-settingsctl volume -5
 uflinux-settingsctl brightness 5
@@ -185,3 +186,7 @@ the installed memory acceptance test. Test-only hostapd/dnsmasq packages are not
 desktop dependencies. Missing test facilities fail the gate rather than silently
 claiming coverage. Physical HDR, VRR, DDC/CI, suspend and GPU support remain
 separate hardware validation. See [recorded results](settings-validation.md).
+
+The integrated [Start menu](start-menu.md) uses the same GUI process and power
+backend. See its [validation record](start-menu-validation.md) for launcher tests
+and measurements.

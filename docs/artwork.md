@@ -53,10 +53,12 @@ these defaults take effect in subsequent builds.
 Local validation on 8 November 2026 passed rebuilt UFLinux/Settings packages,
 fresh signed installation of the 21-package closure, the artwork rendering checks
 and the complete headless desktop suite. Papirus availability checks passed for
-all eight architectures; 38 Python tests, Rust package tests, ShellCheck and
+the then-supported eight architectures; 38 Python tests, Rust package tests, ShellCheck and
 workflow linting also passed. Reports and screenshots are in
 `.cache/artwork-out/checks/x86_64/`. The other architectures and a new ISO were
 not built during this artwork change.
 
 The adw-gtk3 follow-up also passed independent GTK3/GTK4 theme probes and the
 full native desktop suite. Reports are in `.cache/adw-out/checks/x86_64/`.
+
+The [startup animation](bootsplash.md) also uses the original leaf logo.

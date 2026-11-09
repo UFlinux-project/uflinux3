@@ -37,5 +37,13 @@
     "selection": "Unmodified images with explicit upstream attribution and dimensions within the Settings memory limit",
     "checksum_url": "https://download.gnome.org/sources/gnome-backgrounds/3.38/gnome-backgrounds-3.38.0.sha256sum",
     "source_sha256": "f7712a873a80c9a9fcf3952611effeb2d9aed23a3e8abfcda8afb15c427d1ee3"
+  },
+  "bootsplash": {
+    "original_theme_repository": "https://github.com/UFlinux-project/ufplymouththeme",
+    "original_theme_commit": "f56aa102eb205c174fe28a64064a134c5e813e52",
+    "original_theme_assets_available": false,
+    "logo_source": "logo",
+    "animation": "UFLinux spinner, GPL-3.0-only",
+    "implementation": "Alpine Plymouth, OpenRC lifecycle"
   }
 }
