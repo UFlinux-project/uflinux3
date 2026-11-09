@@ -77,23 +77,24 @@ build_systemd_efi() {
 }
 
 create_image_iso() {
-	local ISO="${OUTDIR}/${output_filename}" _isolinux= _efiboot= _f _p image sectors size
+	local ISO="${OUTDIR}/${output_filename}" _isolinux="" _efiboot="" _f _p image sectors size
+	local flavors="${kernel_flavors-}"
 	if [ -e "$DESTDIR/boot/syslinux/isolinux.bin" ]; then
 		_isolinux="-isohybrid-mbr $DESTDIR/boot/syslinux/isohdpfx.bin -eltorito-boot boot/syslinux/isolinux.bin -eltorito-catalog boot/syslinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table"
 	fi
 	if [ -d "$DESTDIR/efi/boot" ]; then
 		mkdir -p "$WORKDIR/systemd-loader/loader/entries" "$DESTDIR/boot"
-		printf 'default uflinux-%s.conf\ntimeout 1\n' "${kernel_flavors%% *}" > "$WORKDIR/systemd-loader/loader/loader.conf"
-		for _f in $kernel_flavors; do
+		printf 'default uflinux-%s.conf\ntimeout 1\n' "${flavors%% *}" > "$WORKDIR/systemd-loader/loader/loader.conf"
+		for _f in $flavors; do
 			{
 				printf 'title UFLinux %s\nlinux /boot/vmlinuz-%s\n' "$_f" "$_f"
 				for _p in $initrd_ucode; do printf 'initrd %s\n' "$_p"; done
-				printf 'initrd /boot/initramfs-%s\noptions %s %s\n' "$_f" "$initfs_cmdline" "$kernel_cmdline"
+				printf 'initrd /boot/initramfs-%s\noptions %s %s\n' "$_f" "${initfs_cmdline-}" "$kernel_cmdline"
 			} > "$WORKDIR/systemd-loader/loader/entries/uflinux-$_f.conf"
 		done
 		# FAT32 needs adequate cluster overhead, including for microcode images.
 		size=$((64 * 1024 * 1024))
-		for _f in $kernel_flavors; do
+		for _f in $flavors; do
 			size=$((size + $(wc -c < "$DESTDIR/boot/vmlinuz-$_f") + $(wc -c < "$DESTDIR/boot/initramfs-$_f")))
 		done
 		for _p in $initrd_ucode; do size=$((size + $(wc -c < "$DESTDIR$_p"))); done
@@ -102,7 +103,7 @@ create_image_iso() {
 		mformat -i "$image" -C -T "$sectors" -F :: || return 1
 		mcopy -i "$image" -s "$DESTDIR/efi" "$WORKDIR/systemd-loader/loader" :: || return 1
 		mmd -i "$image" ::/boot || return 1
-		for _f in $kernel_flavors; do
+		for _f in $flavors; do
 			mcopy -i "$image" "$DESTDIR/boot/vmlinuz-$_f" "$DESTDIR/boot/initramfs-$_f" ::/boot/ || return 1
 		done
 		for _p in $initrd_ucode; do mcopy -i "$image" "$DESTDIR$_p" ::/boot/ || return 1; done
@@ -119,7 +120,7 @@ create_image_iso() {
 	else
 		if [ "$ARCH" = s390x ]; then
 			printf %s "$initfs_cmdline $kernel_cmdline " > "$WORKDIR/parmfile"
-			for _f in $kernel_flavors; do
+			for _f in $flavors; do
 				mk-s390image -p "$WORKDIR/parmfile" -r "$DESTDIR/boot/initramfs-$_f" "$DESTDIR/boot/vmlinuz-$_f" "$DESTDIR/boot/merged.img"
 			done
 			iso_opts="$iso_opts -no-emul-boot -eltorito-boot boot/merged.img"
