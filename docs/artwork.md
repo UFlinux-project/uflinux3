@@ -6,16 +6,27 @@ Papirus and GNOME's `Dark_Ivy.jpg`. Those assets were third-party artwork used b
 the original distribution, rather than artwork authored by UFLinux.
 
 Papirus comes from Alpine's signed `papirus-icon-theme` package. GTK3, GTK4,
-labwc and Fuzzel select Papirus by default; Ironbar uses the GTK theme for its
-application icons. Adwaita remains available for fallback icons. Personal XDG
-configuration continues to override the packaged defaults.
+and labwc select Papirus by default; Ironbar uses the GTK theme for its
+application icons. Adwaita remains available for fallback icons. Personal
+preferences can override the packaged defaults.
 
 GTK3 and GTK4 apps use `adw-gtk3-dark` from Alpine's signed `adw-gtk3` package.
 Both toolkit versions receive the theme name and dark preference through their
-XDG `settings.ini` files. This is a CSS theme; UFLinux Settings remains a plain
-GTK4 app without a libadwaita dependency. No global `GTK_THEME` override is set,
+XDG `settings.ini` files and matching GSettings schema defaults. GTK3 on Wayland
+reads the desktop schemas when installed, taking precedence over `settings.ini`;
+the packaged schema override keeps the theme, icons and font consistent and
+selects the dark color scheme. User GSettings preferences for GTK3 and personal
+`settings.ini` files for GTK4 still take precedence. This is a CSS theme;
+UFLinux Settings remains a plain GTK4 app without a libadwaita dependency.
+No global `GTK_THEME` override is set,
 so personal themes and accessibility preferences can take precedence. The theme
 package version and hashes are recorded with the image's resolved APK inventory.
+Labwc uses `labAdwaita-dark` for window decorations and menus. A shell helper reads the selected GTK3 theme’s named header colors once at
+session startup and applies them to labwc. Theme changes take effect at the next
+login. It leaves a personal `~/.config/labwc/themerc-override` or labwc `rc.xml`
+in control; edit the generated override’s first line to take control. Themes
+without simple named header colors, and GTK4 apps with separate theme overrides,
+may still look different.
 
 Six original GNOME 3.38 wallpapers are installed without image modifications in
 `/usr/share/backgrounds/uflinux/`: Dark Ivy, Cold Warm, Endless Shapes, Road and

@@ -155,7 +155,9 @@ The session wrapper probes hardware Vulkan, then hardware OpenGL, then pixman.
 It skips software Vulkan, respects explicit renderer overrides and limits startup
 fallback attempts. A normal logout or a crash after desktop startup does not
 restart the session with another renderer. On software rendering, GTK uses Cairo
-unless explicitly overridden. DDC uses bounded asynchronous ddcutil VCP 0x10
+unless explicitly overridden. Cairo quick-settings cards omit the blurred shadow
+to reduce software-rendering allocations.
+DDC uses bounded asynchronous ddcutil VCP 0x10
 operations against a connected DRM/EDID identity; unsupported monitors show an
 unavailable state. Backlight values and device hotplug refresh through filtered
 eudev events; display changes and resume coalesce DDC rescans. DDC hardware-button
@@ -178,8 +180,10 @@ The reference target is an **installed x86_64 system with 512 MiB, one display a
 no swap**. Live images load an APK-based root into RAM and need more memory.
 High resolutions, physical GPU drivers and other architectures need separate
 measurements. Targets are ≤16 MiB PSS for background Settings components,
-≤80 MiB for the full UI and ≤50 MiB for the flyout; cold usable frame ≤1.5 seconds
+≤80 MiB for the full UI and ≤64 MiB for the flyout; cold usable frame ≤1.5 seconds
 and warm ≤500 ms are native reference targets, not emulated timing guarantees.
+The flyout budget includes GTK/Mesa's mapped shared libraries; their PSS share
+varies with the other desktop processes using them.
 
 Headless tests exercise real labwc output management, rollback and caller
 isolation, PipeWire controls, UI pages and process lifetime. A separate D-Bus

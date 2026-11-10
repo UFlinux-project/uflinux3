@@ -16,7 +16,7 @@ import time
 
 import pexpect
 from builder import sha, download
-from vm_control import qmp, memory_mib, check_boot_errors, expect_login_prompt
+from vm_control import qmp, memory_mib, check_boot_errors, expect_login_prompt, greeter_button, press_key
 
 ROOT = Path(__file__).resolve().parents[1]
 ARCHES = json.loads((ROOT / "config/architectures.json").read_text())
@@ -55,6 +55,8 @@ def command(args, state, installed=False):
         cmd += ["-cpu", "power9"]
     if arch in {"x86", "x86_64"}:
         cmd += ["-vga", "none", "-device", "virtio-vga"]
+        if arch == "x86_64":
+            cmd += ["-device", "virtio-tablet-pci"]
     elif arch == "aarch64":
         cmd += ["-device", "virtio-gpu-pci"]
     if args.mode == "uefi":
@@ -104,15 +106,48 @@ def transfer(child, source, destination):
     guest(child, "base64 -d " + shlex.quote(temporary) + " > " + shlex.quote(destination) + "; rm " + shlex.quote(temporary))
 
 
-def graphical_login(state):
-    """Type into the installed greeter; leave installed autologin disabled."""
+def graphical_login(child, state):
+    """Use the installed greeter's controls; leave autologin disabled."""
+    # The initial frame can appear before ReGreet finishes populating users and
+    # fullscreen layout. Its pinned-version log confirms the selected test user.
+    guest(child, "for i in $(seq 1 90); do grep -Fq 'user_id: Some(\"alice\")' /var/log/regreet/log 2>/dev/null && exit 0; sleep 1; done; echo 'ReGreet did not select alice'; exit 1")
+    guest(child, "wc -l < /var/log/regreet/log > /run/uflinux-greeter-log-line")
     with qmp(state) as request:
-        for text in ("\n", "uflinux-test-password\n"):
-            for character in text:
-                key = {"\n": "ret", "-": "minus"}.get(character, character)
-                request("send-key", {"keys": [{"type": "qcode", "data": key}], "hold-time": 30})
-                time.sleep(0.07)
-            time.sleep(2)
+        def wait_for_login_button(minimum_y=0):
+            # ReGreet's configured adw-gtk3 theme has a blue Login button. Wait
+            # for the actual frame, rather than sending keys during GTK startup.
+            # The button moves down when PAM's password entry becomes visible.
+            frame = state / "greeter.ppm"
+            previous = None
+            for _ in range(120):
+                request("screendump", {"filename": str(frame)})
+                position = greeter_button(frame.read_bytes())
+                if position is not None and position[1] >= minimum_y and position == previous:
+                    return position
+                previous = position
+                time.sleep(0.5)
+            raise RuntimeError("ReGreet did not display its login/password controls")
+
+        def click(position):
+            x, y, width, height = position
+            request("input-send-event", {"events": [
+                {"type": "abs", "data": {"axis": "x", "value": x * 32767 // (width - 1)}},
+                {"type": "abs", "data": {"axis": "y", "value": y * 32767 // (height - 1)}}]})
+            time.sleep(0.2)
+            request("input-send-event", {"events": [{"type": "btn", "data": {"button": "left", "down": True}}]})
+            time.sleep(0.1)
+            request("input-send-event", {"events": [{"type": "btn", "data": {"button": "left", "down": False}}]})
+
+        initial = wait_for_login_button()
+        click(initial)
+        guest(child, "first=$(($(cat /run/uflinux-greeter-log-line) + 1)); for i in $(seq 1 90); do tail -n +\"$first\" /var/log/regreet/log | grep -Fq 'greetd asks for a secret auth input' && exit 0; sleep 1; done; echo 'ReGreet did not request a password'; exit 1")
+        password = wait_for_login_button(initial[1] + 10)
+        for character in "uflinux-test-password":
+            press_key(request, "minus" if character == "-" else character)
+        click(password)
+    # Do not flood the serial console with the harness transfer while the new
+    # graphical session is still authenticating or starting its compositor.
+    guest(child, "for i in $(seq 1 90); do pgrep -u alice -f /usr/libexec/uflinux-settingsd >/dev/null && exit 0; sleep 1; done; echo 'Installed graphical session did not start'; exit 1")
 
 
 def start(args, state, log, installed=False):
@@ -263,9 +298,21 @@ def main():
             if args.arch == "x86_64":
                 guest(child, "test -f /run/uflinux-splash/completed; ! pgrep -x plymouthd")
                 splash_report["installed_handoff_without_daemon"] = True
-                graphical_login(state)
-                transfer(child, ROOT / "tests/settings-installed.py", "/run/uflinux-settings-installed.py")
-                guest(child, "python3 /run/uflinux-settings-installed.py")
+                try:
+                    graphical_login(child, state)
+                    transfer(child, ROOT / "tests/settings-installed.py", "/run/uflinux-settings-installed.py")
+                    guest(child, "python3 /run/uflinux-settings-installed.py")
+                except RuntimeError:
+                    # Preserve the greeter/session state before the temporary VM
+                    # is removed, so login failures can be diagnosed directly.
+                    try:
+                        with qmp(state) as request:
+                            request("screendump", {"filename": str(out / "installed-failure.ppm")})
+                        diagnostics = guest(child, "ps -o pid,user,comm,args; ls -al /run/user/1000 || true; tail -80 /var/log/messages; cat /var/lib/regreet/state.toml 2>/dev/null || true; find /var/log/regreet -type f -exec tail -80 '{}' ';'")
+                        (out / "installed-failure.txt").write_text(diagnostics)
+                    except (OSError, RuntimeError, pexpect.ExceptionPexpect) as error:
+                        print("Could not collect installed-session diagnostics:", error, file=sys.stderr)
+                    raise
                 metrics = guest(child, "cat /run/uflinux-settings-installed.json")
                 records = re.search(r"UFLINUX_INSTALLED_METRICS:(\{[^\r\n]*\})", metrics)
                 if not records:
@@ -294,8 +341,7 @@ def main():
                 with qmp(state) as request:
                     for character in "uflinux-test-password\n":
                         key={"\n":"ret","-":"minus"}.get(character,character)
-                        request("send-key",{"keys":[{"type":"qcode","data":key}],"hold-time":30})
-                        time.sleep(.07)
+                        press_key(request, key)
                 guest(child,"python3 /run/uflinux-settings-auth.py check-grant")
                 transfer(child, ROOT / "tests/settings-power-vm.py", "/run/uflinux-settings-power.py")
                 power = guest(child, "python3 /run/uflinux-settings-power.py")

@@ -1,7 +1,7 @@
 # Start menu
 
 Click the leaf on the bottom taskbar or release either Super key to toggle the
-launcher. Super combinations still work; Super+R and Super+Space open Fuzzel.
+launcher. Super combinations still work; Super+R and Super+Space also toggle the Start menu.
 The Start menu runs in its own plain GTK4 process, `uflinux-start-menu`, with
 Papirus icons and the selected GTK theme. Login starts it hidden with its default
 widgets, layout and application catalog prepared. It retains these between

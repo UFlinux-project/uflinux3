@@ -2,6 +2,32 @@
 import contextlib
 import json
 import socket
+import time
+
+
+def press_key(request, key):
+    """Release each key explicitly, including repeated password characters."""
+    for down in (True, False):
+        request("input-send-event", {"events": [{"type": "key", "data": {
+            "down": down, "key": {"type": "qcode", "data": key}}}]})
+        time.sleep(0.05)
+
+
+def greeter_button(frame):
+    """Locate ReGreet's blue Login control in a QEMU PPM frame."""
+    magic, dimensions, maximum, pixels = frame.split(b"\n", 3)
+    width, height = map(int, dimensions.split())
+    if magic != b"P6" or maximum != b"255" or len(pixels) != width * height * 3:
+        raise RuntimeError("Unexpected greeter screenshot format")
+    coordinates = [(i % width, i // width) for i, (r, g, b) in enumerate(zip(pixels[::3], pixels[1::3], pixels[2::3]))
+                   if r < 110 and g > 80 and b > 150 and b > g + 30]
+    # The password entry also has a blue focus outline. Its pixels must not
+    # pull the detected button upward when waiting for the password prompt.
+    if len(coordinates) <= 1000:
+        return None
+    middle = len(coordinates) // 2
+    x = sorted(point[0] for point in coordinates)[middle]
+    return x, coordinates[middle][1], width, height
 
 
 @contextlib.contextmanager

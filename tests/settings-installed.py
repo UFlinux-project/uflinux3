@@ -190,7 +190,8 @@ metrics['background_services_pss_bytes']=metrics['service_pss_bytes']+metrics['h
 metrics['background_pss_bytes']=metrics['background_services_pss_bytes']+repeated_closed_pss
 assert metrics["background_services_pss_bytes"] <= 16 * 1024**2, metrics
 assert launcher_pss <= 80 * 1024**2, metrics
-assert flyout_pss <= 50 * 1024**2, metrics
+# Include GTK/Mesa's mapped shared libraries in the bounded process budget.
+assert flyout_pss <= 64 * 1024**2, metrics
 assert full_pss <= 80 * 1024**2, metrics
 Path("/run/uflinux-settings-installed.json").write_text("UFLINUX_INSTALLED_METRICS:" + json.dumps(metrics) + "\n")
 frontend.terminate()

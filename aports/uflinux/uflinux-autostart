@@ -5,6 +5,7 @@ touch "$XDG_RUNTIME_DIR/uflinux-compositor-ready"
 dbus-update-activation-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE LABWC_PID UFLINUX_RENDERER
 if [ -n "${GSK_RENDERER:-}" ]; then dbus-update-activation-environment GSK_RENDERER; fi
 /usr/libexec/pipewire-launcher &
+/usr/libexec/uflinux-theme-sync &
 mako &
 /usr/libexec/uflinux-settingsd &
 uflinux-start-menu --daemon &

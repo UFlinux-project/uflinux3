@@ -51,12 +51,6 @@ swaybg -c '#102c46' -i /usr/share/backgrounds/uflinux/Dark_Ivy.jpg -m fill > "$r
 background=$!; pids="$pids $background"
 mako > "$results/notifications.log" 2>&1 &
 notifications=$!; pids="$pids $notifications"
-fuzzel > "$results/launcher.log" 2>&1 &
-launcher=$!
-sleep 1
-kill -0 "$launcher"
-kill "$launcher"
-wait "$launcher" 2>/dev/null || :
 /usr/libexec/uflinux-start-panel --validate-config > "$results/config.log" 2>&1
 if grep -q 'type = "battery"' /etc/xdg/ironbar/config.toml; then
 	echo 'Battery-free default still contains the battery module' >&2

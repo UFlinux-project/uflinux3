@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <openbox_menu>
   <menu id="root-menu" label="UFLinux">
-    <item label="Applications"><action name="Execute" command="fuzzel"/></item>
+    <item label="Applications"><action name="Execute" command="uflinux-start-menu"/></item>
     <item label="Terminal"><action name="Execute" command="foot"/></item>
     <item label="Files"><action name="Execute" command="nemo"/></item>
     <item label="Settings"><action name="Execute" command="uflinux-settings"/></item>

@@ -6,12 +6,65 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from vm_control import qmp, memory_mib, check_boot_errors, expect_login_prompt
+from vm_control import qmp, memory_mib, check_boot_errors, expect_login_prompt, greeter_button, press_key
+
+
+class GreeterTests(unittest.TestCase):
+    def frame(self, password=False, button=True):
+        width, height = 300, 230
+        pixels = bytearray(bytes((33, 33, 36)) * width * height)
+        def blue(x, y):
+            offset = (y * width + x) * 3
+            pixels[offset:offset + 3] = bytes((53, 132, 228))
+        if button:
+            for y in range(170 if password else 140, 200 if password else 170):
+                for x in range(150, 230):
+                    blue(x, y)
+        if password:
+            for y in range(80, 158):
+                for x in range(30, 270):
+                    if y < 82 or y >= 156 or x < 32 or x >= 268:
+                        blue(x, y)
+        return f'P6\n{width} {height}\n255\n'.encode() + pixels
+
+    def test_password_focus_outline_does_not_hide_prompt_transition(self):
+        initial = greeter_button(self.frame())
+        password = greeter_button(self.frame(password=True))
+        self.assertGreaterEqual(password[1], initial[1] + 10)
+        self.assertIn(password[0], range(150, 230))
+        self.assertIn(password[1], range(170, 200))
+
+    def test_unrendered_frame_is_not_ready(self):
+        self.assertIsNone(greeter_button(self.frame(button=False)))
+
+    def test_truncated_frame_is_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, 'screenshot format'):
+            greeter_button(self.frame()[:-1])
 
 
 class ControlTests(unittest.TestCase):
+    def test_repeated_password_letters_have_separate_key_presses(self):
+        held = set()
+        typed = []
+        def keyboard(command, arguments):
+            self.assertEqual(command, 'input-send-event')
+            for event in arguments['events']:
+                key = event['data']['key']['data']
+                if event['data']['down']:
+                    if key not in held:
+                        typed.append(key)
+                    held.add(key)
+                else:
+                    held.discard(key)
+        with patch('vm_control.time.sleep'):
+            press_key(keyboard, 's')
+            press_key(keyboard, 's')
+        self.assertEqual(typed, ['s', 's'])
+        self.assertFalse(held)
+
     def test_context_releases_connection_while_callback_remains_referenced(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory)

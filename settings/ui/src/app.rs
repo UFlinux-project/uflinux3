@@ -458,6 +458,14 @@ impl App {
         self.close_start();
         window.add_css_class("uflinux-settings");
         window.add_css_class("status-shell");
+        window.connect_realize(|window| {
+            if window
+                .renderer()
+                .is_some_and(|renderer| renderer.is::<gtk::gsk::CairoRenderer>())
+            {
+                window.add_css_class("software-renderer");
+            }
+        });
         if gtk4_layer_shell::is_supported() {
             window.set_resizable(true);
             window.set_default_size(0, 0);

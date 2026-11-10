@@ -25,7 +25,7 @@ only after the full matrix passes. A configured test is not evidence of a
 successful run: use the workflow results and attached build records to determine
 which architectures have actually passed.
 
-The desktop includes Foot, Nemo, Fuzzel, Mako, Transmission, Celluloid, GNOME Disks, File Roller,
+The desktop includes Foot, Nemo, Mako, Transmission, Celluloid, GNOME Disks, File Roller,
 and ConnMan with iwd, PipeWire with
 pipewire-pulse, WirePlumber, and UFLinux Settings in Rust and plain GTK4. BusyBox
 ntpd handles time synchronization. The taskbar opens a combined quick-settings
