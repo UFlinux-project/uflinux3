@@ -36,7 +36,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y shellcheck
-          shellcheck -S warning scripts/*.sh profiles/*.sh tests/*.sh aports/uflinux/uflinux-session aports/uflinux/uflinux-autostart aports/uflinux/uflinux-start-panel aports/uflinux/uflinux-compositor aports/uflinux/uflinux-network-init settings/data/uflinux-acpid.initd settings/data/uflinux-power-button
+          shellcheck -S warning scripts/*.sh profiles/*.sh tests/*.sh aports/uflinux/uflinux-session aports/uflinux/uflinux-autostart settings/desktop/data/uflinux-desktop-supervisor aports/uflinux/uflinux-compositor aports/uflinux/uflinux-network-init settings/data/uflinux-acpid.initd settings/data/uflinux-power-button
           go install github.com/rhysd/actionlint/cmd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca
           "$(go env GOPATH)/bin/actionlint" -config-file .github/actionlint.yaml .github/workflows/build.yml
       - id: matrix
