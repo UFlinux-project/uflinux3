@@ -170,6 +170,11 @@ fn quick_device(app: &Rc<App>, parent: &gtk::Box, input: bool) {
             let weak = weak.clone();
             let popover = popover.clone();
             button.connect_clicked(move |_| {
+                // Dismiss before dispatching: a state update can rebuild this list
+                // while the selected button's click handler is still running.
+                if let Some(popover) = popover.upgrade() {
+                    popover.popdown();
+                }
                 if let Some(app) = weak.upgrade() {
                     app.execute(
                         Action::SetDefault {
@@ -178,9 +183,6 @@ fn quick_device(app: &Rc<App>, parent: &gtk::Box, input: bool) {
                         },
                         None,
                     );
-                }
-                if let Some(popover) = popover.upgrade() {
-                    popover.popdown();
                 }
             });
             list.append(&button);

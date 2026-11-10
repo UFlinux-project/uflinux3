@@ -66,6 +66,15 @@ try:
     click(wait_control('Choose output device'))
     click(wait_control('UFLinux-Alternate-Output'))
     wait(lambda s:s['default_output']=='uflinux_alternate')
+    # GTK may finish dismissing the popover asynchronously, especially under
+    # emulation. Check both labels because the selected marker can update first.
+    for _ in range(100):
+        if not (find_control('UFLinux-Alternate-Output') or
+                find_control('UFLinux-Alternate-Output (selected)')):
+            break
+        time.sleep(.05)
+    else:
+        raise AssertionError('Output selector did not close after selection')
     click(wait_control('Choose output device'))
     wait_control('UFLinux-Alternate-Output (selected)')
     # Close the popover and panel before continuing the backend checks.
