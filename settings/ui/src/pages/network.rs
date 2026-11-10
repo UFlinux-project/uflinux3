@@ -160,7 +160,7 @@ pub fn list(app: &Rc<App>, parent: &gtk::Box, surface: Surface, compact: bool) {
         .child(&list)
         .build();
     parent.append(&scroll);
-    let signature = Rc::new(RefCell::new(String::new()));
+    let signature = Rc::new(RefCell::new(Vec::<String>::new()));
     let weak_model = model.downgrade();
     app.bind_for(surface, &list, move |s| {
         let services = s
@@ -169,19 +169,37 @@ pub fn list(app: &Rc<App>, parent: &gtk::Box, surface: Surface, compact: bool) {
             .iter()
             .take(if compact { 32 } else { 128 })
             .collect::<Vec<_>>();
-        let next = serde_json::to_string(&services).unwrap_or_default();
-        if *signature.borrow() == next {
+        let values = services
+            .iter()
+            .filter_map(|s| serde_json::to_string(s).ok())
+            .collect::<Vec<_>>();
+        let mut previous = signature.borrow_mut();
+        if *previous == values {
             return;
         }
-        signature.replace(next);
         if let Some(model) = weak_model.upgrade() {
-            let values = services
+            let prefix = previous
                 .iter()
-                .filter_map(|s| serde_json::to_string(s).ok())
+                .zip(&values)
+                .take_while(|(a, b)| a == b)
+                .count();
+            let suffix = previous[prefix..]
+                .iter()
+                .rev()
+                .zip(values[prefix..].iter().rev())
+                .take_while(|(a, b)| a == b)
+                .count();
+            let refs = values[prefix..values.len() - suffix]
+                .iter()
+                .map(String::as_str)
                 .collect::<Vec<_>>();
-            let refs = values.iter().map(String::as_str).collect::<Vec<_>>();
-            model.splice(0, model.n_items(), &refs);
+            model.splice(
+                prefix as u32,
+                (previous.len() - prefix - suffix) as u32,
+                &refs,
+            );
         }
+        *previous = values;
     });
 }
 pub fn authentication(app: &Rc<App>, request: AuthRequest) {

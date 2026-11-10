@@ -1,9 +1,3 @@
-mod app;
-mod auth;
-mod pages;
-#[path = "../../shared/popup.rs"]
-mod popup;
-mod widgets;
 fn main() {
     // Compatibility for existing user key bindings; the launcher owns its process.
     if std::env::args().any(|arg| arg == "--start-menu") {
@@ -14,5 +8,5 @@ fn main() {
         eprintln!("Could not start the launcher: {error}");
         std::process::exit(1);
     }
-    app::run();
+    uflinux_settings::app::run();
 }

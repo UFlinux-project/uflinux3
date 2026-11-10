@@ -294,14 +294,15 @@ pub fn applications(app: &Rc<App>, parent: &gtk::Box, surface: Surface) {
     parent.append(&group);
     let target = group.downgrade();
     let weak = Rc::downgrade(app);
-    let last = RefCell::new(String::new());
+    let last = RefCell::new(Vec::<(u32, bool, String)>::new());
+    let rows = RefCell::new(std::collections::HashMap::<(u32, bool, String), gtk::Box>::new());
     app.bind_for(surface, &group, move |s| {
         let signature = s
             .audio
             .streams
             .iter()
-            .map(|v| format!("{}:{}:{}", v.index, v.input, v.name))
-            .collect::<String>();
+            .map(|v| (v.index, v.input, v.name.clone()))
+            .collect::<Vec<_>>();
         if *last.borrow() == signature {
             return;
         }
@@ -309,16 +310,38 @@ pub fn applications(app: &Rc<App>, parent: &gtk::Box, surface: Surface) {
         let (Some(app), Some(group)) = (weak.upgrade(), target.upgrade()) else {
             return;
         };
-        clear(&group);
+        let wanted: std::collections::HashSet<_> = s
+            .audio
+            .streams
+            .iter()
+            .map(|stream| (stream.index, stream.input, stream.name.clone()))
+            .collect();
+        let mut rows = rows.borrow_mut();
+        rows.retain(|key, row| {
+            if wanted.contains(key) {
+                true
+            } else {
+                group.remove(row);
+                false
+            }
+        });
+        let mut previous: Option<gtk::Box> = None;
         for stream in &s.audio.streams {
             let id = stream.index;
             let input = stream.input;
             let name = stream.name.clone();
+            let key = (id, input, name.clone());
+            if let Some(row) = rows.get(&key) {
+                group.reorder_child_after(row, previous.as_ref());
+                previous = Some(row.clone());
+                continue;
+            }
+            let stream_row = column();
             let weak = Rc::downgrade(&app);
             slider(
                 &app,
                 surface,
-                &group,
+                &stream_row,
                 &name,
                 move |s| {
                     s.audio
@@ -353,7 +376,7 @@ pub fn applications(app: &Rc<App>, parent: &gtk::Box, surface: Surface) {
             toggle(
                 &app,
                 surface,
-                &group,
+                &stream_row,
                 "Mute application",
                 move |s| {
                     s.audio
@@ -383,6 +406,10 @@ pub fn applications(app: &Rc<App>, parent: &gtk::Box, surface: Surface) {
                     }
                 },
             );
+            group.append(&stream_row);
+            group.reorder_child_after(&stream_row, previous.as_ref());
+            previous = Some(stream_row.clone());
+            rows.insert(key, stream_row);
         }
     });
 }

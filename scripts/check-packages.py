@@ -16,7 +16,7 @@ required = set()
 for block in re.findall(r'\bdepends="([^"]*)"', text):
     for item in shlex.split(block):
         name = re.split(r"[=<>~]", item)[0]
-        if not name.startswith(("uflinux", "$")) and name != "ironbar":
+        if not name.startswith(("uflinux", "$")):
             required.add(name)
 required.update({"linux-lts", "linux-firmware", "xfsprogs", "alpine-conf", "rust", "cargo", "cargo-auditable",
                  "gtk4.0-dev", "gtk4-layer-shell-dev", "pulseaudio-dev", "openssl-dev", "abuild"})

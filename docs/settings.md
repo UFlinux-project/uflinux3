@@ -11,7 +11,7 @@ uflinux-settings --page network
 uflinux-settings --panel network --output DP-1
 uflinux-settings --panel sound --output DP-1
 uflinux-settings --panel power --output DP-1
-uflinux-start-menu --output DP-1
+uflinux-desktop --start-menu --output DP-1
 uflinux-settingsctl status
 uflinux-settingsctl volume -5
 uflinux-settingsctl brightness 5

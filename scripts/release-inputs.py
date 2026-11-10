@@ -18,7 +18,7 @@ else:
     expected = {"image-apks.tar.gz"}
     for origin in PACKAGE_NAMES:
         expected.update({origin + "/build-apks.tar.gz", origin + "/sources.tar.gz"})
-        if origin in {"ironbar", "uflinux-regreet", "uflinux-settings"}:
+        if origin in {"uflinux-regreet", "uflinux-settings"}:
             expected.add(origin + "/cargo-sources.tar.gz")
     # Non-Rust jobs may retain an existing Cargo cache during local builds.
     expected.update(str(p.relative_to(directory)) for p in inputs

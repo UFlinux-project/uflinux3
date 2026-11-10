@@ -29,6 +29,9 @@ RC
 pids=""
 cleanup() {
 	for pid in $pids; do kill "$pid" 2>/dev/null || :; done
+	if [ -f /tmp/uflinux-settings-smoke-results/service.pid ]; then
+		kill "$(cat /tmp/uflinux-settings-smoke-results/service.pid)" 2>/dev/null || :
+	fi
 	for daemon in pipewire pipewire-pulse wireplumber; do
 		pkill -u "$(id -u)" -x "$daemon" 2>/dev/null || :
 	done
@@ -51,11 +54,6 @@ swaybg -c '#102c46' -i /usr/share/backgrounds/uflinux/Dark_Ivy.jpg -m fill > "$r
 background=$!; pids="$pids $background"
 mako > "$results/notifications.log" 2>&1 &
 notifications=$!; pids="$pids $notifications"
-/usr/libexec/uflinux-start-panel --validate-config > "$results/config.log" 2>&1
-if grep -q 'type = "battery"' /etc/xdg/ironbar/config.toml; then
-	echo 'Battery-free default still contains the battery module' >&2
-	exit 1
-fi
 /usr/libexec/pipewire-launcher > "$results/audio.log" 2>&1 &
 for _attempt in $(seq 1 30); do
 	pactl info > "$results/pulse.txt" 2>/dev/null && break
@@ -70,9 +68,18 @@ for _attempt in $(seq 1 10); do
 	sleep 1
 done
 grep -q '50%' "$results/volume.txt"
-/usr/libexec/uflinux-start-panel > "$results/ironbar.log" 2>&1 &
+mkdir -p /tmp/uflinux-settings-smoke-results
+/usr/libexec/uflinux-settingsd > /tmp/uflinux-settings-smoke-results/service.log 2>&1 &
+settings_daemon=$!; pids="$pids $settings_daemon"
+for _attempt in $(seq 1 100); do
+    if gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.NameHasOwner org.uflinux.Settings1 | grep -q true; then break; fi
+    kill -0 "$settings_daemon"
+    sleep .1
+done
+gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.NameHasOwner org.uflinux.Settings1 | grep -q true
+G_DEBUG=fatal-criticals UFLINUX_SETTINGS_BENCH=1 /usr/bin/uflinux-desktop --daemon > "$results/desktop.log" 2>&1 &
 panel=$!; pids="$pids $panel"
-foot --app-id=uflinux-smoke --title=UFLinux-Smoke sh -c 'sleep 120' > "$results/foot.log" 2>&1 &
+foot --app-id=uflinux-smoke --title=UFLinux-Smoke sh -c 'sleep 600' > "$results/foot.log" 2>&1 &
 terminal=$!; pids="$pids $terminal"
 for _attempt in $(seq 1 60); do
 	wlrctl toplevel list > "$results/toplevels.txt"
@@ -88,11 +95,19 @@ kill -0 "$terminal"
 kill -0 "$background"
 kill -0 "$notifications"
 notify-send --expire-time=3000 UFLinux 'Desktop validation passed'
-sh /project/tests/settings-smoke.sh
-# Detect Ironbar's fallback-to-default behavior as well as fatal parse failures.
-if grep -Eiq 'error loading config|failed to load.*config|invalid.*config|panicked at' "$results/ironbar.log"; then
-	cat "$results/ironbar.log" >&2
-	exit 1
+for menu_name in network sound power; do
+    uflinux-desktop --panel "$menu_name" --output HEADLESS-1
+    uflinux-desktop --status | python3 -c 'import json,sys; assert json.load(sys.stdin)["popup"] == sys.argv[1]' "$menu_name"
+    uflinux-desktop --hide
+done
+uflinux-desktop --start-menu --output HEADLESS-1
+uflinux-desktop --status | python3 -c 'import json,sys; assert json.load(sys.stdin)["popup"] == "start"'
+uflinux-desktop --hide
+UFLINUX_DESKTOP_PID=$panel UFLINUX_DESKTOP_LOG=$results/desktop.log \
+    UFLINUX_SETTINGS_DAEMON_PID=$settings_daemon sh /project/tests/settings-smoke.sh
+if grep -Eiq 'panicked at|thread.*panicked|CRITICAL|assertion.*failed' "$results/desktop.log"; then
+    cat "$results/desktop.log" >&2
+    exit 1
 fi
 grim "$results/desktop.png"
 ps -o pid,rss,args -p "$compositor","$panel","$terminal" > "$results/memory.txt"

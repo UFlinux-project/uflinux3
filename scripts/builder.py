@@ -28,10 +28,9 @@ ARCHES = json.loads((PROJECT / "config/architectures.json").read_text())
 PACKAGE_NAMES = {
     "connman": {"connman", "connman-dbg", "connman-dev", "connman-doc", "connman-openrc"},
     "uflinux-regreet": {"uflinux-regreet"},
-    "ironbar": {"ironbar", "ironbar-dbg", "ironbar-doc"},
     "uflinux-settings": {"uflinux-settings", "uflinux-settings-daemon", "uflinux-settings-dbg",
-                         "uflinux-settings-doc", "uflinux-settings-system", "uflinux-settings-system-openrc", "uflinux-installer-ui"},
-    "uflinux": {"uflinux", "uflinux-defaults", "uflinux-desktop", "uflinux-installer",
+                         "uflinux-settings-doc", "uflinux-settings-system", "uflinux-settings-system-openrc", "uflinux-installer-ui", "uflinux-desktop"},
+    "uflinux": {"uflinux", "uflinux-defaults", "uflinux-desktop-meta", "uflinux-installer",
                 "uflinux-live", "uflinux-live-openrc", "uflinux-release", "uflinux-bootsplash-openrc",
                 "uflinux-initramfs"},
 }
@@ -423,7 +422,7 @@ class Builder:
         apkbuild.write_text(re.sub(r"^pkgver=.*$", "pkgver=" + self.args.version, apkbuild.read_text(), flags=re.M))
         # Only fetch the selected origin's sources in a package shard.
         selected = (self.args.package,) if getattr(self.args, "package", None) else tuple(PACKAGE_NAMES)
-        for origin in ("ironbar", "connman", "uflinux-regreet"):
+        for origin in ("connman", "uflinux-regreet"):
             if origin in selected:
                 archive = download(LOCK["sources"][origin], self.cache / "downloads")
                 suffix = "tar.xz" if origin == "connman" else "tar.gz"
@@ -450,13 +449,12 @@ class Builder:
             (source / "uflinux-settings" / f"uflinux-settings-{settings_version}.tar").write_bytes(settings_source)
             (self.cache / "downloads" / (settings_digest + ".tar")).write_bytes(settings_source)
         env = {"CARGO_HOME": "/cache/cargo", "CARGO_TARGET_DIR": "/cache/target",
-               "CARGO_BUILD_JOBS": os.environ.get("CARGO_BUILD_JOBS", "1"),
-               "VERGEN_GIT_SHA": LOCK["ironbar"]["commit"], "VERGEN_GIT_DESCRIBE": "v" + LOCK["ironbar"]["version"]}
+               "CARGO_BUILD_JOBS": os.environ.get("CARGO_BUILD_JOBS", "1")}
         for package in selected:
             self.build_origin(package, env)
         from sbom import apk_metadata
         versions = {}
-        for origin, version in (("uflinux-regreet", LOCK["uflinux-regreet"]["version"]), ("connman",LOCK["connman"]["version"]),("ironbar", LOCK["ironbar"]["version"]), ("uflinux-settings", LOCK["settings"]["version"]), ("uflinux", self.args.version)):
+        for origin, version in (("uflinux-regreet", LOCK["uflinux-regreet"]["version"]), ("connman",LOCK["connman"]["version"]), ("uflinux-settings", LOCK["settings"]["version"]), ("uflinux", self.args.version)):
             if origin not in selected:
                 continue
             recipe = (source / origin / "APKBUILD").read_text()
@@ -474,7 +472,7 @@ class Builder:
         self.manifest("compile")
         dependency_record = self.cache / self.args.arch / "target/uflinux-build-packages.txt"
         if dependency_record.exists():
-            shutil.copy2(dependency_record, self.out / "metadata" / self.args.arch / "ironbar-build-packages.txt")
+            shutil.copy2(dependency_record, self.out / "metadata" / self.args.arch / "cargo-build-packages.txt")
         inputs = self.out / "inputs" / self.args.arch
         inputs.mkdir(parents=True, exist_ok=True)
         archive_tree(self.cache / self.args.arch / "apk", inputs / "build-apks.tar.gz", self.epoch)
@@ -588,7 +586,7 @@ class Builder:
         # A development key may change while APK control hashes stay the same.
         # Always fetch custom packages from the freshly signed local repository.
         for path in (self.cache / self.args.arch / "image-apk").glob("*.apk"):
-            if path.name.startswith(("uflinux-", "ironbar-", "connman-")):
+            if path.name.startswith(("uflinux-", "connman-")):
                 path.unlink()
         if (self.root / "image-work").exists():
             shutil.rmtree(self.root / "image-work")
@@ -680,14 +678,13 @@ class Builder:
             pass
         else:
             raise RuntimeError("apk accepted a damaged signed archive")
-        settings = self.root / "etc/xdg/ironbar/style.css"
+        settings = self.root / "etc/xdg/labwc/rc.xml"
         before = settings.read_text()
-        settings.write_text(before + "\n/* UFLinux upgrade preservation check */\n")
+        settings.write_text(before + "\n<!-- UFLinux upgrade preservation check -->\n")
         self.chroot("apk", "fix", "--reinstall", "--repository", "/repo", "uflinux-defaults")
         if "UFLinux upgrade preservation check" not in settings.read_text():
             raise RuntimeError("apk replaced modified system defaults")
         settings.write_text(before)
-        self.chroot("ironbar", "--config", "/etc/xdg/ironbar/config.toml", "--theme", "/etc/xdg/ironbar/style.css", "--validate-config")
         self.chroot("sh", "-ec", "id smoke >/dev/null 2>&1 || adduser -D -u 2000 smoke; addgroup smoke netdev")
         report = self.out / "checks" / self.args.arch
         report.mkdir(parents=True, exist_ok=True)
@@ -703,20 +700,20 @@ class Builder:
                 shutil.copytree(results, report / "settings", dirs_exist_ok=True)
         self.chroot("python3", "-m", "unittest", "discover", "-s", "/project/tests", "-p", "test_installer*.py")
         self.chroot("python3", "/project/tests/power-acpid-smoke.py")
-        self.chroot("scanelf", "--needed", "/usr/bin/ironbar", stdout=(report / "elf.txt").open("w"))
-        self.chroot("ldd", "/usr/bin/ironbar", stdout=(report / "libraries.txt").open("w"))
-        binary = self.root / "usr/bin/ironbar"
+        self.chroot("scanelf", "--needed", "/usr/bin/uflinux-desktop", stdout=(report / "elf.txt").open("w"))
+        self.chroot("ldd", "/usr/bin/uflinux-desktop", stdout=(report / "libraries.txt").open("w"))
+        binary = self.root / "usr/bin/uflinux-desktop"
         header = binary.read_bytes()[:64]
         if header[:4] != b"\x7fELF":
-            raise RuntimeError("Ironbar is not an ELF executable")
+            raise RuntimeError("Desktop is not an ELF executable")
         byte_order = "<" if header[5] == 1 else ">"
         elf_type, machine = struct.unpack_from(byte_order + "HH", header, 16)
         expected = {"x86": 3, "x86_64": 62, "armv7": 40, "aarch64": 183,
                     "ppc64le": 21, "s390x": 22, "riscv64": 243}[self.args.arch]
         if machine != expected or elf_type != 3:
-            raise RuntimeError("Ironbar must be a position-independent executable for the target architecture")
+            raise RuntimeError("Desktop must be a position-independent executable for the target architecture")
         settings_binaries = {}
-        for relative in ("usr/bin/uflinux-installer", "usr/bin/uflinux-start-menu", "usr/bin/uflinux-settings", "usr/bin/uflinux-settingsctl",
+        for relative in ("usr/bin/uflinux-installer", "usr/bin/uflinux-settings", "usr/bin/uflinux-settingsctl",
                          "usr/libexec/uflinux-settingsd", "usr/libexec/uflinux-settings-system", "usr/sbin/connmand"):
             path = self.root / relative
             data = path.read_bytes()[:64]
@@ -729,7 +726,7 @@ class Builder:
             (report / (path.name + "-libraries.txt")).write_text(libraries)
             settings_binaries[path.name] = {"sha256": sha(path), "bytes": path.stat().st_size}
         (report / "verified.json").write_text(json.dumps({"arch": self.args.arch, "version": self.args.version,
-            "desktop": "headless smoke passed", "ironbar_bytes": binary.stat().st_size, "elf_machine": machine,
+            "desktop": "headless smoke passed", "desktop_bytes": binary.stat().st_size, "elf_machine": machine,
             "signature_rejection": True, "configuration_preserved_on_reinstall": True, "binary_sha256": sha(binary),
             "verified_packages": {p.name: sha(p) for p in sorted(repo.glob("*.apk"))},
             "settings_binaries": settings_binaries,

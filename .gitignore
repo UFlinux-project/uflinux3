@@ -10,6 +10,7 @@
 /settings/core/src/*
 !/settings/core/src/panel.rs
 !/settings/installer/
+!/settings/desktop/
 !/settings/data/
 /settings/data/*
 !/settings/data/org.uflinux.Installer.desktop

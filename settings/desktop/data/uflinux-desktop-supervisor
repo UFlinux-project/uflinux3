@@ -1,0 +1,54 @@
+#!/bin/sh
+# Run from the compositor's autostart, with LABWC_PID exported by labwc.
+set -u
+case ${LABWC_PID:-} in
+    ''|*[!0-9]*) echo 'uflinux-desktop-supervisor: LABWC_PID is required' >&2; exit 1 ;;
+esac
+child=
+watcher=
+stop() {
+    trap - HUP INT TERM
+    if [ -n "$watcher" ]; then
+        kill "$watcher" 2>/dev/null || :
+        wait "$watcher" 2>/dev/null || :
+    fi
+    if [ -n "$child" ]; then
+        kill "$child" 2>/dev/null || :
+        wait "$child" 2>/dev/null || :
+    fi
+    exit 0
+}
+trap stop HUP INT TERM
+delay=1
+while kill -0 "$LABWC_PID" 2>/dev/null; do
+    uflinux-desktop --daemon &
+    child=$!
+    (
+        while kill -0 "$LABWC_PID" 2>/dev/null; do sleep 1; done
+        kill "$child" 2>/dev/null || :
+    ) &
+    watcher=$!
+    if wait "$child"; then
+        child=
+        kill "$watcher" 2>/dev/null || :
+        wait "$watcher" 2>/dev/null || :
+        watcher=
+        exit 0
+    fi
+    child=
+    kill "$watcher" 2>/dev/null || :
+    wait "$watcher" 2>/dev/null || :
+    watcher=
+    # Check the compositor between each second so logout interrupts backoff.
+    remaining=$delay
+    while [ "$remaining" -gt 0 ]; do
+        kill -0 "$LABWC_PID" 2>/dev/null || exit 0
+        sleep 1 &
+        child=$!
+        wait "$child" || :
+        child=
+        remaining=$((remaining - 1))
+    done
+    delay=$((delay * 2))
+    [ "$delay" -le 30 ] || delay=30
+done

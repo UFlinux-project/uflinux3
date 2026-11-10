@@ -30,7 +30,7 @@ def collect(out, arch, version):
         identity = current_identity
         recipe = (PROJECT / 'aports' / origin / 'APKBUILD').read_text()
         revision = re.search(r'^pkgrel=([0-9]+)$', recipe, re.M)[1]
-        upstream = {'uflinux-regreet': LOCK['uflinux-regreet']['version'], 'connman': LOCK['connman']['version'], 'ironbar': LOCK['ironbar']['version'],
+        upstream = {'uflinux-regreet': LOCK['uflinux-regreet']['version'], 'connman': LOCK['connman']['version'],
                     'uflinux-settings': LOCK['settings']['version'], 'uflinux': version}[origin]
         names, payloads = set(), {}
         key = (source / 'build.rsa.pub').read_text()
@@ -51,7 +51,7 @@ def collect(out, arch, version):
             raise ValueError('Incomplete or unexpected package set for ' + origin)
         inputs = shard / 'inputs' / arch
         required = {'build-apks.tar.gz', 'sources.tar.gz'}
-        if origin in {'ironbar', 'uflinux-regreet', 'uflinux-settings'}:
+        if origin in {'uflinux-regreet', 'uflinux-settings'}:
             required.add('cargo-sources.tar.gz')
         if not required.issubset({p.name for p in inputs.glob('*.tar.gz')}):
             raise ValueError('Missing rebuild inputs for ' + origin)

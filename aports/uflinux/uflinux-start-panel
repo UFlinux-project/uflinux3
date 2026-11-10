@@ -1,8 +1,0 @@
-#!/bin/sh
-set -eu
-config_home=${XDG_CONFIG_HOME:-$HOME/.config}
-config=$config_home/ironbar/config.toml
-theme=$config_home/ironbar/style.css
-[ -f "$config" ] || config=/etc/xdg/ironbar/config.toml
-[ -f "$theme" ] || theme=/etc/xdg/ironbar/style.css
-exec ironbar --config "$config" --theme "$theme" "$@"

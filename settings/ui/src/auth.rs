@@ -66,6 +66,12 @@ unsafe extern "C" fn event(
         .into_owned();
     if kind == 2 {
         app.authorization_active.set(false);
+        let weak = Rc::downgrade(&app);
+        glib::idle_add_local_once(move || {
+            if let Some(app) = weak.upgrade() {
+                app.release_agent_if_desktop();
+            }
+        });
         DIALOG.with(|d| {
             if let Some(window) = d.borrow_mut().take() {
                 window.destroy();

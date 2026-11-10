@@ -116,6 +116,7 @@ pub fn run() {
 }
 
 impl App {
+    pub fn catalog_changed(&self, _catalog: &crate::catalog::Catalog) {}
     fn toggle(&self, output: &str) {
         let slot = self.menu.borrow();
         let Some(menu) = slot.as_ref() else { return };
@@ -173,6 +174,10 @@ impl App {
             self.agent
                 .replace(Some(auth::Agent::register(Rc::downgrade(self))));
         }
+    }
+    pub fn release_agent_if_desktop(&self) {}
+    pub fn release_agent(&self) {
+        self.agent.borrow_mut().take();
     }
     pub fn open_page(&self, page: &str) {
         match std::process::Command::new("uflinux-settings")

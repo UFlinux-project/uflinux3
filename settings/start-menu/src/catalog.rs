@@ -7,6 +7,7 @@ pub struct Entry {
     pub id: String,
     pub name: String,
     pub icon: String,
+    pub startup_wm_class: Option<String>,
     pub description: String,
     pub name_key: String,
     pub search_key: String,
@@ -45,6 +46,10 @@ fn entry(info: &gio::AppInfo) -> Option<Entry> {
             .and_then(|i| i.to_string())
             .unwrap_or_else(|| "application-x-executable".into())
             .to_string(),
+        startup_wm_class: info
+            .downcast_ref::<gio::DesktopAppInfo>()
+            .and_then(|desktop| desktop.startup_wm_class())
+            .map(|value| value.to_string()),
     })
 }
 pub fn load() -> Catalog {
@@ -122,6 +127,7 @@ mod tests {
             id: format!("{name}.desktop"),
             name: name.into(),
             icon: String::new(),
+            startup_wm_class: None,
             description: keywords.into(),
             name_key: fold(name),
             search_key: fold(&format!("{name} {keywords}")),
