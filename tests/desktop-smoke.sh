@@ -62,17 +62,23 @@ grep -q zwlr_foreign_toplevel_manager_v1 "$results/wayland.txt"
 python3 /project/tests/artwork-smoke.py > "$results/artwork.txt"
 swaybg -c '#102c46' -i /usr/share/backgrounds/uflinux/Dark_Ivy.jpg -m fill > "$results/background.log" 2>&1 &
 background=$!; pids="$pids $background"
-mako > "$results/notifications.log" 2>&1 &
+# Record Wayland setup and, when running under qemu-user, guest syscalls. This
+# distinguishes a stalled compositor handshake from a D-Bus connection failure.
+WAYLAND_DEBUG=1 QEMU_STRACE=1 mako > "$results/notifications.log" 2>&1 &
 notifications=$!; pids="$pids $notifications"
 # A running process is not necessarily registered on D-Bus yet. Calling
 # notify-send too early can trigger a competing D-Bus activation of mako.
-for _attempt in $(seq 1 120); do
+for _attempt in $(seq 1 600); do
 	if gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.NameHasOwner org.freedesktop.Notifications | grep -q true; then break; fi
 	if ! kill -0 "$notifications" 2>/dev/null; then cat "$results/notifications.log" >&2; exit 1; fi
 	sleep 1
 done
 if ! gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.NameHasOwner org.freedesktop.Notifications | grep -q true; then
-	cat "$results/notifications.log" >&2
+	for entry in status wchan syscall; do
+		{ echo "--- mako /proc/$notifications/$entry ---"; cat "/proc/$notifications/$entry"; } >> "$results/notifications-state.txt" 2>&1 || :
+	done
+	cat "$results/notifications-state.txt" >&2
+	tail -100 "$results/notifications.log" >&2
 	echo 'Notification service did not register on D-Bus' >&2
 	exit 1
 fi
