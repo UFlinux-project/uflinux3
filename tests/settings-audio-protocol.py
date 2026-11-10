@@ -44,13 +44,14 @@ try:
                 queue.extend(list(item))
             except (RuntimeError,LookupError): pass
         return None
-    def wait_control(name):
+    def wait_control(*names):
         for _ in range(600):
             while GLib.MainContext.default().pending(): GLib.MainContext.default().iteration(False)
-            item=find_control(name)
-            if item: return item
+            for name in names:
+                item=find_control(name)
+                if item: return item
             time.sleep(.05)
-        raise AssertionError('Missing accessible sound control: '+name)
+        raise AssertionError('Missing accessible sound control: '+' or '.join(names))
     def click(item):
         queue=[item]
         while queue:
@@ -64,7 +65,8 @@ try:
             queue.extend(list(item))
         raise AssertionError('Control has no accessible action')
     click(wait_control('Choose output device'))
-    click(wait_control('UFLinux-Alternate-Output'))
+    # WirePlumber may already have made the new sink the default.
+    click(wait_control('UFLinux-Alternate-Output', 'UFLinux-Alternate-Output (selected)'))
     wait(lambda s:s['default_output']=='uflinux_alternate')
     # GTK may finish dismissing the popover asynchronously, especially under
     # emulation. Check both labels because the selected marker can update first.
