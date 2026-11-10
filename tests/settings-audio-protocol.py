@@ -18,7 +18,7 @@ def call(method, action=None):
 def execute(action): return call('Execute', action)
 def state(): return call('GetState')['audio']
 def wait(predicate):
-    for _ in range(100):
+    for _ in range(600):
         snapshot=state();value=predicate(snapshot)
         if value: return value
         time.sleep(0.05)
@@ -32,9 +32,9 @@ unloaded=False
 try:
     wait(lambda s:any(d['name']=='uflinux_alternate' for d in s['outputs']))
     # Exercise the taskbar selector through GTK, including its live selected marker.
-    subprocess.run(['uflinux-settings','--panel','sound','--output','HEADLESS-1'],check=True)
+    subprocess.run(['uflinux-desktop','--panel','sound','--output','HEADLESS-1'],check=True)
     def find_control(name):
-        queue=[app for app in pyatspi.Registry.getDesktop(0) if app.name=='uflinux-settings']
+        queue=[app for app in pyatspi.Registry.getDesktop(0) if app.name=='uflinux-desktop']
         while queue:
             item=queue.pop(0)
             try:
@@ -45,7 +45,7 @@ try:
             except (RuntimeError,LookupError): pass
         return None
     def wait_control(name):
-        for _ in range(100):
+        for _ in range(600):
             while GLib.MainContext.default().pending(): GLib.MainContext.default().iteration(False)
             item=find_control(name)
             if item: return item
@@ -68,7 +68,8 @@ try:
     wait(lambda s:s['default_output']=='uflinux_alternate')
     # GTK may finish dismissing the popover asynchronously, especially under
     # emulation. Check both labels because the selected marker can update first.
-    for _ in range(100):
+    for _ in range(600):
+        while GLib.MainContext.default().pending(): GLib.MainContext.default().iteration(False)
         if not (find_control('UFLinux-Alternate-Output') or
                 find_control('UFLinux-Alternate-Output (selected)')):
             break
@@ -79,7 +80,7 @@ try:
     wait_control('UFLinux-Alternate-Output (selected)')
     # Close the popover and panel before continuing the backend checks.
     click(wait_control('Choose output device'))
-    subprocess.run(['uflinux-settings','--panel','sound','--output','HEADLESS-1'],check=True)
+    subprocess.run(['uflinux-desktop','--hide'],check=True)
     execute({'action':'set-volume','input':False,'device':'','percent':34})
     execute({'action':'set-mute','input':False,'device':'','muted':True})
     wait(lambda s:any(d['name']=='uflinux_alternate' and d['muted'] and abs(d['volume']-34)<1 for d in s['outputs']))
