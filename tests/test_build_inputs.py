@@ -3,7 +3,9 @@ import importlib.machinery
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -25,6 +27,26 @@ def stream(name, contents):
 
 
 class ApkTests(unittest.TestCase):
+    def test_s390_image_generation_stops_when_boot_image_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'boot').mkdir()
+            marker = root / 'xorriso-ran'
+            script = '''
+. "$PROFILE"
+mk-s390image() { return 42; }
+xorrisofs() { touch "$MARKER"; }
+gen_volid() { echo test; }
+ARCH=s390x OUTDIR="$ROOT" DESTDIR="$ROOT" WORKDIR="$ROOT"
+output_filename=test.iso kernel_flavors=lts initfs_cmdline='' kernel_cmdline='' iso_opts=''
+create_image_iso
+'''
+            env = dict(os.environ, PROFILE=str(Path(builder.PROJECT) / 'profiles/mkimg.uflinux.sh'),
+                       ROOT=str(root), MARKER=str(marker))
+            result = subprocess.run(['sh', '-c', script], env=env, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(marker.exists())
+
     def test_resigning_preserves_control_and_data(self):
         control = stream(".PKGINFO", b"pkgname = ironbar\npkgver = 0.19.1-r0\n")
         data = stream("usr/bin/ironbar", b"test ELF payload")

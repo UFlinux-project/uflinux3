@@ -25,7 +25,6 @@ class ShardTests(unittest.TestCase):
             packages = root / 'packages/x86_64'
             packages.mkdir(parents=True)
             upstream = {'uflinux-regreet': builder.LOCK['uflinux-regreet']['version'], 'connman': builder.LOCK['connman']['version'],
-                        'ironbar': builder.LOCK['ironbar']['version'],
                         'uflinux-settings': builder.LOCK['settings']['version'], 'uflinux': '0.1.0'}[origin]
             revision = '1' if origin == 'connman' else '0'
             version = upstream + '-r' + revision
@@ -66,14 +65,14 @@ class ShardTests(unittest.TestCase):
             proof = json.loads((out / 'metadata/x86_64/reproducibility.json').read_text())
             self.assertEqual(len(proof['baseline']), sum(map(len, builder.PACKAGE_NAMES.values())))
             self.assertEqual(proof['baseline'], proof['rebuilt'])
-            self.assertTrue((out / 'inputs/x86_64/ironbar/cargo-sources.tar.gz').exists())
+            self.assertTrue((out / 'inputs/x86_64/uflinux-settings/cargo-sources.tar.gz').exists())
 
     def test_invalid_inputs_never_replace_existing_signing_inputs(self):
         for mode in ('missing-shard', 'missing-apk', 'tampered-apk', 'mixed-commit', 'wrong-proof', 'missing-cache'):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
                 out = Path(temporary)
                 self.fixture(out)
-                shard = out / 'package-shards/x86_64/ironbar'
+                shard = out / 'package-shards/x86_64/uflinux-settings'
                 if mode == 'missing-shard':
                     shard.rename(shard.with_name('unexpected-origin'))
                 elif mode == 'missing-apk':
@@ -98,7 +97,7 @@ class ShardTests(unittest.TestCase):
     def test_package_outputs_are_isolated_and_serial_layout_is_unchanged(self):
         with tempfile.TemporaryDirectory() as temporary:
             self.assertEqual(builder.package_output(temporary, 'x86_64'), Path(temporary))
-            self.assertNotEqual(builder.package_output(temporary, 'x86_64', 'ironbar'),
+            self.assertNotEqual(builder.package_output(temporary, 'x86_64', 'connman'),
                                 builder.package_output(temporary, 'x86_64', 'uflinux-settings'))
 
 
@@ -112,15 +111,15 @@ class InputArchiveTests(unittest.TestCase):
                 target.mkdir(parents=True)
                 for name in ('build-apks.tar.gz','sources.tar.gz'):
                     (target/name).write_bytes(b'input')
-                if origin in {'ironbar','uflinux-regreet','uflinux-settings'}:
+                if origin in {'uflinux-regreet','uflinux-settings'}:
                     (target/'cargo-sources.tar.gz').write_bytes(b'cargo')
             (directory/'image-apks.tar.gz').write_bytes(b'image')
             command=[sys.executable,str(builder.PROJECT/'scripts/release-inputs.py'),'--arch','x86_64','--version','0.1.0']
             subprocess.run(command,cwd=root,check=True,capture_output=True)
             entries=(root/'out/SHA256SUMS-x86_64-inputs').read_text().splitlines()
-            self.assertEqual(len(entries),14)
-            self.assertEqual(len(list((root/'out').glob('uflinux-*.tar.gz'))),14)
-            (directory/'ironbar/cargo-sources.tar.gz').unlink()
+            self.assertEqual(len(entries),11)
+            self.assertEqual(len(list((root/'out').glob('uflinux-*.tar.gz'))),11)
+            (directory/'uflinux-settings/cargo-sources.tar.gz').unlink()
             rejected=subprocess.run(command,cwd=root,capture_output=True)
             self.assertNotEqual(rejected.returncode,0)
 
@@ -141,5 +140,5 @@ class EmulatedDependencyTests(unittest.TestCase):
         instance = object.__new__(builder.Builder)
         instance.chroot = Mock(side_effect=[None, RuntimeError('compiler failed'), None])
         with self.assertRaisesRegex(RuntimeError, 'compiler failed'):
-            instance.build_origin('ironbar', {})
+            instance.build_origin('uflinux-settings', {})
         self.assertTrue(instance.chroot.call_args_list[-1].args[-1].endswith('abuild -F undeps'))

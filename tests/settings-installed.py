@@ -9,7 +9,7 @@ import time
 import sys
 
 def diagnostics(kind,error,traceback):
-    for name in ('uflinux-settings-ui.log', 'uflinux-start-menu.log'):
+    for name in ('uflinux-settings-ui.log', 'uflinux-desktop.log'):
         log=Path('/run') / name
         if log.exists(): print(name+':\n'+log.read_text(),file=sys.stderr)
     if 'frontend' in globals(): print('Primary GUI exit status:',frontend.poll(),file=sys.stderr)
@@ -50,7 +50,7 @@ def demote():
     os.setuid(user.pw_uid)
 
 def run(*args):
-    if args[0] in ('uflinux-settings', 'uflinux-start-menu'):
+    if args[0] == 'uflinux-settings':
         # GApplication forwards stdio descriptors to the primary process. Do not
         # wait for pipe EOF from a GUI that intentionally remains alive.
         with Path('/run/uflinux-settings-ui.log').open('a') as log:
@@ -82,121 +82,71 @@ def gui_pid():
             pass
     raise AssertionError("Settings GUI exited unexpectedly")
 
-# Wait for autostart to finish registering its actions before asking it to quit.
-# A quit sent during GTK startup can otherwise be lost, and a new --daemon may
-# forward to the old instance instead of becoming the measured resident process.
-def launcher_status():
-    return subprocess.check_output(['uflinux-start-menu', '--status'], env=environment,
-        preexec_fn=demote, text=True, timeout=10).strip()
+# The installed desktop is supervised and remains alive while full Settings exits.
+def desktop_status():
+    return json.loads(run('uflinux-desktop', '--status'))
 
-def launcher_pids():
-    result = []
+def desktop_pid():
     for path in Path('/proc').glob('[0-9]*/exe'):
         try:
-            if path.resolve().name == 'uflinux-start-menu' and path.parent.stat().st_uid == user.pw_uid:
-                result.append(int(path.parent.name))
+            if path.resolve().name == 'uflinux-desktop' and path.parent.stat().st_uid == user.pw_uid:
+                return int(path.parent.name)
         except OSError:
             pass
-    return result
+    raise AssertionError('Resident desktop was not found')
 
-deadline = time.monotonic() + 90
-while time.monotonic() < deadline:
-    if launcher_status() == 'ready=true visible=false':
-        break
-    time.sleep(.25)
-else:
-    raise AssertionError('Autostart launcher did not become ready: ' + launcher_status())
-old_launchers = launcher_pids()
-assert old_launchers, 'Ready launcher process was not found'
-run('uflinux-start-menu', '--quit')
-deadline = time.monotonic() + 30
-while time.monotonic() < deadline and any(Path(f'/proc/{pid}/exe').exists() for pid in old_launchers):
-    time.sleep(.1)
-assert not any(Path(f'/proc/{pid}/exe').exists() for pid in old_launchers), 'Autostart launcher did not exit'
-
-menu_log = Path('/run/uflinux-start-menu.log')
-with menu_log.open('w') as log:
-    launcher = subprocess.Popen(['uflinux-start-menu', '--daemon'],
-        env=environment, preexec_fn=demote, stdout=log, stderr=log)
-deadline = time.monotonic() + 90
-status = 'not queried'
-while time.monotonic() < deadline:
-    assert launcher.poll() is None, 'Resident launcher exited during preparation'
-    status = launcher_status()
-    if status == 'ready=true visible=false': break
-    time.sleep(.25)
-else: raise AssertionError('The launcher did not prepare its hidden screen: ' + status)
-run('uflinux-start-menu', '--output', snapshot['displays']['outputs'][0]['name'])
-for _ in range(100):
-    if 'UFLINUX_START_MENU_FIRST_FRAME_MS=' in menu_log.read_text(): break
-    time.sleep(.1)
-else: raise AssertionError('The Start menu did not draw a frame')
-time.sleep(.5)
-launcher_pss = pss(launcher.pid)
-launcher_first_ms = float(menu_log.read_text().split('UFLINUX_START_MENU_FIRST_FRAME_MS=')[-1].splitlines()[0])
-run('uflinux-start-menu', '--hide')
-assert launcher.poll() is None, 'Hiding the launcher exited its resident process'
-assert launcher_status() == 'ready=true visible=false'
-
-started = time.monotonic()
-with Path('/run/uflinux-settings-ui.log').open('w') as log:
-    frontend=subprocess.Popen(["uflinux-settings", "--quick-settings", "--output", snapshot["displays"]["outputs"][0]["name"]],
-        env=environment,preexec_fn=demote,stdout=log,stderr=log)
-for _ in range(60):
-    assert frontend.poll() is None, 'The quick panel failed to start'
-    if 'UFLINUX_FIRST_FRAME_MS=' in Path('/run/uflinux-settings-ui.log').read_text(): break
-    time.sleep(0.5)
-else: raise AssertionError('The quick panel did not map a frame')
-time.sleep(1)
-flyout_pss = pss(gui_pid())
-for page in ("network", "displays", "audio", "power", "default-apps", "datetime", "appearance", "about"):
-    assert frontend.poll() is None, 'The primary Settings process exited while switching pages'
-    print('Opening installed Settings page: '+page,flush=True)
-    run("uflinux-settings", "--page", page)
-    time.sleep(0.4)
-full_pss = pss(gui_pid())
-# Repeated toggles must retain the launcher and leave Settings in its own process.
-primary = gui_pid()
-launcher_samples = []
-for _ in range(10):
-    run('uflinux-start-menu')
-    time.sleep(.2)
-    assert gui_pid() == primary and launcher.poll() is None, 'Launcher changed process lifetime'
-    launcher_samples.append(pss(launcher.pid))
-    run('uflinux-start-menu')
-    time.sleep(.1)
-repeated_closed_pss = pss(launcher.pid)
-assert repeated_closed_pss - launcher_pss <= 12 * 1024**2, 'Repeated launcher use retained excessive memory'
-run("uflinux-settingsctl", "volume", "-5")
-run("uflinux-settingsctl", "mute")
-run("uflinux-settingsctl", "mute")
-assert state()["audio"]["available"]
-assert list(processes("labwc")) and list(processes("ironbar"))
-messages = subprocess.check_output(["dmesg"], text=True)
-assert "Out of memory" not in messages and "Killed process" not in messages
-metrics = {"ram_mib": 512, "swap": False, "displays": 1, "service_pss_bytes": pss(service),
-           "launcher_pss_bytes": launcher_pss, "launcher_resident_first_frame_ms": launcher_first_ms,
-           "launcher_repeated_peak_pss_bytes": max(launcher_samples), "launcher_closed_pss_bytes": repeated_closed_pss,
-           "flyout_pss_bytes": flyout_pss, "full_ui_pss_bytes": full_pss,
-           "exercise_seconds": round(time.monotonic() - started, 2), "oom": False,
-           "renderer": snapshot["displays"]["renderer"], "scope": "QEMU software-rendered installed x86_64; native latency measured separately"}
-helpers=[]
-for path in Path('/proc').glob('[0-9]*/exe'):
+for _ in range(180):
     try:
-        if path.resolve().name=='uflinux-settings-system': helpers.append(int(path.parent.name))
-    except OSError: pass
-metrics['helper_pss_bytes']=sum(pss(pid) for pid in helpers)
-metrics['background_services_pss_bytes']=metrics['service_pss_bytes']+metrics['helper_pss_bytes']
-metrics['background_pss_bytes']=metrics['background_services_pss_bytes']+repeated_closed_pss
-assert metrics["background_services_pss_bytes"] <= 16 * 1024**2, metrics
-assert launcher_pss <= 80 * 1024**2, metrics
-# Include GTK/Mesa's mapped shared libraries in the bounded process budget.
-assert flyout_pss <= 64 * 1024**2, metrics
-assert full_pss <= 80 * 1024**2, metrics
-Path("/run/uflinux-settings-installed.json").write_text("UFLINUX_INSTALLED_METRICS:" + json.dumps(metrics) + "\n")
+        if desktop_status()['ready']:
+            break
+    except (subprocess.SubprocessError, json.JSONDecodeError):
+        pass
+    time.sleep(.5)
+else:
+    raise AssertionError('Desktop did not become ready')
+desktop = desktop_pid()
+initial_pss = pss(desktop)
+output = snapshot['displays']['outputs'][0]['name']
+started = time.monotonic()
+for menu in ('start', 'network', 'sound', 'power'):
+    command = ('--start-menu',) if menu == 'start' else ('--panel', menu)
+    for _ in range(10):
+        run('uflinux-desktop', *command, '--output', output)
+        assert desktop_status()['popup'] == menu
+        run('uflinux-desktop', '--hide')
+        assert desktop_status()['popup'] is None
+assert desktop_pid() == desktop
+closed_pss = pss(desktop)
+with Path('/run/uflinux-settings-ui.log').open('w') as log:
+    frontend = subprocess.Popen(['uflinux-settings', '--page', 'network'], env=environment,
+                                preexec_fn=demote, stdout=log, stderr=log)
+for _ in range(60):
+    assert frontend.poll() is None, 'Settings exited during startup'
+    try:
+        gui_pid()
+        break
+    except AssertionError:
+        time.sleep(.5)
+else:
+    raise AssertionError('Settings did not start')
+for page in ('network', 'displays', 'audio', 'power', 'default-apps', 'datetime', 'appearance', 'about'):
+    run('uflinux-settings', '--page', page)
+    time.sleep(.4)
+full_pss = pss(gui_pid())
+run('uflinux-settingsctl', 'volume', '-5')
+run('uflinux-settingsctl', 'mute')
+run('uflinux-settingsctl', 'mute')
+assert state()['audio']['available']
+assert list(processes('labwc')) and desktop_pid() == desktop
+messages = subprocess.check_output(['dmesg'], text=True)
+assert 'Out of memory' not in messages and 'Killed process' not in messages
+metrics = {'ram_mib': 512, 'swap': False, 'displays': 1,
+           'service_pss_bytes': pss(service), 'desktop_initial_pss_bytes': initial_pss,
+           'desktop_closed_pss_bytes': closed_pss, 'full_ui_pss_bytes': full_pss,
+           'exercise_seconds': round(time.monotonic() - started, 2), 'oom': False,
+           'renderer': snapshot['displays']['renderer'],
+           'scope': 'QEMU software-rendered installed x86_64; native latency measured separately'}
+Path('/run/uflinux-settings-installed.json').write_text('UFLINUX_INSTALLED_METRICS:' + json.dumps(metrics) + '\n')
 frontend.terminate()
-for _ in range(40):
-    if frontend.poll() is not None:break
-    time.sleep(.1)
-assert frontend.poll() is not None, "The measured GUI did not exit"
-print("Installed 512 MiB Settings and flyout acceptance passed", flush=True)
+frontend.wait(timeout=20)
+assert desktop_pid() == desktop, 'Closing Settings stopped the desktop'

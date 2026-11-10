@@ -2,7 +2,7 @@
 
 Click the leaf on the bottom taskbar or release either Super key to toggle the
 launcher. Super combinations still work; Super+R and Super+Space also toggle the Start menu.
-The Start menu runs in its own plain GTK4 process, `uflinux-start-menu`, with
+The Start menu runs in the resident GTK4 `uflinux-desktop` process, with
 Papirus icons and the selected GTK theme. Login starts it hidden with its default
 widgets, layout and application catalog prepared. It retains these between
 openings; GTK and the compositor draw buffers when the window is mapped.
@@ -29,27 +29,20 @@ returns from All Applications and finally closes the menu. Outside clicks close
 it immediately. Start and the Network, Sound and Power menus replace each other while a full Settings
 window can remain open.
 
-`uflinux-start-menu [--output NAME]` opens or toggles the menu on the
+`uflinux-desktop --start-menu [--output NAME]` opens or toggles the menu on the
 specified monitor. With no monitor, labwc selects the keyboard activation output.
-Ironbar supplies its originating monitor in `IRONBAR_OUTPUT`. The transparent
+Panel buttons supply their originating monitor. The transparent
 layer captures outside clicks and the Start button while leaving other taskbar
 controls usable. Output removal closes the menu. The card adapts to smaller
 outputs and compositor scaling.
 
-The native desktop harness exercises real GTK controls and GIO fixtures in a
-private labwc session. Tests cover hidden startup, repeated toggles, independent
-process lifetime, memory and idle CPU. Its login1 fixture records and denies
-power requests; shutdown and reboot must only be exercised inside disposable VMs. Installed VM
-tests also measure launcher memory, repeated opening and closing, and process
-exit. Power-profile synchronization is tested through Settings and Ironbar. See the [validation report](start-menu-validation.md) for
-measured results and architecture coverage.
+The desktop connects to the Settings state service and provides the session
+polkit agent. Settings shortcuts open `uflinux-settings` in a separate process.
+The native desktop harness exercises GTK controls, state and tray fixtures in a
+private labwc session. See the [validation report](desktop-prototype-validation.md)
+for measurements and remaining release checks.
 
-The launcher does not connect to the Settings state service or register a polkit
-agent at startup. Settings shortcuts launch `uflinux-settings`; session actions
-use login1 and initialize authorization only when requested. Start and the status menus dismiss each other through D-Bus actions without starting the other app.
-`uflinux-settings --start-menu` remains a compatibility alias for user bindings.
-
-`uflinux-start-menu --daemon` starts or ensures the hidden resident process.
+`uflinux-desktop --daemon` starts or ensures the hidden resident process.
 `--hide` dismisses it, `--status` reports readiness and visibility, and `--quit`
 ends it explicitly. Closing the menu resets search, selection and confirmations;
 it does not destroy the catalog or widgets. Desktop-file changes refresh the
@@ -61,7 +54,6 @@ The taskbar has separate Network, Sound and Power buttons with Papirus symbolic
 icons. They track connection, output volume and battery state. Sound includes
 input/output and application controls; Power includes battery information,
 brightness and power profiles. The corresponding Settings page provides advanced
-controls. Open a panel directly with `uflinux-settings --panel network|sound|power
---output NAME`; `--quick-settings` opens Network for compatibility. The settings
-service reads system batteries and updates the panel after device changes or an
-Ironbar restart. Desktop systems use a bolt icon.
+controls. Open a panel directly with `uflinux-desktop --panel network|sound|power
+--output NAME`. The settings service reads system batteries and updates the panel
+after device changes. Desktop systems use a bolt icon.

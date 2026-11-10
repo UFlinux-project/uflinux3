@@ -1,4 +1,5 @@
 use crate::{auth, pages, widgets};
+use glib::variant::ToVariant;
 use gtk::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use settings_core::{bus, *};
@@ -36,6 +37,10 @@ pub struct App {
     activation: Cell<Instant>,
     first_frame: Cell<bool>,
     loaded: Cell<bool>,
+    desktop_mode: bool,
+    desktop_quicks: RefCell<std::collections::HashMap<String, DesktopQuick>>,
+    desktop_monitor: RefCell<Option<(gtk::gdk::Monitor, glib::SignalHandlerId)>>,
+    desktop_ddc_discovered: Cell<bool>,
 }
 pub const PAGES: &[(&str, &str)] = &[
     ("network", "Network"),
@@ -91,9 +96,11 @@ pub fn run() {
             activation: Cell::new(began),
             first_frame: Cell::new(true),
             loaded: Cell::new(false),
+            desktop_mode: false,
+            desktop_quicks: RefCell::new(std::collections::HashMap::new()),
+            desktop_monitor: RefCell::new(None),
+            desktop_ddc_discovered: Cell::new(false),
         });
-        app.agent
-            .replace(Some(auth::Agent::register(Rc::downgrade(&app))));
         let action = gio::SimpleAction::new("close-quick", None);
         let weak = Rc::downgrade(&app);
         action.connect_activate(move |_, _| {
@@ -153,6 +160,101 @@ pub fn run() {
     controller.borrow_mut().take();
 }
 impl App {
+    /// Create quick controls inside the desktop's GTK process. Full Settings
+    /// remains an independently launched application.
+    pub fn for_desktop(application: &gtk::Application) -> Rc<Self> {
+        let began = Instant::now();
+        let css = gtk::CssProvider::new();
+        css.load_from_string(include_str!("../assets/style.css"));
+        if let Some(display) = gtk::gdk::Display::default() {
+            gtk::style_context_add_provider_for_display(
+                &display,
+                &css,
+                gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            );
+        }
+        let app = Rc::new(Self {
+            application: application.clone(),
+            state: RefCell::new(Snapshot::default()),
+            agent: RefCell::new(None),
+            authorization_active: Cell::new(false),
+            submenu_open: Cell::new(false),
+            submenu_epoch: Cell::new(0),
+            full: RefCell::new(None),
+            quick: RefCell::new(None),
+            stack: RefCell::new(None),
+            full_bindings: RefCell::new(Vec::new()),
+            quick_bindings: RefCell::new(Vec::new()),
+            banner: RefCell::new(Vec::new()),
+            quick_output: RefCell::new(String::new()),
+            quick_panel: RefCell::new(String::new()),
+            started: began,
+            auth_id: Cell::new(0),
+            quick_auth: RefCell::new(None),
+            auth_window: RefCell::new(None),
+            activation: Cell::new(began),
+            first_frame: Cell::new(true),
+            loaded: Cell::new(false),
+            desktop_mode: true,
+            desktop_quicks: RefCell::new(std::collections::HashMap::new()),
+            desktop_monitor: RefCell::new(None),
+            desktop_ddc_discovered: Cell::new(false),
+        });
+        app.connect();
+        app
+    }
+
+    pub fn hide_quick(self: &Rc<Self>) {
+        let window = self.quick.borrow_mut().take();
+        if let Some(window) = window {
+            if self.desktop_mode {
+                window.set_visible(false);
+                if *self.quick_panel.borrow() == "network" {
+                    let request = self
+                        .state
+                        .borrow()
+                        .network
+                        .authentication
+                        .as_ref()
+                        .map(|request| request.id);
+                    if let Some(id) = request {
+                        self.execute(Action::AuthCancel { id }, None);
+                    }
+                }
+                if let Some(area) = self.quick_auth.borrow().as_ref() {
+                    widgets::clear(area);
+                }
+                self.auth_id.set(0);
+                self.submenu_open.set(false);
+                self.submenu_epoch
+                    .set(self.submenu_epoch.get().wrapping_add(1));
+                if let Some((monitor, id)) = self.desktop_monitor.borrow_mut().take() {
+                    monitor.disconnect(id);
+                }
+            } else {
+                window.close();
+            }
+        }
+    }
+
+    pub fn quick_window(&self) -> Option<gtk::ApplicationWindow> {
+        self.quick
+            .borrow()
+            .as_ref()
+            .filter(|w| w.is_visible())
+            .cloned()
+    }
+
+    pub fn quick_details(&self) -> Option<(String, String)> {
+        self.quick_window().map(|_| {
+            (
+                self.quick_panel.borrow().clone(),
+                self.quick_output.borrow().clone(),
+            )
+        })
+    }
+
+    pub fn release_agent_if_desktop(&self) {}
     pub fn parent(&self) -> Option<gtk::Window> {
         self.quick
             .borrow()
@@ -168,6 +270,25 @@ impl App {
             Ok(connection)=>{
                 let weak=Rc::downgrade(&app);connection.signal_subscribe(Some(SESSION_NAME),Some(SESSION_NAME),Some("Changed"),Some(SESSION_PATH),None,gio::DBusSignalFlags::NONE,move|_,_,_,_,_,parameters|{
                     if let Some(app)=weak.upgrade(){if let Some((raw,))=parameters.get::<(String,)>(){app.update(&raw);}}
+                });
+                let weak = Rc::downgrade(&app);
+                connection.signal_subscribe(Some("org.freedesktop.DBus"), Some("org.freedesktop.DBus"), Some("NameOwnerChanged"), Some("/org/freedesktop/DBus"), Some(SESSION_NAME), gio::DBusSignalFlags::NONE, move |_, _, _, _, _, parameters| {
+                    let Some((name, _, owner)) = parameters.get::<(String, String, String)>() else { return };
+                    if name != SESSION_NAME { return; }
+                    if let Some(app) = weak.upgrade() {
+                        if owner.is_empty() {
+                            app.desktop_ddc_discovered.set(false);
+                            if let Ok(raw) = serde_json::to_string(&Snapshot::default()) { app.update(&raw); }
+                            app.error("The settings service is unavailable.");
+                        } else {
+                            let weak = Rc::downgrade(&app);
+                            glib::MainContext::default().spawn_local(async move {
+                                if let (Some(app), Ok(raw)) = (weak.upgrade(), bus::session("GetState", None).await) {
+                                    app.update(&raw);
+                                }
+                            });
+                        }
+                    }
                 });
                 match bus::session("GetState",None).await{Ok(raw)=>{app.update(&raw);app.execute(Action::Refresh,None);},Err(_)=>app.error("The settings service could not start. Check the session D-Bus and service package.")}
             }
@@ -198,7 +319,7 @@ impl App {
         }
         self.error(state.error.as_deref().unwrap_or_default());
         if state.network.authentication.is_some() {
-            self.show_auth();
+            if self.desktop_mode { self.show_auth(); }
         } else {
             self.auth_id.set(0);
             if let Some(area) = &*self.quick_auth.borrow() {
@@ -253,8 +374,21 @@ impl App {
             widget.set_sensitive(false);
         }
         let weak = Rc::downgrade(self);
+        let desktop_mode = self.desktop_mode;
         glib::MainContext::default().spawn_local(async move {
-            let result = bus::execute(&action).await;
+            let result = async {
+                if !desktop_mode {
+                    let connection = gio::bus_get_future(gio::BusType::Session).await
+                        .map_err(|error| error.to_string())?;
+                    connection.call_future(
+                        Some("org.freedesktop.DBus"), "/org/freedesktop/DBus",
+                        "org.freedesktop.DBus", "StartServiceByName",
+                        Some(&("org.uflinux.Desktop", 0u32).to_variant()), None,
+                        gio::DBusCallFlags::NONE, 5000,
+                    ).await.map_err(|error| format!("Could not start desktop authorization agent: {error}"))?;
+                }
+                bus::execute(&action).await
+            }.await;
             if let Some(widget) = button {
                 widget.set_sensitive(true);
             }
@@ -273,6 +407,21 @@ impl App {
         });
     }
     pub fn open_page(self: &Rc<Self>, page: &str) {
+        if self.desktop_mode {
+            self.hide_quick();
+            match std::process::Command::new("uflinux-settings")
+                .args(["--page", page])
+                .spawn()
+            {
+                Ok(mut child) => {
+                    std::thread::spawn(move || {
+                        let _ = child.wait();
+                    });
+                }
+                Err(error) => self.error(&format!("Could not open Settings: {error}")),
+            }
+            return;
+        }
         let quick = self.quick.borrow_mut().take();
         if let Some(window) = quick {
             window.close();
@@ -431,9 +580,16 @@ impl App {
         pages::build(self, page, &content);
     }
     fn close_start(&self) {
-        remote_action("org.uflinux.StartMenu", "/org/uflinux/StartMenu", "hide");
+        if self.desktop_mode {
+            return;
+        }
+        remote_action("org.uflinux.Desktop", "/org/uflinux/Desktop", "hide");
     }
     pub fn open_quick(self: &Rc<Self>, output: String, panel: &str) {
+        if self.desktop_mode {
+            self.open_desktop_quick(output, panel);
+            return;
+        }
         let previous = self.quick.borrow_mut().take();
         if let Some(window) = previous {
             window.close();
@@ -641,6 +797,7 @@ impl App {
     }
     fn report_first_frame(self: &Rc<Self>, window: &gtk::ApplicationWindow) {
         let began = self.frame_start();
+        let panel = self.quick_panel.borrow().clone();
         let app = Rc::downgrade(self);
         window.add_tick_callback(move |window, _| {
             if !app.upgrade().is_some_and(|app| app.loaded.get()) {
@@ -649,9 +806,15 @@ impl App {
             if let Some(clock) = window.frame_clock() {
                 let token = Rc::new(RefCell::new(None));
                 let target = token.clone();
+                let panel = panel.clone();
                 let id = clock.connect_after_paint(move |clock| {
                     if std::env::var_os("UFLINUX_SETTINGS_BENCH").is_some() {
                         eprintln!("UFLINUX_FIRST_FRAME_MS={}", began.elapsed().as_millis());
+                        eprintln!(
+                            "UFLINUX_QUICK_PAINT_US={} panel={}",
+                            glib::monotonic_time(),
+                            panel
+                        );
                     }
                     if let Some(id) = target.borrow_mut().take() {
                         clock.disconnect(id);
@@ -668,6 +831,12 @@ impl App {
         };
         if self.auth_id.replace(request.id) == request.id {
             return;
+        }
+        if self.desktop_mode
+            && (self.quick_window().is_none() || *self.quick_panel.borrow() != "network")
+        {
+            self.application
+                .activate_action("panel", Some(&("network", "").to_variant()));
         }
         pages::network_auth(self, request);
     }
@@ -699,3 +868,5 @@ fn remote_action(name: &'static str, path: &'static str, action: &'static str) {
         }
     });
 }
+
+include!("../../shared/desktop_quick.rs");

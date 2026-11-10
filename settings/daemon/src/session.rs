@@ -6,8 +6,7 @@ use std::{
     cell::{Cell, RefCell},
     collections::BTreeMap,
     fs,
-    io::{BufRead, BufReader, Write},
-    os::unix::{net::UnixStream, process::CommandExt},
+    os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     rc::Rc,
@@ -58,7 +57,7 @@ pub fn run() -> Result<()> {
     if std::env::var_os("XDG_RUNTIME_DIR").is_none() {
         return Err("A user login session is required".into());
     }
-    let (_app,_monitor,_power_monitors,_device_monitor,mainloop)=glib::MainContext::default().block_on(async {
+    let (_app,_power_monitors,_device_monitor,mainloop)=glib::MainContext::default().block_on(async {
         let connection=gio::bus_get_future(gio::BusType::Session).await.map_err(|e|e.to_string())?;
         let system=gio::bus_get_future(gio::BusType::System).await.map_err(|e|e.to_string())?;
         let appearance=files::read_json(&files::config_dir().join("appearance.json"));
@@ -115,9 +114,6 @@ pub fn run() -> Result<()> {
                 display::Event::Unavailable(reason)=>{app.view.borrow_mut().displays.available=false;app.view.borrow_mut().displays.hdr_status=reason;app.publish();}
             }}
         });
-        let runtime=gio::File::for_path(std::env::var_os("XDG_RUNTIME_DIR").unwrap());
-        let _monitor=runtime.monitor_directory(gio::FileMonitorFlags::NONE,gio::Cancellable::NONE).ok();
-        if let Some(monitor)=&_monitor{let weak=Rc::downgrade(&app);monitor.connect_changed(move|_,_,_,_|if let Some(app)=weak.upgrade(){app.publish();});}
         let mut power_monitors=Vec::new();
         for path in ["/run/tlp","/etc/uflinux"]{
             if let Ok(monitor)=gio::File::for_path(path).monitor_directory(gio::FileMonitorFlags::NONE,gio::Cancellable::NONE){
@@ -144,12 +140,11 @@ pub fn run() -> Result<()> {
                 old.timezone!=next.timezone||old.ntp_enabled!=next.ntp_enabled||old.ntp_running!=next.ntp_running||old.synchronized!=next.synchronized||old.servers!=next.servers};
             app.view.borrow_mut().datetime=next;if changed{app.publish();}
             app.refresh_power();
-            app.publish(); // Resynchronize after Ironbar has restarted.
             glib::ControlFlow::Continue
         });
         let mainloop=glib::MainLoop::new(None,false);
         for signal in [libc::SIGTERM,libc::SIGINT]{let quit=mainloop.clone();glib::source::unix_signal_add_local(signal,move||{quit.quit();glib::ControlFlow::Break});}
-        Ok::<_,String>((app,_monitor,power_monitors,_device_monitor,mainloop))
+        Ok::<_,String>((app,power_monitors,_device_monitor,mainloop))
     })?;
     mainloop.run();
     // GLib sources may retain App until process exit. Explicitly reap owned children.
@@ -260,45 +255,6 @@ impl App {
                 "Changed",
                 Some(&(raw,).to_variant()),
             );
-            let network =
-                if !view.network.available {
-                    "Network unavailable"
-                } else if view.network.offline {
-                    "Network off"
-                } else if view.network.services.iter().any(|s| {
-                    s.kind == "ethernet" && ["ready", "online"].contains(&s.state.as_str())
-                }) {
-                    "Ethernet"
-                } else if view
-                    .network
-                    .services
-                    .iter()
-                    .any(|s| s.kind == "wifi" && ["ready", "online"].contains(&s.state.as_str()))
-                {
-                    "Wi-Fi"
-                } else {
-                    "Disconnected"
-                };
-            let output = view
-                .audio
-                .outputs
-                .iter()
-                .find(|d| d.name == view.audio.default_output);
-            let volume = output
-                .map(|d| {
-                    if d.muted {
-                        "Muted".into()
-                    } else {
-                        format!("Vol {:.0}%", d.volume)
-                    }
-                })
-                .unwrap_or_else(|| "Audio unavailable".into());
-            let power = view.power.clone();
-            let icons = panel::status(&view);
-            glib::MainContext::default().spawn_local(async move {
-                let _ =
-                    gio::spawn_blocking(move || ironbar(network, &volume, &power, &icons)).await;
-            });
         });
     }
     fn start_audio(self: &Rc<Self>) {
@@ -968,68 +924,4 @@ fn information() -> BTreeMap<String, String> {
     data.insert("Session".into(), "labwc / Wayland".into());
     data.insert("Settings".into(), env!("CARGO_PKG_VERSION").into());
     data
-}
-fn ironbar(
-    network: &str,
-    volume: &str,
-    power: &Power,
-    icons: &[(String, String); 3],
-) -> Result<()> {
-    let path =
-        PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR").ok_or("Missing runtime directory")?)
-            .join("ironbar-ipc.sock");
-    let marker = |profile: PowerProfile| {
-        format!(
-            "{} {}",
-            if power.profile == Some(profile) {
-                "●"
-            } else {
-                "○"
-            },
-            profile.label()
-        )
-    };
-    for (key, value) in [
-        ("uflinux_network_icon", icons[0].0.clone()),
-        ("uflinux_network_tooltip", icons[0].1.clone()),
-        ("uflinux_sound_icon", icons[1].0.clone()),
-        ("uflinux_sound_tooltip", icons[1].1.clone()),
-        ("uflinux_power_icon", icons[2].0.clone()),
-        ("uflinux_power_tooltip", icons[2].1.clone()),
-        ("uflinux_network", network.to_string()),
-        ("uflinux_volume", volume.to_string()),
-        (
-            "uflinux_power",
-            power
-                .profile
-                .map(PowerProfile::label)
-                .unwrap_or("Unavailable")
-                .into(),
-        ),
-        ("uflinux_power_saver", marker(PowerProfile::PowerSaver)),
-        ("uflinux_power_balanced", marker(PowerProfile::Balanced)),
-        (
-            "uflinux_power_performance",
-            marker(PowerProfile::Performance),
-        ),
-    ] {
-        let mut socket = UnixStream::connect(&path).map_err(|_| "Panel is not running")?;
-        socket
-            .set_read_timeout(Some(Duration::from_millis(150)))
-            .map_err(|e| e.to_string())?;
-        socket
-            .set_write_timeout(Some(Duration::from_millis(150)))
-            .map_err(|e| e.to_string())?;
-        let message =
-            serde_json::json!({"command":"var","subcommand":"set","key":key,"value":value})
-                .to_string();
-        socket
-            .write_all(format!("{message}\n").as_bytes())
-            .map_err(|e| e.to_string())?;
-        let mut reply = String::new();
-        BufReader::new(socket)
-            .read_line(&mut reply)
-            .map_err(|e| e.to_string())?;
-    }
-    Ok(())
 }

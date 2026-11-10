@@ -104,8 +104,7 @@ Do not mix edge packages or another Alpine release branch into this system. A
 branch upgrade requires an explicitly tested UFLinux release for the new branch.
 Review `.apk-new` files after upgrades if you have edited system defaults.
 
-Use `~/.config/labwc/`, `~/.config/ironbar/config.toml`, and
-`~/.config/ironbar/style.css` for personal overrides. Defaults live in
+Use `~/.config/labwc/` for personal compositor overrides. Defaults live in
 `/etc/xdg`. Ironbar uses its packaged defaults when user files are absent. The Power icon
 shows battery status where available and a bolt on desktops. Super+Space opens the
 launcher; Super+Enter opens a terminal; Super+E opens files; Super+D shows the

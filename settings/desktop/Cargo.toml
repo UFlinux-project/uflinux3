@@ -1,0 +1,23 @@
+[package]
+name = "uflinux-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+settings-core.workspace = true
+uflinux-settings = { path = "../ui" }
+serde_json.workspace = true
+glib.workspace = true
+gio = { workspace = true, features = ["v2_80"] }
+gtk = { package = "gtk4", version = "=0.10.1", features = ["v4_12"] }
+gtk4-layer-shell = "=0.6.3"
+async-channel.workspace = true
+futures-util = "=0.3.34"
+libc.workspace = true
+wayland-client = "=0.31.14"
+wayland-protocols-wlr = { version = "=0.3.12", features = ["client"] }
+
+[build-dependencies]
+cc = "1"
+pkg-config = "0.3"

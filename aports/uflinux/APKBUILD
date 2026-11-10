@@ -2,12 +2,12 @@
 pkgname=uflinux
 pkgver=0.1.0
 pkgrel=0
-pkgdesc="Minimal Alpine desktop with labwc and Ironbar"
+pkgdesc="Minimal Alpine desktop with labwc"
 url="${UFLINUX_PROJECT_URL:-https://github.com}"
 arch="noarch"
 license="GPL-3.0-only"
-depends="uflinux-desktop=$pkgver-r$pkgrel"
-subpackages="uflinux-release:release uflinux-defaults:defaults uflinux-desktop:desktop
+depends="uflinux-desktop-meta=$pkgver-r$pkgrel"
+subpackages="uflinux-release:release uflinux-defaults:defaults uflinux-desktop-meta:desktop
 	uflinux-live:live uflinux-live-openrc:live_openrc uflinux-installer:installer
 	uflinux-bootsplash-openrc:bootsplash_openrc uflinux-initramfs:initramfs"
 # Configuration and installer checks are run by scripts/check.py and verify.
@@ -15,9 +15,9 @@ options="!check"
 makedepends="rsvg-convert"
 builddir="$srcdir"
 source="uflinux-openrc.conf uflinux.plymouth uflinux.script uflinux-spinner.svg plymouthd.conf
-	uflinux-bootsplash uflinux-initramfs-init uflinux-initramfs-splash uflinux-plymouth.files uflinux-splash.initd uflinux-splash-stop.initd LICENSE uflinux-session uflinux-compositor uflinux-autostart uflinux-theme-sync uflinux-start-panel uflinux-install uflinux-install-gui-backend
+	uflinux-bootsplash uflinux-initramfs-init uflinux-initramfs-splash uflinux-plymouth.files uflinux-splash.initd uflinux-splash-stop.initd LICENSE uflinux-session uflinux-compositor uflinux-autostart uflinux-theme-sync uflinux-install uflinux-install-gui-backend
 	uflinux-live.initd uflinux.desktop uflinux-logo.svg artwork-NOTICE labwc-rc.xml labwc-menu.xml
-	labwc-autostart labwc-environment ironbar.toml ironbar.css mako.conf
+	labwc-autostart labwc-environment mako.conf
 	gtk-settings.ini 90-uflinux.gschema.override 45-uflinux-fonts.conf firefox-defaults.js regreet.toml greetd-installed.toml greetd-live.toml greetd.pam
 	connman.conf connman.confd iwd.conf ntpd.confd uflinux-network-init uflinux-connman-clock.conf
 	https://download.gnome.org/sources/gnome-backgrounds/3.38/gnome-backgrounds-3.38.0.tar.xz
@@ -63,7 +63,6 @@ package() {
 	install -Dm755 "$srcdir/uflinux-theme-sync" "$pkgdir/usr/libexec/uflinux-theme-sync"
 	install -Dm755 "$srcdir/uflinux-compositor" "$pkgdir/usr/libexec/uflinux-compositor"
 	install -Dm755 "$srcdir/uflinux-network-init" "$pkgdir/usr/libexec/uflinux-network-init"
-	install -Dm755 "$srcdir/uflinux-start-panel" "$pkgdir/usr/libexec/uflinux-start-panel"
 	install -Dm755 "$srcdir/uflinux-install" "$pkgdir/usr/sbin/uflinux-install"
 	install -Dm755 "$srcdir/uflinux-install-gui-backend" "$pkgdir/usr/libexec/uflinux-install-gui-backend"
 	install -Dm755 "$srcdir/uflinux-live.initd" "$pkgdir/etc/init.d/uflinux-live"
@@ -88,8 +87,6 @@ package() {
 	install -Dm644 "$srcdir/labwc-menu.xml" "$pkgdir/etc/xdg/labwc/menu.xml"
 	install -Dm644 "$srcdir/labwc-autostart" "$pkgdir/etc/xdg/labwc/autostart"
 	install -Dm644 "$srcdir/labwc-environment" "$pkgdir/etc/xdg/labwc/environment"
-	install -Dm644 "$srcdir/ironbar.toml" "$pkgdir/etc/xdg/ironbar/config.toml"
-	install -Dm644 "$srcdir/ironbar.css" "$pkgdir/etc/xdg/ironbar/style.css"
 	install -Dm644 "$srcdir/mako.conf" "$pkgdir/etc/xdg/mako/config"
 	install -Dm644 "$srcdir/firefox-defaults.js" "$pkgdir/usr/lib/firefox/browser/defaults/preferences/uflinux.js"
 	install -Dm644 "$srcdir/45-uflinux-fonts.conf" "$pkgdir/etc/fonts/conf.d/45-uflinux-fonts.conf"
@@ -115,12 +112,12 @@ release() {
 }
 
 defaults() {
-	pkgdesc="UFLinux labwc and Windows 10-inspired Ironbar defaults"
+	pkgdesc="UFLinux labwc desktop defaults"
 	license="GPL-3.0-only AND CC-BY-SA-3.0 AND CC-BY-SA-4.0 AND CC0-1.0"
 	depends="adw-gtk3 papirus-icon-theme gsettings-desktop-schemas uflinux-initramfs=$pkgver-r$pkgrel"
 	replaces="plymouth greetd greetd-agreety-config connman connman-openrc iwd busybox-openrc"
 	replaces_priority=100
-	amove usr/libexec/uflinux-autostart usr/libexec/uflinux-theme-sync usr/libexec/uflinux-compositor usr/libexec/uflinux-network-init usr/libexec/uflinux-start-panel
+	amove usr/libexec/uflinux-autostart usr/libexec/uflinux-theme-sync usr/libexec/uflinux-compositor usr/libexec/uflinux-network-init
 	amove etc/fonts etc/rc.conf.d etc/xdg etc/greetd etc/pam.d etc/connman etc/iwd etc/conf.d usr/bin \
 		usr/share/wayland-sessions usr/share/backgrounds usr/share/themes usr/share/dbus-1 \
 		usr/share/icons usr/share/glib-2.0/schemas usr/lib/firefox usr/share/licenses/uflinux-defaults
@@ -138,7 +135,7 @@ initramfs() {
 desktop() {
 	pkgdesc="UFLinux minimal desktop dependencies"
 	depends="uflinux-release=$pkgver-r$pkgrel uflinux-defaults=$pkgver-r$pkgrel uflinux-bootsplash-openrc=$pkgver-r$pkgrel
-		xdg-user-dirs labwc ironbar=0.19.1-r0 uflinux-settings foot nemo mako swaybg
+		xdg-user-dirs labwc uflinux-desktop uflinux-settings foot nemo mako swaybg
 		transmission-gtk celluloid gnome-disk-utility file-roller
 		eudev eudev-openrc elogind elogind-openrc dbus dbus-openrc dbus-x11
 		greetd greetd-openrc uflinux-regreet=0.2.0-r0 cage polkit-elogind
@@ -150,7 +147,7 @@ desktop() {
 
 live() {
 	pkgdesc="Ephemeral UFLinux live session setup; never install on disk"
-	depends="uflinux-desktop=$pkgver-r$pkgrel uflinux-live-openrc=$pkgver-r$pkgrel shadow"
+	depends="uflinux-desktop-meta=$pkgver-r$pkgrel uflinux-live-openrc=$pkgver-r$pkgrel shadow"
 	amove usr/share/uflinux/greetd-live.toml
 }
 
@@ -188,21 +185,18 @@ a4df2659edcc5ad83752f9b61ef9331885ab422c66e273ab2c8da35fa606b69d33ce20769ba9a120
 d361e5e8201481c6346ee6a886592c51265112be550d5224f1a7a6e116255c2f1ab8788df579d9b8372ed7bfd19bac4b6e70e00b472642966ab5b319b99a2686  LICENSE
 e7547d393b9489bfaf96ea7f1f580099e8d01487e7a59cc897001032e0f0f424b68d77d21e92ac38953fb8df4561796990bf8694d1759b4459c03dfe26809d65  uflinux-session
 1e5eedf741904d0ebbab6f34aa3424683a87724d92d3e9dfbd2edc5e99645bd207185890807b6374ca02390cbe8dba64f32b609ac445e8f71a29edfef8939eec  uflinux-compositor
-47b3490aa02a86096037c7228b883fc37247d96f9585cff45736fd0137ff346e951488eb2d8cceb376369a05a3b9c635e7f796dcd2c91b48917017ffc51ad35b  uflinux-autostart
+dceed614da30fad0fe2a349d12654f20bf1bd1e1be1469844ff65fba5c4f1f015a79886a1190be2230280783a9756408bd744632be2abf07a51166b47e7842d4  uflinux-autostart
 0c37806c49629bb84275ed096c735d37d879483bdf4e1320fdc7ab0a0755bf376544c023227ed1d2321997c27a26128139e1865d6caac291aaf09a145a62c367  uflinux-theme-sync
-04c37bbfcf598a42e90ecc0d12100de86166ff2a6c36de81cbf2186fbb76164c60adfa1ad1e537499a5d43249c46804533cd28b66454894be7923c376ca5bd23  uflinux-start-panel
 182f00e5c8fc3b58a6fb2894267efa92c128a91cc13b9b7952c508e72ee42b20eeb2cab96a8a6a5b259244cb9a8aeea3a73412cb64f781b9b9bf64780f316032  uflinux-install
 44df7b48d307198bc768a0224ef6f2422ca285ae5edc21c33b074fd1d3527ead4eddd1439602ceb3b54b4d0d9b8c988467771ef333bb37e9f9641681ede907a1  uflinux-install-gui-backend
 153f498b540da75c6398e7eb271d360ee2ced012d2cd5c77d11d8833c48bcd12fc51f2e46169f7351b38a8e8e7faa24c790776fe5d6537d78b6dafa497eec49f  uflinux-live.initd
 e6df4f4a610b45f3426de64299f2fcc0e53691cf4f62a571cc9a3a0c168628042f31ea328e202bcec79d0aa62204e370265b38ea131772c8c548a5b1a19a9d11  uflinux.desktop
 f1c52e9fb8613e71ef77817ffcfad4638be5fba1c606218562955ad6a0d75a087bce62ed514d8687af9fa25940d64513ba0b535f1de370c51a1db9b2ed399256  uflinux-logo.svg
 43cb7fdcd84cc66fbe908d23b34e4aae6098a6360e1d822ed2c2920eac0d583a7f374ee633c47f9f3ec4bd69a1d319b5243fdf04f2a40120bdb02bf388162e88  artwork-NOTICE
-c0a0a47507e1e1647d180221674893fab169ef9c98d2b1bec4c46b353c289f77d9b15207be712f53c2feba036807f8b3bcd3e0d279761278b94a2ba7b2beef75  labwc-rc.xml
-f9030c7eefc3576d9b8d1811c2c75fcace7e5b3e03e0ea89f9dde4a667b37b1dbce1e1ade73b4c6f3d12dfe220ea35c88efd6fa802a59c2ef1bfed5e52bebc5f  labwc-menu.xml
+aa7246e56d2805550b325932cce4b4e7a6ea8e3bb754ac6bf92c2e28e25e5da0e3e697166a397674b8fc087d78507af7181520fb18c3391bef623f0c3a05a7c8  labwc-rc.xml
+0e3bb10cffaf6d2279fc225e5908119dadfe4dda0125041844f265c26dc488486b8c30274e784a7a85ad77afb5bc96bdb2b038d371f59261e63fec1b5e9dc324  labwc-menu.xml
 f25b2a1b852ea3519078d149f2ab86eedaddb811a2f4c6437a4e572072ddf7b758fa8b2570c9ba6f266ed2ac585a5e3f11e056a8e6e77df3de89c8814f9acb7e  labwc-autostart
 f635e02bd8f0b6b859571a578336b978585dc93baae7a6a9d4ee74aa038d29c813706cd72ae5c8a90391b0f05d37b33bcfb8c146c969ffbd6da5680dcd6dd9ed  labwc-environment
-2af8400cc20c689e35525ea240c404b88870893ec82669689f1b417cf233fa7504b27ca05bcc62ed0800c7825f0a2540ef315daca38c01d2fd15ef94ea8ac613  ironbar.toml
-5b56ecc4320b1cbb9ce7092593b7f1d7c2bff4bdf16405bc1547772d440ae6584afaea5c9471724d60ce5cdca47fc3bee8976c4acd575e5df357bdf4cbd38cc3  ironbar.css
 9c24ef0ef182ff5bb8bfbf8e38135b3fc5d6d6384f1254151fe1c8b820f03f9bfaf4ab3f678f4fa0f82d2483c1056e88ecde88040a68adea9eb6c8750b58f1df  mako.conf
 26310a63dc6a98145b5381bb2ab139145de09835b7657bc9d701dbb5bbd8436a483a7ccd8852769ad715d5c3d47a666cbe157216e9422a972aaaff99cb681f0d  gtk-settings.ini
 dc4a105d7982c7270f2f2cd4e5c6648ba8ff5a21167c29b84b014e9f5ae4e4cddf6cd827a8159e297f1e032809d0634b3bf627d553e03c431eada91b2779ac2c  90-uflinux.gschema.override

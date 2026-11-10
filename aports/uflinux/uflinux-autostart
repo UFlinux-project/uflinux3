@@ -8,8 +8,7 @@ if [ -n "${GSK_RENDERER:-}" ]; then dbus-update-activation-environment GSK_RENDE
 /usr/libexec/uflinux-theme-sync &
 mako &
 /usr/libexec/uflinux-settingsd &
-uflinux-start-menu --daemon &
-/usr/libexec/uflinux-start-panel &
+/usr/libexec/uflinux-desktop-supervisor &
 if [ -f /run/uflinux-live ] && [ ! -e "$XDG_RUNTIME_DIR/uflinux-installer-started" ]; then
 	touch "$XDG_RUNTIME_DIR/uflinux-installer-started"
 	uflinux-installer &

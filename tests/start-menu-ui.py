@@ -45,7 +45,7 @@ def wait(predicate, description):
         time.sleep(.05)
     raise AssertionError(description)
 def tree(root=None):
-    queue = list(root) if root is not None else [a for a in pyatspi.Registry.getDesktop(0) if a.name in ('uflinux-settings', 'uflinux-start-menu')]
+    queue = list(root) if root is not None else [a for a in pyatspi.Registry.getDesktop(0) if a.name in ('uflinux-settings', 'uflinux-desktop')]
     found = []
     while queue:
         item = queue.pop(0)
@@ -70,7 +70,7 @@ def diagnostics(kind, error, traceback):
 sys.excepthook = diagnostics
 def open_menu():
     assert not menu(), 'An earlier Start menu remained open'
-    command('uflinux-start-menu', '--output', 'HEADLESS-1')
+    command('uflinux-desktop', '--start-menu', '--output', 'HEADLESS-1')
     wait(menu, 'Start menu did not appear')
     wait(lambda: find('Search applications'), 'Search field is missing')
     wait(lambda: not find('Loading applications…'), 'Application catalog did not load')
@@ -82,7 +82,7 @@ def search(text):
     assert field.queryEditableText().setTextContents(text)
     time.sleep(.3)
 def close_menu():
-    command('uflinux-start-menu')
+    command('uflinux-desktop', '--start-menu')
     wait(lambda: not menu(), 'Super-style toggle failed to close Start')
 def pointer(x, y, width=1280, height=720):
     command('/tmp/uflinux-ui-driver/pointer-driver', str(x), str(y), str(x), str(y), str(width), str(height))
@@ -111,8 +111,8 @@ created.append(broken)
 command('update-desktop-database', str(apps))
 try:
     for _ in range(100):
-        status = subprocess.check_output(['uflinux-start-menu', '--status'], text=True, timeout=10)
-        if 'ready=true' in status: break
+        status = subprocess.check_output(['uflinux-desktop', '--status'], text=True, timeout=10)
+        if json.loads(status)['ready']: break
         time.sleep(.05)
     else: raise AssertionError('Resident Start menu was not prepared')
     open_menu()
@@ -202,19 +202,22 @@ try:
     command('wtype', '-M', 'logo', '-k', 'i', '-m', 'logo')
     time.sleep(.3); assert not menu(), 'Super+I incorrectly triggered the modifier-only menu'
     open_menu()
-    click(find('Settings', 'button') or find('Settings', 'push button'))
+    settings_shortcut = wait(lambda: next((item for item in tree(menu())
+        if item.name == 'Settings' and item.getRoleName() in ('button', 'push button')), None),
+        'Settings shortcut is missing from Start')
+    click(settings_shortcut)
     wait(lambda: not menu(), 'Settings shortcut did not dismiss Start')
     wait(lambda: find('Settings', 'frame'), 'Settings shortcut did not open Settings')
-    command('uflinux-settings', '--start-menu', '--output', 'HEADLESS-1')
-    wait(menu, 'Compatibility command did not open the independent launcher')
-    command('uflinux-settings', '--start-menu')
-    wait(lambda: not menu(), 'Compatibility command did not hide the launcher')
-    command('uflinux-settings', '--panel', 'network', '--output', 'HEADLESS-1')
+    command('uflinux-desktop', '--start-menu', '--output', 'HEADLESS-1')
+    wait(menu, 'Desktop command did not open Start while Settings is open')
+    command('uflinux-desktop', '--start-menu')
+    wait(lambda: not menu(), 'Desktop command did not hide Start')
+    command('uflinux-desktop', '--panel', 'network', '--output', 'HEADLESS-1')
     wait(lambda: find('Network', 'frame'), 'Network panel did not appear')
     pointer(100, 100)
     wait(lambda: not find('Network', 'frame'), 'Outside click did not dismiss the Network panel')
     for panel, title, control in [('network', 'Network', 'Network Settings…'), ('sound', 'Sound', 'Sound Settings…'), ('power', 'Power', 'Power Settings…')]:
-        command('uflinux-settings', '--panel', panel, '--output', 'HEADLESS-1')
+        command('uflinux-desktop', '--panel', panel, '--output', 'HEADLESS-1')
         frame = wait(lambda: find(title, 'frame'), title + ' panel did not appear')
         wait(lambda: find(control), title + ' control missing')
         snapshot = json.loads(subprocess.check_output(['uflinux-settingsctl', 'status'], text=True))
@@ -230,34 +233,34 @@ try:
         else:
             wait(lambda: shown('Brightness') == bool(snapshot['displays']['brightness']), 'Brightness visibility did not match the hardware')
             wait(lambda: shown('Power mode') == snapshot['power']['available'], 'Power profile visibility did not match availability')
-    command('uflinux-settings', '--panel', 'power', '--output', 'HEADLESS-1')
+    command('uflinux-desktop', '--panel', 'power', '--output', 'HEADLESS-1')
     wait(lambda: not find('Power', 'frame'), 'Power panel did not toggle closed')
     open_menu()
-    command('uflinux-settings', '--quick-settings', '--output', 'HEADLESS-1')
+    command('uflinux-desktop', '--panel', 'network', '--output', 'HEADLESS-1')
     wait(lambda: not menu(), 'Quick settings did not replace Start')
-    command('uflinux-settings', '--quick-settings', '--output', 'HEADLESS-1')
+    command('uflinux-desktop', '--panel', 'network', '--output', 'HEADLESS-1')
     open_menu()
     pointer(1160, 700)
     wait(lambda: any(find(name, 'frame') for name in ('Network', 'Sound', 'Power')), 'Other taskbar controls were blocked by Start')
     assert not menu(), 'Taskbar quick-settings click left Start open'
-    command('uflinux-start-menu', '--output', 'HEADLESS-1')
+    command('uflinux-desktop', '--start-menu', '--output', 'HEADLESS-1')
     wait(menu, 'Start did not replace panel')
-    command('uflinux-start-menu')
+    command('uflinux-desktop', '--start-menu')
     open_menu()
     command('grim', str(results / 'start-menu.png'))
     # A genuine outside click dismisses the transparent layer.
     pointer(900, 80)
     wait(lambda: not menu(), 'Clicking outside the card did not dismiss it')
-    # Click Ironbar's real Start button, then the same point again. The second
+    # Click the real Start button, then the same point again. The second
     # click is captured by the dismissal layer, without reopening on release.
     pointer(25, 700)
-    wait(menu, 'Ironbar Start button did not open the launcher')
+    wait(menu, 'Desktop Start button did not open the launcher')
     pointer(25, 700)
     time.sleep(.5); assert not menu(), 'Repeated Start click reopened instead of toggling closed'
     # The selected monitor disappearing must close its layer immediately.
     command('wtype', '-M', 'ctrl', '-M', 'alt', '-k', 'F10', '-m', 'alt', '-m', 'ctrl')
     wait(lambda: 'UF-TEST' in subprocess.check_output(['wlr-randr'], text=True), 'Virtual monitor was not added')
-    command('uflinux-start-menu', '--output', 'UF-TEST')
+    command('uflinux-desktop', '--start-menu', '--output', 'UF-TEST')
     wait(menu, 'Start did not open on the second output')
     command('wtype', '-M', 'ctrl', '-M', 'alt', '-k', 'F11', '-m', 'alt', '-m', 'ctrl')
     wait(lambda: not menu(), 'Start survived removal of its monitor')
@@ -270,7 +273,7 @@ try:
     command('wlr-randr', '--output', 'HEADLESS-1', '--custom-mode', '1280x720@60Hz')
     (results / 'start-menu.json').write_text(json.dumps({'gio_launch': True, 'unicode_search': True, 'visibility': True,
         'catalog_refresh': True, 'inline_errors': True, 'confirmation_cancel': True, 'super_keys': True,
-        'outside_click': True, 'ironbar_toggle': True, 'small_display': True, 'fractional_scaling': True, 'output_removal': True, 'application_browser': True}, indent=2) + '\n')
+        'outside_click': True, 'panel_toggle': True, 'small_display': True, 'fractional_scaling': True, 'output_removal': True, 'application_browser': True}, indent=2) + '\n')
 except BaseException:
     diagnostics(*sys.exc_info())
     sys.excepthook = sys.__excepthook__

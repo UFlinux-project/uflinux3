@@ -6,7 +6,6 @@ from pathlib import Path
 import subprocess
 import sys
 import pwd
-import socket
 import time
 
 assert os.geteuid()==0 and 'QEMU' in Path('/sys/class/dmi/id/sys_vendor').read_text()
@@ -39,11 +38,6 @@ def demote():
     os.initgroups(user.pw_name,user.pw_gid);os.setgid(user.pw_gid);os.setuid(user.pw_uid)
 def shared_profile():
     return json.loads(subprocess.check_output(['uflinux-settingsctl','status'],env=environment,preexec_fn=demote,text=True,timeout=10))['power']['profile']
-def panel_profile():
-    with socket.socket(socket.AF_UNIX) as client:
-        client.settimeout(2);client.connect(environment['XDG_RUNTIME_DIR']+'/ironbar-ipc.sock')
-        client.sendall(b'{"command":"var","subcommand":"get","key":"uflinux_power"}\n')
-        return json.loads(client.makefile('r').readline()).get('value','')
 seen=[]
 for profile,code,label in [('power-saver','SAV','Power saver'),('balanced','BAL','Balanced'),('performance','PRF','Performance')]:
     observed=operation({'operation':'set-power-profile','profile':profile})
@@ -51,9 +45,9 @@ for profile,code,label in [('power-saver','SAV','Power saver'),('balanced','BAL'
     assert 'TLP_PROFILE_DEFAULT='+code in Path('/etc/tlp.d/90-uflinux-profile.conf').read_text()
     assert json.loads(Path('/etc/uflinux/power.json').read_text())['profile']==profile
     for _ in range(50):
-        if shared_profile()==profile and panel_profile()==label:break
+        if shared_profile()==profile:break
         time.sleep(0.1)
-    else:raise AssertionError('Settings and Ironbar did not receive the power-profile update')
+    else:raise AssertionError('Settings did not receive the power-profile update')
     seen.append(profile)
 operation({'operation':'set-power-profile','profile':'balanced'})
 for action in ('suspend','nothing','poweroff'):
@@ -64,4 +58,4 @@ operation({'operation':'set-power-buttons','on_ac':'nothing','on_battery':'nothi
 version=subprocess.check_output(['tlp-stat','--version'],text=True,timeout=10).strip()
 print('UFLINUX_POWER_VM:'+json.dumps({'profiles':seen,'persistent_configuration':True,
     'button_policies':['suspend','nothing','poweroff'],'tlp_version':version,'busybox_acpid':True,
-    'settings_and_ironbar_synchronized':True}),flush=True)
+    'settings_service_synchronized':True}),flush=True)

@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class ReleaseDebugTests(unittest.TestCase):
     def test_abuild_override_is_cleared_before_cargo(self):
-        for origin in ('ironbar', 'uflinux-settings'):
+        for origin in ('uflinux-settings',):
             with self.subTest(origin=origin), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 for name, script in {

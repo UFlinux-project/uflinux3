@@ -29,12 +29,12 @@ class MatrixTests(unittest.TestCase):
         for arch in ('ppc64le', 's390x'):
             self.assertEqual({job['mode'] for job in jobs if job['arch'] == arch}, {'native'})
 
-    def test_each_architecture_has_five_independent_jobs(self):
-        for event,ref,count in [('pull_request','refs/heads/main',5),('workflow_dispatch','refs/heads/main',35)]:
+    def test_each_architecture_has_four_independent_jobs(self):
+        for event,ref,count in [('pull_request','refs/heads/main',4),('workflow_dispatch','refs/heads/main',28)]:
             result=ci.configuration(event,ref)
             jobs=result['packages']['include']
             self.assertEqual(len(jobs),count)
             for architecture in result['matrix']['include']:
                 selected=[job for job in jobs if job['arch']==architecture['arch']]
-                self.assertEqual({job['package'] for job in selected},{'connman','ironbar','uflinux-regreet','uflinux-settings','uflinux'})
+                self.assertEqual({job['package'] for job in selected},{'connman','uflinux-regreet','uflinux-settings','uflinux'})
                 self.assertTrue(all(job['runner']==architecture['runner'] for job in selected))

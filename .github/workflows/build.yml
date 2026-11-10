@@ -36,7 +36,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y shellcheck
-          shellcheck -S warning scripts/*.sh profiles/*.sh tests/*.sh aports/uflinux/uflinux-session aports/uflinux/uflinux-autostart aports/uflinux/uflinux-start-panel aports/uflinux/uflinux-compositor aports/uflinux/uflinux-network-init settings/data/uflinux-acpid.initd settings/data/uflinux-power-button
+          shellcheck -S warning scripts/*.sh profiles/*.sh tests/*.sh aports/uflinux/uflinux-session aports/uflinux/uflinux-autostart settings/desktop/data/uflinux-desktop-supervisor aports/uflinux/uflinux-compositor aports/uflinux/uflinux-network-init settings/data/uflinux-acpid.initd settings/data/uflinux-power-button
           go install github.com/rhysd/actionlint/cmd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca
           "$(go env GOPATH)/bin/actionlint" -config-file .github/actionlint.yaml .github/workflows/build.yml
       - id: matrix
@@ -139,6 +139,14 @@ jobs:
       - name: Exercise release signing and key cleanup with a disposable key
         if: matrix.arch == 'x86_64'
         run: sudo --preserve-env=SOURCE_DATE_EPOCH,APK_REPOSITORY_URL,GITHUB_REPOSITORY,GITHUB_SHA python3 tests/signing-smoke.py --arch x86_64 --version '${{ needs.checks.outputs.version }}'
+      - name: Upload verification diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: diagnostics-${{ matrix.arch }}
+          path: out/checks/${{ matrix.arch }}
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: image-${{ matrix.arch }}

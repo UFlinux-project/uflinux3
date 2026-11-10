@@ -6,11 +6,11 @@ pkgdesc="UFLinux Settings, quick controls and resident Start menu"
 url="${UFLINUX_PROJECT_URL:-https://github.com}"
 arch="x86 x86_64 aarch64 armv7 ppc64le s390x riscv64"
 license="GPL-3.0-only"
-depends="$pkgname-daemon=$pkgver-r$pkgrel $pkgname-system=$pkgver-r$pkgrel"
+depends="uflinux-desktop=$pkgver-r$pkgrel $pkgname-daemon=$pkgver-r$pkgrel $pkgname-system=$pkgver-r$pkgrel"
 makedepends="cargo cargo-auditable gtk4.0-dev gtk4-layer-shell-dev pulseaudio-dev polkit-dev
 	eudev-dev vulkan-loader-dev mesa-dev pkgconf"
 subpackages="$pkgname-dbg $pkgname-doc $pkgname-daemon:daemon $pkgname-system:system
-	$pkgname-system-openrc:system_openrc uflinux-installer-ui:installer_ui"
+	$pkgname-system-openrc:system_openrc uflinux-installer-ui:installer_ui uflinux-desktop:desktop"
 options="net"
 # Generated from the repository by scripts/settings-source.py, independently verified.
 source="$pkgname-$pkgver.tar"
@@ -26,8 +26,8 @@ prepare() {
 	default_prepare
 	cargo fetch --locked --target="$CTARGET"
 	# Source bundles normalize timestamps. Never reuse stale workspace binaries.
-	cargo clean -p uflinux-installer -p uflinux-start-menu -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
-	cargo clean --release -p uflinux-installer -p uflinux-start-menu -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
+	cargo clean -p uflinux-desktop -p uflinux-installer -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
+	cargo clean --release -p uflinux-desktop -p uflinux-installer -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
 }
 build() {
 	# abuild enables Rust debug info when a -dbg subpackage exists.
@@ -42,8 +42,9 @@ package() {
 	local target="${CARGO_TARGET_DIR:-target}/release"
 	install -Dm755 "$target/uflinux-installer" "$pkgdir/usr/bin/uflinux-installer"
 	install -Dm644 data/org.uflinux.Installer.desktop "$pkgdir/usr/share/applications/org.uflinux.Installer.desktop"
-	install -Dm755 "$target/uflinux-start-menu" "$pkgdir/usr/bin/uflinux-start-menu"
-	install -Dm644 data/org.uflinux.StartMenu.service "$pkgdir/usr/share/dbus-1/services/org.uflinux.StartMenu.service"
+	install -Dm755 "$target/uflinux-desktop" "$pkgdir/usr/bin/uflinux-desktop"
+	install -Dm755 desktop/data/uflinux-desktop-supervisor "$pkgdir/usr/libexec/uflinux-desktop-supervisor"
+	install -Dm644 desktop/data/org.uflinux.Desktop.service "$pkgdir/usr/share/dbus-1/services/org.uflinux.Desktop.service"
 	install -Dm755 "$target/uflinux-settings" "$pkgdir/usr/bin/uflinux-settings"
 	install -Dm755 "$target/uflinux-settingsctl" "$pkgdir/usr/bin/uflinux-settingsctl"
 	install -Dm755 "$target/uflinux-settingsd" "$pkgdir/usr/libexec/uflinux-settingsd"
@@ -67,6 +68,11 @@ package() {
 	install -Dm644 data/uflinux-logind-power.conf "$pkgdir/etc/elogind/logind.conf.d/90-uflinux-power.conf"
 	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 	install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
+desktop() {
+	pkgdesc="UFLinux panel, Start menu and quick controls"
+	depends="$pkgname-daemon=$pkgver-r$pkgrel $pkgname-system=$pkgver-r$pkgrel"
+	amove usr/bin/uflinux-desktop usr/libexec/uflinux-desktop-supervisor usr/share/dbus-1/services/org.uflinux.Desktop.service
 }
 installer_ui() {
 	pkgdesc="Live UFLinux GTK4 installer"

@@ -3,6 +3,7 @@ use gtk::prelude::*;
 use gtk4_layer_shell::LayerShell;
 
 pub const CSS: &str = ".uflinux-popup-card { background: @theme_bg_color; color: @theme_fg_color; border: 1px solid alpha(@theme_fg_color, 0.18); border-radius: 14px; padding: 12px; box-shadow: 0 4px 16px alpha(black, 0.25); }";
+pub const PANEL_HEIGHT: i32 = 40;
 
 pub fn select_monitor(window: &gtk::ApplicationWindow, output: &str) -> Option<gtk::gdk::Monitor> {
     let display = gtk::gdk::Display::default()?;
@@ -30,14 +31,14 @@ pub fn set_input_region(surface: &gtk::gdk::Surface, width: i32, height: i32, st
         0,
         0,
         width,
-        (height - 40).max(0),
+        (height - PANEL_HEIGHT).max(0),
     ));
     if start_width > 0 {
         let _ = region.union_rectangle(&gtk::cairo::RectangleInt::new(
             0,
-            (height - 40).max(0),
+            (height - PANEL_HEIGHT).max(0),
             start_width.min(width),
-            40.min(height),
+            PANEL_HEIGHT.min(height),
         ));
     }
     surface.set_input_region(&region);

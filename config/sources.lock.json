@@ -14,10 +14,6 @@
       "url": "https://codeload.github.com/alpinelinux/aports/tar.gz/3db0a46d5ef507f6faaa9c0c0fc52181a277e9b7",
       "sha512": "e702e6178555f29d30fb7494cbc108d46b724f39684fbfb4751601e271170ce2ce4a602d0f0b96726b03baf7bd3032f12b75df164bbe594153d946aa0763486d"
     },
-    "ironbar": {
-      "url": "https://codeload.github.com/JakeStanger/ironbar/tar.gz/cac7d684ddc7e26315b4e269b93143ab92c71757",
-      "sha512": "8ea1634af954c61b68fdcb450e7ffea4910abc40dc6f945d4d02708a373e89913a7647aab35c4925d35b25930c6014c6a9b45eea82c9dd71e5ad60ad9c6a3234"
-    },
     "connman": {
       "url": "https://www.kernel.org/pub/linux/network/connman/connman-2.0.tar.xz",
       "sha512": "c63e6097e5fcbfb49b427d3131e8e67f627461ec21ef5e46b5bb8a4c68fd1ac0cf7cbc332c322de0f9db1aa643832f42057bae9d40d0686077f43c1f593435d8"
@@ -63,19 +59,6 @@
     "riscv64": {
       "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/riscv64/alpine-minirootfs-3.24.4-riscv64.tar.gz",
       "sha256": "010683db6c73b3ad1c334fc8f93f64ae748ef67ae6d69e964929aeaf8517bff3"
-    }
-  },
-  "ironbar": {
-    "version": "0.19.1",
-    "commit": "cac7d684ddc7e26315b4e269b93143ab92c71757",
-    "features": "battery,cli,clock,config+toml,custom,launcher,tray",
-    "opt_level": "s",
-    "lto": "thin",
-    "codegen_units": 8,
-    "panic": "abort",
-    "patches": {
-      "ironbar-output-environment.patch": "7aeb5ad98107dee258c9f5df3dbc6a79181ee3d138753dfe607de033f3d3f8cbb916b9d6712d686a9696764c6b747bf8f655babb7a33cb239533460579b6c45d",
-      "ironbar-symbolic-icons.patch": "274f958aee0a9e361f5223de5ebe03c46621a93d00e08b74aafbd45e636b49b28dbaf492fa371476806a01828a02bca30ff6b14a2926a005d0b2c9f218e824a3"
     }
   },
   "aports_commit": "3db0a46d5ef507f6faaa9c0c0fc52181a277e9b7",

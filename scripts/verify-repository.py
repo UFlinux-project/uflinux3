@@ -83,10 +83,10 @@ def main():
         # the first release. Initial publication has no previous version to test.
         initial = versions[-1]
         apk('add', 'uflinux-defaults=' + initial)
-        system_config = root / 'etc/xdg/ironbar/style.css'
+        system_config = root / 'etc/xdg/labwc/rc.xml'
         marker = '\n/* repository client preservation test */\n'
         system_config.write_text(system_config.read_text() + marker)
-        user_config = builder.put('home/validation/.config/ironbar/config.toml', '# personal override\n')
+        user_config = builder.put('home/validation/.config/labwc/rc.xml', '# personal override\n')
         # Normal world entries are unversioned. Remove the test's initial pin so
         # apk upgrade can select the current version from the signed index.
         world = root / 'etc/apk/world'

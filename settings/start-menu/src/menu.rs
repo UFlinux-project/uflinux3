@@ -14,7 +14,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-const BAR_HEIGHT: i32 = 40;
+const BAR_HEIGHT: i32 = crate::popup::PANEL_HEIGHT;
 const START_WIDTH: i32 = 56;
 
 pub struct Menu {
@@ -449,6 +449,7 @@ impl Menu {
                             "UFLINUX_START_MENU_FIRST_FRAME_MS={:.1}",
                             began.elapsed().as_secs_f64() * 1000.0
                         );
+                        eprintln!("UFLINUX_START_PAINT_US={}", glib::monotonic_time());
                         if let Some(id) = target.borrow_mut().take() {
                             clock.disconnect(id);
                         }
@@ -500,7 +501,16 @@ impl Menu {
                 }) {
                     gesture.set_state(gtk::EventSequenceState::Denied);
                 } else {
+                    // Keep the surface mapped through release so the panel button
+                    // beneath it cannot receive the second half of the click.
                     gesture.set_state(gtk::EventSequenceState::Claimed);
+                }
+            }
+        });
+        let weak = Rc::downgrade(self);
+        gesture.connect_released(move |gesture, _, _, _| {
+            if gesture.current_sequence().is_none() || gesture.handles_sequence(gesture.current_sequence().as_ref()) {
+                if let Some(menu) = weak.upgrade() {
                     menu.hide();
                 }
             }
@@ -645,6 +655,9 @@ impl Menu {
                 if !menu.closed.get() && menu.epoch.get() == epoch {
                     match result {
                         Ok(data) => {
+                            if let Some(app) = menu.app.upgrade() {
+                                app.catalog_changed(&data);
+                            }
                             menu.catalog.replace(data);
                             menu.loaded.set(true);
                             menu.rebuild();
@@ -1000,7 +1013,7 @@ impl Menu {
                 menu.busy.set(false);
                 menu.card.set_sensitive(true);
                 if let Some(app) = menu.app.upgrade() {
-                    app.agent.borrow_mut().take();
+                    app.release_agent();
                 }
                 if menu.presentation.get() != presentation || !menu.window.is_visible() {
                     return;
