@@ -85,7 +85,7 @@ jobs:
         with:
           path: .cache/build/${{ matrix.package }}
           key: ${{ steps.cache.outputs.cache-primary-key }}
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: package-shard-${{ matrix.arch }}-${{ matrix.package }}
           retention-days: 7
@@ -141,13 +141,13 @@ jobs:
         run: sudo --preserve-env=SOURCE_DATE_EPOCH,APK_REPOSITORY_URL,GITHUB_REPOSITORY,GITHUB_SHA python3 tests/signing-smoke.py --arch x86_64 --version '${{ needs.checks.outputs.version }}'
       - name: Upload verification diagnostics on failure
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: diagnostics-${{ matrix.arch }}
           path: out/checks/${{ matrix.arch }}
           if-no-files-found: ignore
           retention-days: 7
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: image-${{ matrix.arch }}
           retention-days: 7
@@ -159,7 +159,7 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           overwrite: true
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: inputs-${{ matrix.arch }}
           retention-days: 7
@@ -193,7 +193,7 @@ jobs:
           network=()
           if [ '${{ matrix.arch }}' = x86_64 ] && [ '${{ matrix.mode }}' = bios ]; then network+=(--network-tests); fi
           python3 scripts/vm-test.py --arch '${{ matrix.arch }}' --mode '${{ matrix.mode }}' --iso 'out/images/${{ matrix.arch }}/uflinux-${{ needs.checks.outputs.version }}-${{ matrix.arch }}.iso' "${network[@]}"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: vm-${{ matrix.arch }}-${{ matrix.mode }}
@@ -245,7 +245,7 @@ jobs:
           subject-path: out/uflinux-*.tar.gz
       - name: Upload inputs to the unpublished draft
         run: gh release upload "v$VERSION" --clobber out/uflinux-*.tar.gz
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: inputs-manifest-${{ matrix.arch }}
           retention-days: 7
@@ -325,7 +325,7 @@ jobs:
             if [ "$attempt" -eq 3 ]; then exit 1; fi
             sleep 10
           done
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: published-repository-check
