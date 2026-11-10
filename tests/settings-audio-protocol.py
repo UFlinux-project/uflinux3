@@ -18,7 +18,7 @@ def call(method, action=None):
 def execute(action): return call('Execute', action)
 def state(): return call('GetState')['audio']
 def wait(predicate):
-    for _ in range(100):
+    for _ in range(600):
         snapshot=state();value=predicate(snapshot)
         if value: return value
         time.sleep(0.05)
@@ -45,7 +45,7 @@ try:
             except (RuntimeError,LookupError): pass
         return None
     def wait_control(name):
-        for _ in range(100):
+        for _ in range(600):
             while GLib.MainContext.default().pending(): GLib.MainContext.default().iteration(False)
             item=find_control(name)
             if item: return item
@@ -65,7 +65,14 @@ try:
         raise AssertionError('Control has no accessible action')
     click(wait_control('Choose output device'))
     click(wait_control('UFLinux-Alternate-Output'))
+    for _ in range(600):
+        while GLib.MainContext.default().pending(): GLib.MainContext.default().iteration(False)
+        if not find_control('UFLinux-Alternate-Output'): break
+        time.sleep(.05)
+    else: raise AssertionError('Output selector did not close after selection')
     wait(lambda s:s['default_output']=='uflinux_alternate')
+    # The service state can update before the GTK client has processed the
+    # signal. Wait for the selector to reflect the new default as well.
     click(wait_control('Choose output device'))
     wait_control('UFLinux-Alternate-Output (selected)')
     # Close the popover and panel before continuing the backend checks.

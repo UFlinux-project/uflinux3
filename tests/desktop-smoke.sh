@@ -29,12 +29,22 @@ RC
 pids=""
 cleanup() {
 	for pid in $pids; do kill "$pid" 2>/dev/null || :; done
-	if [ -f /tmp/uflinux-settings-smoke-results/service.pid ]; then
-		kill "$(cat /tmp/uflinux-settings-smoke-results/service.pid)" 2>/dev/null || :
-	fi
-	for daemon in pipewire pipewire-pulse wireplumber; do
-		pkill -u "$(id -u)" -x "$daemon" 2>/dev/null || :
-	done
+	# Under qemu-user the host process name is qemu-*, not the guest daemon
+	# name. Restrict cleanup to this session's unique runtime directory.
+	python3 - <<'PY'
+import os, signal
+from pathlib import Path
+runtime = ('XDG_RUNTIME_DIR=' + os.environ['XDG_RUNTIME_DIR']).encode()
+for process in Path('/proc').glob('[0-9]*'):
+    try:
+        pid = int(process.name)
+        if pid in (os.getpid(), os.getppid()) or process.stat().st_uid != os.getuid():
+            continue
+        if runtime in (process / 'environ').read_bytes().split(b'\0'):
+            os.kill(pid, signal.SIGTERM)
+    except (OSError, ValueError):
+        pass
+PY
 	wait 2>/dev/null || :
 	rm -rf "$XDG_RUNTIME_DIR"
 }
@@ -54,13 +64,33 @@ swaybg -c '#102c46' -i /usr/share/backgrounds/uflinux/Dark_Ivy.jpg -m fill > "$r
 background=$!; pids="$pids $background"
 mako > "$results/notifications.log" 2>&1 &
 notifications=$!; pids="$pids $notifications"
+# A running process is not necessarily registered on D-Bus yet. Calling
+# notify-send too early can trigger a competing D-Bus activation of mako.
+for _attempt in $(seq 1 120); do
+	if gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.NameHasOwner org.freedesktop.Notifications | grep -q true; then break; fi
+	if ! kill -0 "$notifications" 2>/dev/null; then cat "$results/notifications.log" >&2; exit 1; fi
+	sleep 1
+done
+if ! gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.NameHasOwner org.freedesktop.Notifications | grep -q true; then
+	cat "$results/notifications.log" >&2
+	echo 'Notification service did not register on D-Bus' >&2
+	exit 1
+fi
 /usr/libexec/pipewire-launcher > "$results/audio.log" 2>&1 &
 for _attempt in $(seq 1 30); do
 	pactl info > "$results/pulse.txt" 2>/dev/null && break
 	sleep 1
 done
 pactl load-module module-null-sink sink_name=uflinux_test > "$results/audio-module.txt"
-pactl set-default-sink uflinux_test
+for _attempt in $(seq 1 30); do
+	if pactl set-default-sink uflinux_test 2> "$results/audio-default-error.txt" &&
+		pactl info > "$results/pulse.txt" && grep -Fxq 'Default Sink: uflinux_test' "$results/pulse.txt"; then break; fi
+	sleep 1
+done
+if ! grep -Fxq 'Default Sink: uflinux_test' "$results/pulse.txt"; then
+	cat "$results/audio-default-error.txt" "$results/audio.log" >&2
+	exit 1
+fi
 for _attempt in $(seq 1 10); do
 	pactl set-sink-volume uflinux_test 50%
 	pactl get-sink-volume uflinux_test > "$results/volume.txt"

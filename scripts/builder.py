@@ -333,6 +333,9 @@ class Builder:
     def mounted(self):
         try:
             self.bind("/dev", "dev")
+            # Do not propagate nested device binds into the host's /dev or other
+            # build roots when the runner uses shared mount propagation.
+            run(["mount", "--make-private", self.root / "dev"])
             # Container runtimes may bind these nodes individually over placeholders.
             for device in ("null", "zero", "full", "random", "urandom", "tty"):
                 self.bind("/dev/" + device, "dev/" + device)
@@ -530,7 +533,7 @@ class Builder:
     def image(self):
         self.tools("xorriso", "mtools", "squashfs-tools", "zstd", "util-linux", "syslinux" if self.args.arch in {"x86", "x86_64"} else "util-linux")
         if self.args.arch == "s390x":
-            self.chroot("apk", "add", "s390-tools")
+            self.chroot("apk", "add", "s390-tools", "file")
         elif self.args.arch == "ppc64le":
             self.chroot("apk", "add", "grub", "grub-ieee1275")
         for name, digest in LOCK["image"]["patches"].items():
