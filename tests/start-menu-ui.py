@@ -202,7 +202,10 @@ try:
     command('wtype', '-M', 'logo', '-k', 'i', '-m', 'logo')
     time.sleep(.3); assert not menu(), 'Super+I incorrectly triggered the modifier-only menu'
     open_menu()
-    click(find('Settings', 'button') or find('Settings', 'push button'))
+    settings_shortcut = wait(lambda: next((item for item in tree(menu())
+        if item.name == 'Settings' and item.getRoleName() in ('button', 'push button')), None),
+        'Settings shortcut is missing from Start')
+    click(settings_shortcut)
     wait(lambda: not menu(), 'Settings shortcut did not dismiss Start')
     wait(lambda: find('Settings', 'frame'), 'Settings shortcut did not open Settings')
     command('uflinux-desktop', '--start-menu', '--output', 'HEADLESS-1')
