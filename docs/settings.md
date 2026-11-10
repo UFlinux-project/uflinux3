@@ -152,6 +152,8 @@ limitations follow the packaged compositor's capabilities. See the
 [labwc configuration manual](https://labwc.github.io/labwc-config.5).
 
 The session wrapper probes hardware Vulkan, then hardware OpenGL, then pixman.
+It skips Vulkan on Sandy Bridge, Ivy Bridge and Bay Trail Intel graphics because
+their Vulkan support is incomplete.
 It skips software Vulkan, respects explicit renderer overrides and limits startup
 fallback attempts. A normal logout or a crash after desktop startup does not
 restart the session with another renderer. On software rendering, GTK uses Cairo

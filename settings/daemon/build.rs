@@ -1,5 +1,6 @@
 fn main() {
     println!("cargo:rerun-if-changed=src/renderer.c");
+    println!("cargo:rerun-if-changed=src/renderer_ids.h");
     let vk = pkg_config::Config::new()
         .cargo_metadata(false)
         .probe("vulkan")

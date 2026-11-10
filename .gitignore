@@ -4,6 +4,11 @@
 /out-settings/
 /dist/
 /settings/*
+!/settings/daemon/
+/settings/daemon/*
+!/settings/daemon/src/
+/settings/daemon/src/*
+!/settings/daemon/src/renderer_ids.h
 !/settings/core/
 /settings/core/*
 !/settings/core/src/

@@ -73,15 +73,23 @@ def find(ssid):
     return next((s for s in services() if s['name'] == ssid), None)
 
 def discover(ssid):
-    for attempt in range(80):
-        if attempt%8==0:
-            try:request({'action':'scan'})
+    deadline = time.monotonic() + 90
+    next_scan = 0
+    last_scan_error = None
+    while time.monotonic() < deadline:
+        if time.monotonic() >= next_scan:
+            try:
+                request({'action':'scan'})
+                last_scan_error = None
             except AssertionError as error:
                 if not any(word in str(error) for word in ('Busy','InProgress','in progress','NotSupported')):raise
+                last_scan_error = str(error)
+            next_scan = time.monotonic() + 4
         service=find(ssid)
         if service:return service
         time.sleep(0.5)
-    raise AssertionError('Could not discover '+ssid)
+    raise AssertionError('Could not discover '+ssid+'; last scan error: '+str(last_scan_error)+
+                         '; visible services: '+str([s['name'] for s in services()]))
 
 def connected(ssid):
     s = find(ssid)
@@ -192,6 +200,12 @@ try:
                 config += f'wpa_key_mgmt=WPA-EAP\nieee8021x=1\neap_server=1\neap_user_file={root}/users\nca_cert={root}/ca.pem\nserver_cert={root}/server.pem\nprivate_key={root}/server.key\n'
             (root/'hostapd.conf').write_text(config)
             hostapd=spawn('hostapd-'+mode,['hostapd',str(root/'hostapd.conf')])
+            def ap_ready():
+                output = (root/('hostapd-'+mode+'.log')).read_text()
+                if hostapd.poll() is not None:
+                    raise AssertionError('hostapd exited before enabling '+ssid+': '+output)
+                return 'AP-ENABLED' in output
+            wait_for(ap_ready, 'hostapd AP-ENABLED for '+ssid)
             if mode == 'hidden':
                 system({'operation':'hidden-profile','ssid':ssid,'passphrase':'uflinux-test-password'})
             elif mode in ('PEAP','TTLS','TLS'):

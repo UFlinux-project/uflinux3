@@ -1,4 +1,5 @@
 /* A short-lived hardware probe: never pick lavapipe/llvmpipe automatically. */
+#include "renderer_ids.h"
 #include <vulkan/vulkan.h>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -49,8 +50,9 @@ int uflinux_renderer_probe(void) {
                 for (uint32_t i=0; i<count; ++i) {
                     VkPhysicalDeviceProperties p;
                     vkGetPhysicalDeviceProperties(devices[i], &p);
-                    if (p.deviceType==VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ||
-                        p.deviceType==VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+                    if ((p.deviceType==VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ||
+                         p.deviceType==VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) &&
+                        !uflinux_legacy_intel_gpu(p.vendorID, p.deviceID)) {
                         vkDestroyInstance(instance, NULL);
                         return 2;
                     }
