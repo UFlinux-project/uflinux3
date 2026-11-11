@@ -1,71 +1,50 @@
-import os
+"""Keep the desktop supervisor inside the desktop binary.
+
+The restart loop used to be a shell script, which meant the session paid for a
+second interpreter to keep one window owner resident. Its behaviour is covered
+by `cargo test -p uflinux-desktop` (run by the package `check()`); what is
+asserted here is that the session still reaches that code and that nothing
+reintroduces the script.
+"""
 from pathlib import Path
-import subprocess
-import tempfile
-import time
 import unittest
 
+ROOT = Path(__file__).resolve().parents[1]
+AUTOSTART = ROOT / 'aports/uflinux/uflinux-autostart'
+RECIPE = ROOT / 'aports/uflinux-settings/APKBUILD'
+MAIN = ROOT / 'settings/desktop/src/main.rs'
+SUPERVISOR = ROOT / 'settings/desktop/src/supervisor.rs'
+LEGACY = ROOT / 'settings/desktop/data/uflinux-desktop-supervisor'
 
-SUPERVISOR = Path(__file__).resolve().parents[1] / 'settings/desktop/data/uflinux-desktop-supervisor'
 
+class DesktopSupervisorTests(unittest.TestCase):
+    def test_the_script_is_not_brought_back(self):
+        self.assertFalse(LEGACY.exists(), 'the shell supervisor was replaced by --supervise')
+        self.assertNotIn('uflinux-desktop-supervisor', RECIPE.read_text(),
+                         'the recipe packages a supervisor that no longer exists')
 
-class DesktopSupervisorTest(unittest.TestCase):
-    def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
-        self.compositor = subprocess.Popen(['sleep', '60'])
-        self.addCleanup(self.stop, self.compositor)
-        self.env = dict(os.environ, LABWC_PID=str(self.compositor.pid),
-                        PATH=str(self.root) + os.pathsep + os.environ['PATH'],
-                        FIXTURE=str(self.root / 'starts'))
+    def test_the_session_uses_the_builtin_supervisor(self):
+        autostart = AUTOSTART.read_text()
+        self.assertIn('uflinux-desktop --supervise &', autostart,
+                      'the session starts the desktop without supervision')
+        # Supervision must not hold the session open past logout.
+        self.assertIn('wait', autostart)
 
-    @staticmethod
-    def stop(process):
-        if process.poll() is None:
-            process.terminate()
-            process.wait(timeout=5)
+    def test_supervision_runs_before_any_display_connection(self):
+        main = MAIN.read_text()
+        self.assertIn('mod supervisor;', main)
+        body = main.split('fn main() {', 1)[1]
+        self.assertLess(body.index('--supervise'), body.index('Taskbar::default()'),
+                        'supervision initializes GTK or the taskbar first')
+        self.assertIn('supervisor::run()', body)
 
-    def desktop(self, body):
-        path = self.root / 'uflinux-desktop'
-        path.write_text('#!/bin/sh\n' + body + '\n')
-        path.chmod(0o755)
-
-    def supervisor(self):
-        process = subprocess.Popen(['sh', str(SUPERVISOR)], env=self.env)
-        self.addCleanup(self.stop, process)
-        return process
-
-    def wait_for_starts(self, count):
-        deadline = time.monotonic() + 8
-        while time.monotonic() < deadline:
-            if (self.root / 'starts').exists() and len((self.root / 'starts').read_text().splitlines()) >= count:
-                return
-            time.sleep(.02)
-        self.fail(f'desktop did not start {count} times')
-
-    def test_restarts_failures_then_stops_after_clean_exit(self):
-        self.desktop('echo start >> "$FIXTURE"\n[ "$(wc -l < "$FIXTURE")" -ge 3 ]')
-        start = time.monotonic()
-        process = self.supervisor()
-        self.assertEqual(process.wait(timeout=8), 0)
-        self.assertGreaterEqual(time.monotonic() - start, 2.8)
-        self.assertEqual(len((self.root / 'starts').read_text().splitlines()), 3)
-
-    def test_stops_resident_when_compositor_exits(self):
-        self.desktop('echo start >> "$FIXTURE"\nexec sleep 60')
-        process = self.supervisor()
-        self.wait_for_starts(1)
-        self.compositor.terminate()
-        self.compositor.wait(timeout=5)
-        self.assertEqual(process.wait(timeout=4), 0)
-        self.assertEqual(len((self.root / 'starts').read_text().splitlines()), 1)
-
-    def test_requires_compositor_pid(self):
-        environment = dict(self.env)
-        environment.pop('LABWC_PID')
-        process = subprocess.run(['sh', str(SUPERVISOR)], env=environment, capture_output=True)
-        self.assertNotEqual(process.returncode, 0)
+    def test_supervision_is_reachable_from_the_packaged_binary(self):
+        recipe = RECIPE.read_text()
+        self.assertIn('install -Dm755 "$target/uflinux-desktop" "$pkgdir/usr/bin/uflinux-desktop"',
+                      recipe)
+        self.assertIn('amove usr/bin/uflinux-desktop', recipe,
+                      'the desktop binary is not in the package the session runs')
+        self.assertTrue(SUPERVISOR.is_file())
 
 
 if __name__ == '__main__':

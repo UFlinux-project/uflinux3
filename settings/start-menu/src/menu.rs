@@ -380,6 +380,7 @@ impl Menu {
         if gtk4_layer_shell::is_supported() {
             self.window.set_keyboard_mode(KeyboardMode::None);
         }
+        self.release_surface();
         self.dismiss_confirmation();
         self.all.set(false);
         self.search.set_text("");
@@ -391,6 +392,16 @@ impl Menu {
         self.prepare();
         if let Some(app) = self.app.upgrade() {
             app.report_status();
+        }
+    }
+    // Unmapping alone keeps the Wayland surface, the renderer and its back
+    // buffer, so a hidden shell would hold a full-output allocation for the
+    // rest of the session. Unrealizing releases all three; GTK realizes the
+    // window again on the next presentation and gtk4-layer-shell recreates the
+    // layer surface from the state already configured for this window.
+    fn release_surface(&self) {
+        if self.window.is_realized() {
+            gtk::prelude::WidgetExt::unrealize(&self.window);
         }
     }
     // Build and allocate the default screen without mapping a Wayland surface.
@@ -463,6 +474,14 @@ impl Menu {
     fn wire(self: &Rc<Self>) {
         let weak = Rc::downgrade(self);
         self.window.connect_realize(move |window| {
+            // Cairo has no shadow fast path: the card's box-shadow costs a
+            // full-output surface allocation, so opt out when software-rendering.
+            if window
+                .renderer()
+                .is_some_and(|renderer| renderer.is::<gtk::gsk::CairoRenderer>())
+            {
+                window.add_css_class("software-renderer");
+            }
             if let Some(surface) = window.surface() {
                 let target = weak.clone();
                 surface.connect_layout(move |_, w, h| {
@@ -509,7 +528,9 @@ impl Menu {
         });
         let weak = Rc::downgrade(self);
         gesture.connect_released(move |gesture, _, _, _| {
-            if gesture.current_sequence().is_none() || gesture.handles_sequence(gesture.current_sequence().as_ref()) {
+            if gesture.current_sequence().is_none()
+                || gesture.handles_sequence(gesture.current_sequence().as_ref())
+            {
                 if let Some(menu) = weak.upgrade() {
                     menu.hide();
                 }

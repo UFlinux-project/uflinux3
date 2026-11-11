@@ -49,7 +49,22 @@ daemon, desktop supervisor, and its descendants for the replacement. They exclud
 compositor on both sides. The privileged helper is not active in this fixture.
 Use `scripts/desktop-memory-summary.py` with three `--baseline` and three
 `--replacement` paths to compare matching sessions. It rejects inconsistent
-fixtures, binaries, or insufficient cycle and idle durations.
+fixtures, binaries, or insufficient cycle and idle durations. Because the
+fixture hashes are part of that comparison, editing a device or tray fixture
+between sessions of one set makes the set incomparable; re-collect the sessions
+that predate the edit rather than mixing them.
+
+The memory work in the unified desktop — releasing an unmapped popup surface,
+decoding the panel logo at its displayed size, a built-in supervisor instead of
+a shell wrapper and a separate launcher process, deferred quick-settings trees,
+a bounded allocator, and trimming on hide — passed the memory and idle-CPU
+checks with three sessions per implementation. Median process-set proportional
+size fell from 86.8 to 73.5 MiB once settled and from 89.2 to 75.9 MiB after one
+pass through all four menus, both a 15% reduction against a 10% requirement. No
+replacement session retained more than 0.4 MiB across 100 cycles, no session grew
+its descriptor count, and desktop idle CPU peaked at 0.067%. Those figures come
+from one headless-pixman environment on one kernel and are not a release
+approval.
 
 This collector does not measure interactive frame latency, widget or D-Bus
 subscription growth, real audio devices, multi-architecture builds, or an

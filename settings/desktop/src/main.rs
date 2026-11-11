@@ -1,18 +1,24 @@
 mod app;
 mod auth;
-mod clock_watch;
 #[path = "../../start-menu/src/catalog.rs"]
 mod catalog;
+mod clock_watch;
 #[path = "../../start-menu/src/menu.rs"]
 mod menu;
 mod panel;
 #[path = "../../shared/popup.rs"]
 mod popup;
+mod supervisor;
 mod tray;
 mod tray_menu;
 #[path = "../../start-menu/src/widgets.rs"]
 mod widgets;
 fn main() {
+    // Supervision has no use for a display connection, so it leaves before GTK
+    // or the taskbar integration can pull either into the process.
+    if std::env::args().any(|argument| argument == "--supervise") {
+        std::process::exit(supervisor::run());
+    }
     let _taskbar = uflinux_desktop::taskbar::Taskbar::default();
     if !forward() {
         app::run();

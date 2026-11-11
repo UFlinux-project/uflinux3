@@ -41,6 +41,9 @@ pub struct App {
     desktop_quicks: RefCell<std::collections::HashMap<String, DesktopQuick>>,
     desktop_monitor: RefCell<Option<(gtk::gdk::Monitor, glib::SignalHandlerId)>>,
     desktop_ddc_discovered: Cell<bool>,
+    /// Set by the host process that owns the authorization agent. In desktop
+    /// mode that process registers the agent only once something needs it.
+    pub agent_request: RefCell<Option<Rc<dyn Fn()>>>,
 }
 pub const PAGES: &[(&str, &str)] = &[
     ("network", "Network"),
@@ -100,6 +103,7 @@ pub fn run() {
             desktop_quicks: RefCell::new(std::collections::HashMap::new()),
             desktop_monitor: RefCell::new(None),
             desktop_ddc_discovered: Cell::new(false),
+            agent_request: RefCell::new(None),
         });
         let action = gio::SimpleAction::new("close-quick", None);
         let weak = Rc::downgrade(&app);
@@ -199,9 +203,18 @@ impl App {
             desktop_quicks: RefCell::new(std::collections::HashMap::new()),
             desktop_monitor: RefCell::new(None),
             desktop_ddc_discovered: Cell::new(false),
+            agent_request: RefCell::new(None),
         });
         app.connect();
         app
+    }
+
+    /// Ask the host process to register an authorization agent. Standalone
+    /// Settings activates the desktop service itself, so it has no hook.
+    fn request_agent(&self) {
+        if let Some(request) = self.agent_request.borrow().as_ref() {
+            request();
+        }
     }
 
     pub fn hide_quick(self: &Rc<Self>) {
@@ -209,6 +222,13 @@ impl App {
         if let Some(window) = window {
             if self.desktop_mode {
                 window.set_visible(false);
+                // Unmapping alone keeps the Wayland surface, the renderer and its
+                // back buffer, so a hidden shell would hold a full-output
+                // allocation for the rest of the session. Unrealizing releases all
+                // three; the shell realizes again when it is presented.
+                if window.is_realized() {
+                    gtk::prelude::WidgetExt::unrealize(&window);
+                }
                 if *self.quick_panel.borrow() == "network" {
                     let request = self
                         .state
@@ -319,7 +339,12 @@ impl App {
         }
         self.error(state.error.as_deref().unwrap_or_default());
         if state.network.authentication.is_some() {
-            if self.desktop_mode { self.show_auth(); }
+            // Answering the request can require polkit, so the agent has to be
+            // registered before the passphrase is submitted.
+            if self.desktop_mode {
+                self.request_agent();
+                self.show_auth();
+            }
         } else {
             self.auth_id.set(0);
             if let Some(area) = &*self.quick_auth.borrow() {
@@ -375,20 +400,34 @@ impl App {
         }
         let weak = Rc::downgrade(self);
         let desktop_mode = self.desktop_mode;
+        if desktop_mode {
+            self.request_agent();
+        }
         glib::MainContext::default().spawn_local(async move {
             let result = async {
                 if !desktop_mode {
-                    let connection = gio::bus_get_future(gio::BusType::Session).await
+                    let connection = gio::bus_get_future(gio::BusType::Session)
+                        .await
                         .map_err(|error| error.to_string())?;
-                    connection.call_future(
-                        Some("org.freedesktop.DBus"), "/org/freedesktop/DBus",
-                        "org.freedesktop.DBus", "StartServiceByName",
-                        Some(&("org.uflinux.Desktop", 0u32).to_variant()), None,
-                        gio::DBusCallFlags::NONE, 5000,
-                    ).await.map_err(|error| format!("Could not start desktop authorization agent: {error}"))?;
+                    connection
+                        .call_future(
+                            Some("org.freedesktop.DBus"),
+                            "/org/freedesktop/DBus",
+                            "org.freedesktop.DBus",
+                            "StartServiceByName",
+                            Some(&("org.uflinux.Desktop", 0u32).to_variant()),
+                            None,
+                            gio::DBusCallFlags::NONE,
+                            5000,
+                        )
+                        .await
+                        .map_err(|error| {
+                            format!("Could not start desktop authorization agent: {error}")
+                        })?;
                 }
                 bus::execute(&action).await
-            }.await;
+            }
+            .await;
             if let Some(widget) = button {
                 widget.set_sensitive(true);
             }
@@ -523,7 +562,7 @@ impl App {
                             "audio" => "sound volume microphone speakers headphones mute",
                             "power" => "battery energy power saver balanced performance suspend sleep button shutdown tlp",
                             "default-apps" => "browser mail email files documents music video associations",
-                            "datetime" => "clock timezone calendar ntp synchronization",
+                            "datetime" => "clock timezone calendar sntp synchronization",
                             "appearance" => "wallpaper background picture color",
                             "about" => "system information memory processor cpu kernel version storage graphics",
                             _ => "",

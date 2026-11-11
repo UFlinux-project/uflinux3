@@ -34,7 +34,7 @@ for entry in \
 	'udev-settle sysinit' 'hwdrivers sysinit' 'modloop sysinit' \
 	'uflinux-splash sysinit' 'uflinux-splash-stop default' 'hwclock boot' 'modules boot' 'sysctl boot' 'hostname boot' \
 	'bootmisc boot' 'syslog boot' 'dbus default' 'elogind default' \
-	'iwd default' 'connman default' 'ntpd default' 'tlp default' 'uflinux-acpid default' 'uflinux-routes default' \
+	'iwd default' 'connman default' 'tlp default' 'uflinux-acpid default' 'uflinux-routes default' \
 	'uflinux-live default' 'greetd default' \
 	'killprocs shutdown' 'mount-ro shutdown'; do
 	# Intentional service/runlevel pair splitting.

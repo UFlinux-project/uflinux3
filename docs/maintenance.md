@@ -82,11 +82,14 @@ ConnMan is also a maintained custom package. Track Alpine's ConnMan security
 updates and upstream releases, update its locked source/hash and package revision,
 and rebase the small iwd credential-delegation patch before release. Its private
 driver flag must remain confined to iwd; do not bypass authentication or CA/server
-verification. Re-run the real PEAP, TTLS and TLS tests, including server-domain
+verification. Keep the package's D-Bus rules: group netdev may control ConnMan but
+may not mutate `net.connman.Clock`, and the deny has to stay inside the netdev
+policy because D-Bus applies console and context policies in a fixed order.
+Re-run the real PEAP, TTLS and TLS tests, including server-domain
 mismatch rejection, before publishing a changed network stack. The desktop pins
 this tested revision so an unrelated official package cannot silently drop the fix.
 
-The x86_64 native VM job exercises simulated Wi-Fi and BusyBox NTP before disk
+The x86_64 native VM job exercises simulated Wi-Fi and ConnMan SNTP before disk
 installation. Both x86_64 firmware modes reboot the installed desktop with
 512 MiB and no swap. Publication requires these results for the exact ISO hash,
 in addition to all seven package/desktop and architecture-specific boot reports.

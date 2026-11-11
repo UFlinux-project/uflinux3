@@ -205,10 +205,10 @@ pub struct Wallpaper {
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct DateTime {
     pub timezone: String,
-    pub ntp_enabled: bool,
-    pub ntp_running: bool,
+    pub time_sync_enabled: bool,
+    pub sntp_running: bool,
     pub synchronized: Option<bool>,
-    pub servers: Vec<String>,
+    pub timeservers: Vec<String>,
     pub utc_seconds: i64,
 }
 
@@ -372,9 +372,8 @@ pub enum SystemAction {
     SetTime {
         utc_seconds: i64,
     },
-    SetNtp {
+    SetTimeSync {
         enabled: bool,
-        servers: Vec<String>,
     },
     DdcDiscover,
     DdcBrightness {

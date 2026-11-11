@@ -137,7 +137,7 @@ pub fn run() -> Result<()> {
             let Some(app)=weak.upgrade() else{return glib::ControlFlow::Break;};
             let next=clock::status();
             let changed={let view=app.view.borrow();let old=&view.datetime;
-                old.timezone!=next.timezone||old.ntp_enabled!=next.ntp_enabled||old.ntp_running!=next.ntp_running||old.synchronized!=next.synchronized||old.servers!=next.servers};
+                old.timezone!=next.timezone||old.time_sync_enabled!=next.time_sync_enabled||old.sntp_running!=next.sntp_running||old.synchronized!=next.synchronized||old.timeservers!=next.timeservers};
             app.view.borrow_mut().datetime=next;if changed{app.publish();}
             app.refresh_power();
             glib::ControlFlow::Continue
@@ -511,7 +511,7 @@ impl App {
                 }
                 if matches!(
                     operation,
-                    SystemAction::SetNtp { .. }
+                    SystemAction::SetTimeSync { .. }
                         | SystemAction::SetTimezone { .. }
                         | SystemAction::SetTime { .. }
                 ) {

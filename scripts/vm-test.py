@@ -233,7 +233,7 @@ def main():
             guest(child, "apk info -e uflinux uflinux-desktop labwc")
             guest(child, '. /etc/rc.conf.d/uflinux.conf; test "$rc_parallel" = YES; apk info -e linux-firmware')
             guest(child, "test -x /usr/bin/uflinux-desktop")
-            guest(child, "apk info -e connman iwd busybox-openrc uflinux-settings uflinux-settings-daemon uflinux-settings-system; connmanctl state; connmanctl services; rc-service ntpd status; ! pgrep -x NetworkManager; ! pgrep -x chronyd; ! pgrep -x openntpd; ! pgrep -x wpa_supplicant")
+            guest(child, "apk info -e connman iwd busybox-openrc uflinux-settings uflinux-settings-daemon uflinux-settings-system; connmanctl state; connmanctl services; ! pgrep -x ntpd; ! pgrep -x NetworkManager; ! pgrep -x chronyd; ! pgrep -x openntpd; ! pgrep -x wpa_supplicant")
             if args.arch in {"x86", "x86_64", "aarch64"}:
                 guest(child, "for n in $(seq 1 30); do pgrep -x labwc >/dev/null && pgrep -f '[u]flinux-desktop --daemon' >/dev/null && break; sleep 1; done; if ! pgrep -x labwc || ! pgrep -f '[u]flinux-desktop --daemon'; then rc-status; cat /var/log/messages; exit 1; fi")
             if args.arch == "x86_64":

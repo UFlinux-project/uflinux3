@@ -3,20 +3,29 @@ Date: Sun, 26 Dec 2021 01:19:49 +0100
 Subject: [PATCH] Adjust DBus rules for Alpine
 
 - Allow users in group netdev to control ConnMan using connmanctl.
+- Keep net.connman.Clock mutation root-only, so a netdev user cannot bypass
+  polkit by toggling automatic time synchronization directly.
 - Allow running OpenVPN plugin under user 'openvpn' instead of root.
 
 --- a/src/connman-dbus.conf
 +++ b/src/connman-dbus.conf
-@@ -8,6 +8,10 @@
+@@ -8,9 +8,14 @@
          <allow send_interface="net.connman.Counter"/>
          <allow send_interface="net.connman.Notification"/>
      </policy>
-+    <!-- Allow users in group netdev to control ConnMan using connmanctl. -->
+-    <policy at_console="true">
+-        <allow send_destination="net.connman"/>
+-    </policy>
++    <!-- Allow users in group netdev to control ConnMan using connmanctl.
++         The Clock deny must live in this policy, after the allow: at_console
++         and context policies are applied in a fixed order and would otherwise
++         re-allow Clock mutation for a console session. -->
 +    <policy group="netdev">
 +        <allow send_destination="net.connman"/>
++        <deny send_destination="net.connman" send_interface="net.connman.Clock" send_member="SetProperty"/>
 +    </policy>
-     <policy at_console="true">
-         <allow send_destination="net.connman"/>
+     <policy context="default">
+         <deny send_destination="net.connman"/>
      </policy>
 --- a/vpn/vpn-dbus.conf
 +++ b/vpn/vpn-dbus.conf

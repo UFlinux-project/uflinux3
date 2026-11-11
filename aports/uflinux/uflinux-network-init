@@ -2,11 +2,20 @@
 set -eu
 umask 077
 mkdir -p /var/lib/connman
-if [ ! -f /var/lib/connman/settings ]; then
-	cat > /var/lib/connman/settings <<'EOF'
+settings=/var/lib/connman/settings
+# ConnMan rewrites this file itself, so the migration below must run only once.
+migrated=/var/lib/connman/.uflinux-time-auto
+if [ ! -f "$settings" ]; then
+	cat > "$settings" <<'EOF'
 [global]
 OfflineMode=false
-TimeUpdates=manual
+TimeUpdates=auto
 TimezoneUpdates=manual
 EOF
+elif [ ! -f "$migrated" ]; then
+	# ConnMan SNTP replaced BusyBox ntpd as the clock writer. An image installed
+	# before the switch recorded 'manual', which would leave nobody maintaining
+	# the clock. TimezoneUpdates stays manual: Settings owns the timezone.
+	sed -i 's/^TimeUpdates=manual$/TimeUpdates=auto/' "$settings"
 fi
+touch "$migrated"

@@ -26,7 +26,8 @@ class ShardTests(unittest.TestCase):
             packages.mkdir(parents=True)
             upstream = {'uflinux-regreet': builder.LOCK['uflinux-regreet']['version'], 'connman': builder.LOCK['connman']['version'],
                         'uflinux-settings': builder.LOCK['settings']['version'], 'uflinux': '0.1.0'}[origin]
-            revision = '1' if origin == 'connman' else '0'
+            recipe = (builder.PROJECT / 'aports' / origin / 'APKBUILD').read_text()
+            revision = re.search(r'^pkgrel=([0-9]+)$', recipe, re.M)[1]
             version = upstream + '-r' + revision
             records, payloads = {}, {}
             for name in names:

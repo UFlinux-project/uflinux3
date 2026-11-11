@@ -43,7 +43,6 @@ package() {
 	install -Dm755 "$target/uflinux-installer" "$pkgdir/usr/bin/uflinux-installer"
 	install -Dm644 data/org.uflinux.Installer.desktop "$pkgdir/usr/share/applications/org.uflinux.Installer.desktop"
 	install -Dm755 "$target/uflinux-desktop" "$pkgdir/usr/bin/uflinux-desktop"
-	install -Dm755 desktop/data/uflinux-desktop-supervisor "$pkgdir/usr/libexec/uflinux-desktop-supervisor"
 	install -Dm644 desktop/data/org.uflinux.Desktop.service "$pkgdir/usr/share/dbus-1/services/org.uflinux.Desktop.service"
 	install -Dm755 "$target/uflinux-settings" "$pkgdir/usr/bin/uflinux-settings"
 	install -Dm755 "$target/uflinux-settingsctl" "$pkgdir/usr/bin/uflinux-settingsctl"
@@ -72,7 +71,7 @@ package() {
 desktop() {
 	pkgdesc="UFLinux panel, Start menu and quick controls"
 	depends="$pkgname-daemon=$pkgver-r$pkgrel $pkgname-system=$pkgver-r$pkgrel"
-	amove usr/bin/uflinux-desktop usr/libexec/uflinux-desktop-supervisor usr/share/dbus-1/services/org.uflinux.Desktop.service
+	amove usr/bin/uflinux-desktop usr/share/dbus-1/services/org.uflinux.Desktop.service
 }
 installer_ui() {
 	pkgdesc="Live UFLinux GTK4 installer"

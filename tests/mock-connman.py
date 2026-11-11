@@ -25,6 +25,11 @@ XML = """<node>
  <method name="Connect"/><method name="Disconnect"/><method name="Remove"/>
  <method name="SetProperty"><arg type="s" direction="in"/><arg type="v" direction="in"/></method>
  <signal name="PropertyChanged"><arg type="s"/><arg type="v"/></signal>
+</interface>
+<interface name="net.connman.Clock">
+ <method name="GetProperties"><arg type="a{sv}" direction="out"/></method>
+ <method name="SetProperty"><arg type="s" direction="in"/><arg type="v" direction="in"/></method>
+ <signal name="PropertyChanged"><arg type="s"/><arg type="v"/></signal>
 </interface></node>"""
 bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
 bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "RequestName",
@@ -36,6 +41,18 @@ state = "idle"
 favorite = False
 autoconnect = False
 configuration = {}
+# ConnMan persists the clock policy itself; the fixture keeps it in memory.
+time_updates = "auto"
+timezone_updates = "manual"
+timeservers = ["clock-fixture.invalid"]
+
+
+def clock_properties():
+    return {"Time": GLib.Variant("u", 1700000000),
+            "TimeUpdates": GLib.Variant("s", time_updates),
+            "TimezoneUpdates": GLib.Variant("s", timezone_updates),
+            "Timeservers": GLib.Variant("as", timeservers),
+            "TimeserverSynced": GLib.Variant("b", time_updates == "auto")}
 
 
 def properties():
@@ -46,7 +63,9 @@ def properties():
          "Ethernet": GLib.Variant("a{sv}", {"Interface": GLib.Variant("s", "wlan-test")}),
          "IPv4": GLib.Variant("a{sv}", {"Method": GLib.Variant("s", "dhcp"), "Address": GLib.Variant("s", "192.0.2.2")}),
          "IPv6": GLib.Variant("a{sv}", {"Method": GLib.Variant("s", "auto"), "Address": GLib.Variant("s", "2001:db8::2")}),
-         "Nameservers": GLib.Variant("as", ["192.0.2.1"])}
+         "Nameservers": GLib.Variant("as", ["192.0.2.1"]),
+         # Announced by DHCP: ConnMan prefers service timeservers over its fallback list.
+         "Timeservers": GLib.Variant("as", ["192.0.2.1"])}
     p.update(configuration)
     return p
 
@@ -58,7 +77,10 @@ def changed():
 
 def method(connection, sender, path, interface, name, args, invocation):
     global agent, powered, offline, state, favorite, autoconnect
-    if name == "GetProperties":
+    global time_updates, timezone_updates, timeservers
+    if name == "GetProperties" and interface == "net.connman.Clock":
+        invocation.return_value(GLib.Variant("(a{sv})", (clock_properties(),)))
+    elif name == "GetProperties":
         invocation.return_value(GLib.Variant("(a{sv})", ({"State": GLib.Variant("s", "ready" if state == "ready" else "idle"), "OfflineMode": GLib.Variant("b", offline)},)))
     elif name == "GetTechnologies":
         invocation.return_value(GLib.Variant("(a(oa{sv}))", ([(TECH, {"Type": GLib.Variant("s", "wifi"), "Powered": GLib.Variant("b", powered), "Connected": GLib.Variant("b", state == "ready")})],)))
@@ -69,7 +91,24 @@ def method(connection, sender, path, interface, name, args, invocation):
         invocation.return_value(None)
     elif name == "SetProperty":
         key, value = args.unpack()
-        if interface == "net.connman.Manager" and key == "OfflineMode":
+        if interface == "net.connman.Clock" and key == "TimeUpdates":
+            if value not in {"manual", "auto"}:
+                invocation.return_dbus_error("net.connman.Error.InvalidArguments", "Unknown clock policy")
+                return
+            time_updates = value
+        elif interface == "net.connman.Clock" and key == "TimezoneUpdates":
+            if value not in {"manual", "auto"}:
+                invocation.return_dbus_error("net.connman.Error.InvalidArguments", "Unknown clock policy")
+                return
+            timezone_updates = value
+        elif interface == "net.connman.Clock" and key == "Timeservers":
+            timeservers = value
+        elif interface == "net.connman.Clock":
+            # Real ConnMan refuses a manual clock write while synchronizing
+            # automatically, and never allows TimeserverSynced to be written.
+            invocation.return_dbus_error("net.connman.Error.InvalidArguments", "Fixture clock property is read-only")
+            return
+        elif interface == "net.connman.Manager" and key == "OfflineMode":
             offline = value
         elif interface == "net.connman.Technology" and key == "Powered":
             powered = value
@@ -120,7 +159,8 @@ def method(connection, sender, path, interface, name, args, invocation):
 
 
 node = Gio.DBusNodeInfo.new_for_xml(XML)
-for path, interface in [("/", "net.connman.Manager"), (TECH, "net.connman.Technology"), (SERVICE, "net.connman.Service")]:
+for path, interface in [("/", "net.connman.Manager"), ("/", "net.connman.Clock"),
+                        (TECH, "net.connman.Technology"), (SERVICE, "net.connman.Service")]:
     bus.register_object(path, node.lookup_interface(interface), method, None, None)
 loop = GLib.MainLoop()
 GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, lambda: (loop.quit(), False)[1])

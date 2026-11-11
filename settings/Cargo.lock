@@ -1005,6 +1005,7 @@ dependencies = [
  "async-channel",
  "cc",
  "futures-util",
+ "gdk-pixbuf",
  "gio",
  "glib",
  "gtk4",

@@ -12,6 +12,9 @@ use uflinux_desktop::{
     toplevel::{Client, Command},
 };
 
+/// Panel logo size in device-independent pixels.
+const LOGO_PIXELS: i32 = 28;
+
 struct TaskButton {
     button: gtk::Button,
     image: gtk::Image,
@@ -588,8 +591,21 @@ impl Panel {
         let root = gtk::Box::new(gtk::Orientation::Horizontal, 0);
         let start = gtk::Button::new();
         let start_content = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-        let logo = gtk::Image::from_file("/usr/share/icons/hicolor/scalable/apps/uflinux.svg");
-        logo.set_pixel_size(28);
+        let logo = gtk::Image::new();
+        logo.set_pixel_size(LOGO_PIXELS);
+        // The installed logo is a scalable document whose intrinsic size is far
+        // larger than the panel. Decoding it at the pixel size actually shown
+        // keeps the texture tiny; a file paintable would ignore pixel size.
+        let scale = window.scale_factor().max(1);
+        match gdk_pixbuf::Pixbuf::from_file_at_scale(
+            "/usr/share/icons/hicolor/scalable/apps/uflinux.svg",
+            LOGO_PIXELS * scale,
+            LOGO_PIXELS * scale,
+            true,
+        ) {
+            Ok(pixbuf) => logo.set_paintable(Some(&gtk::gdk::Texture::for_pixbuf(&pixbuf))),
+            Err(error) => eprintln!("Could not load the panel logo: {error}"),
+        }
         start_content.append(&logo);
         start_content.append(&gtk::Label::new(Some("Menu")));
         start.set_child(Some(&start_content));

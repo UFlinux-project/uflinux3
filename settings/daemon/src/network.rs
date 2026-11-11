@@ -487,12 +487,18 @@ impl Client {
                 // Activate the desktop if it is not already handling the session.
                 glib::MainContext::default().spawn_local(async move {
                     if let Ok(bus) = gio::bus_get_future(gio::BusType::Session).await {
-                        let _ = bus.call_future(
-                            Some("org.freedesktop.DBus"), "/org/freedesktop/DBus",
-                            "org.freedesktop.DBus", "StartServiceByName",
-                            Some(&("org.uflinux.Desktop", 0u32).to_variant()), None,
-                            gio::DBusCallFlags::NONE, 5000,
-                        ).await;
+                        let _ = bus
+                            .call_future(
+                                Some("org.freedesktop.DBus"),
+                                "/org/freedesktop/DBus",
+                                "org.freedesktop.DBus",
+                                "StartServiceByName",
+                                Some(&("org.uflinux.Desktop", 0u32).to_variant()),
+                                None,
+                                gio::DBusCallFlags::NONE,
+                                5000,
+                            )
+                            .await;
                     }
                 });
                 let weak = Rc::downgrade(self);

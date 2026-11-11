@@ -157,12 +157,10 @@ def main():
                 accounting = [daemon, panel, primary]
                 wait_for(lambda: 'ready=true' in run([args.legacy_dir / 'uflinux-start-menu', '--status']), 'Start readiness')
             else:
-                bindir = runtime / 'bin'
-                bindir.mkdir()
-                (bindir / 'uflinux-desktop').symlink_to(args.desktop.resolve())
-                env['PATH'] = str(bindir) + os.pathsep + env['PATH']
+                # The built-in supervisor restarts itself from /proc/self/exe, so it
+                # needs no copy of the binary on PATH.
                 env['LABWC_PID'] = str(compositor.pid)
-                supervisor = spawn('desktop-supervisor', ['sh', ROOT / 'settings/desktop/data/uflinux-desktop-supervisor'])
+                supervisor = spawn('desktop-supervisor', [args.desktop, '--supervise'])
                 accounting = [daemon, supervisor]
                 wait_for(lambda: json.loads(run([args.desktop, '--status']))['ready'], 'desktop readiness')
                 reply = run(['gdbus', 'call', '--session', '--dest', 'org.freedesktop.DBus',

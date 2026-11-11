@@ -23,9 +23,12 @@ Rust enums; unknown operations and oversized requests are rejected. System D-Bus
 uses `org.uflinux.Settings.System1`, object `/org/uflinux/Settings/System` and an
 independently authorized `Execute` method. These are version-1 project interfaces.
 
-ConnMan owns IP addresses, DHCP, DNS and connection policy. iwd only handles Wi-Fi
-authentication. BusyBox ntpd owns synchronization; ConnMan clock mutation is
-disabled. Enterprise profiles require a CA and server domain. Saved network
+ConnMan owns IP addresses, DHCP, DNS, connection policy and time synchronization
+through its built-in SNTP client. iwd only handles Wi-Fi
+authentication. Settings may switch synchronization on and off through ConnMan's
+clock API, which ordinary users may not mutate; only the root helper reaches it,
+after polkit. Timezone remains manual in ConnMan, because Settings owns it.
+Enterprise profiles require a CA and server domain. Saved network
 credentials are machine-wide in root-protected ConnMan/iwd storage.
 
 TLP provides Power saver, Balanced and Performance modes, with a persistent

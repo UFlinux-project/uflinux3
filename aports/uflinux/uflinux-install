@@ -226,7 +226,7 @@ def make_overlay(directory, args, repositories=None, uefi=False):
                            ("uflinux-splash-stop", "default"), ("hwclock", "boot"), ("modules", "boot"),
                            ("sysctl", "boot"), ("hostname", "boot"), ("bootmisc", "boot"),
                            ("syslog", "boot"), ("dbus", "default"), ("elogind", "default"),
-                           ("iwd", "default"), ("connman", "default"), ("ntpd", "default"),
+                           ("iwd", "default"), ("connman", "default"),
                            ("tlp", "default"), ("uflinux-acpid", "default"),
                            ("uflinux-routes", "default"), ("greetd", "default"),
                            ("killprocs", "shutdown"), ("mount-ro", "shutdown")]:

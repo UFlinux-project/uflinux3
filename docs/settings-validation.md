@@ -35,9 +35,11 @@ No GitHub Release or public Pages repository has been published from this worksp
   PEAP/MSCHAPv2, TTLS/PAP and EAP-TLS, including DHCP, reconnect and forgetting.
   Manual addressing, DNS/search domains, proxy configuration, route restoration,
   unrelated-route preservation and server-domain mismatch rejection pass.
-- BusyBox ntpd contacts the selected controlled server, remains the sole clock
-  synchronizer and reports the actual kernel synchronization state. ConnMan's
-  persisted clock policies remain manual.
+  `/etc/resolv.conf` is ConnMan-generated and lists the DNS proxy.
+- ConnMan's SNTP client contacts the selected controlled server, remains the sole clock
+  synchronizer and reports the actual kernel synchronization state. Its persisted
+  clock policies start as automatic synchronization with a manual timezone, root
+  may mutate the clock and a netdev user may not.
 - A private chroot exercises the actual BusyBox acpid input parser: only power-key
   presses invoke the hook; release, repeat and unrelated input events are ignored.
 
@@ -85,8 +87,8 @@ with Do nothing and Shut down policies. Suspend policy validation is distinct
 from physical suspend/resume certification.
 
 The native firmware test additionally uses two mac80211_hwsim radios with
-hostapd and DHCP for personal, hidden and enterprise Wi-Fi, plus a controlled NTP
-server. Those packages and the installed Python test interpreter are harness
+hostapd and DHCP for personal, hidden and enterprise Wi-Fi, plus a controlled
+SNTP server and a rewritten ConnMan fallback timeserver list. Those packages and the installed Python test interpreter are harness
 dependencies, not additional default desktop services.
 
 Reports include the exact ISO SHA-256. Tests boot a snapshot of that ISO so a
@@ -116,8 +118,8 @@ BusyBox acpid listener received virtual ACPI button events: Do nothing kept
 the system running and Shut down completed a normal OpenRC shutdown.
 Suspend policy was accepted; physical suspend/resume remains a hardware test.
 
-The BIOS run additionally passed all six real simulated Wi-Fi modes and BusyBox
-NTP checks listed above. Both verified records identify the ISO checksum shown
+The BIOS run additionally passed all six real simulated Wi-Fi modes and ConnMan
+SNTP checks listed above. Both verified records identify the ISO checksum shown
 in this document.
 
 ## Completed follow-up work

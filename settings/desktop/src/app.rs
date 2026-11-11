@@ -3,6 +3,28 @@ use glib::variant::ToVariant;
 use gtk::prelude::*;
 use std::{cell::RefCell, rc::Rc, time::Instant};
 
+/// Hand freed popup memory back to the kernel. Only GNU libc keeps freed
+/// allocations mapped, and Alpine's musl has no equivalent, so this is a no-op
+/// there rather than an emulated one.
+#[cfg(target_env = "gnu")]
+fn trim_allocator() {
+    unsafe { libc::malloc_trim(0) };
+}
+
+#[cfg(not(target_env = "gnu"))]
+fn trim_allocator() {}
+
+/// Keep the resident heap small. Popup trees are the largest allocations this
+/// process makes and they come and go, so a low trim threshold and a small
+/// arena cap both reduce the anonymous memory the process keeps mapped.
+fn tune_allocator() {
+    #[cfg(target_env = "gnu")]
+    unsafe {
+        libc::mallopt(libc::M_ARENA_MAX, 2);
+        libc::mallopt(libc::M_TRIM_THRESHOLD, 128 * 1024);
+    }
+}
+
 pub struct App {
     pub application: gtk::Application,
     pub agent: RefCell<Option<auth::Agent>>,
@@ -15,11 +37,12 @@ pub struct App {
     clock_output: RefCell<Option<String>>,
     tray_output: RefCell<Option<String>>,
     task_output: RefCell<Option<String>>,
-    quick_settings_ready: std::cell::Cell<bool>,
     quick_prepared: RefCell<std::collections::HashSet<String>>,
+    trim_scheduled: Rc<std::cell::Cell<bool>>,
 }
 
 pub fn run() {
+    tune_allocator();
     let application = gtk::Application::builder()
         .application_id("org.uflinux.Desktop")
         .flags(gio::ApplicationFlags::HANDLES_COMMAND_LINE)
@@ -56,9 +79,18 @@ pub fn run() {
             clock_output: RefCell::new(None),
             tray_output: RefCell::new(None),
             task_output: RefCell::new(None),
-            quick_settings_ready: std::cell::Cell::new(false),
             quick_prepared: RefCell::new(std::collections::HashSet::new()),
+            trim_scheduled: Rc::new(std::cell::Cell::new(false)),
         });
+        // Quick controls own their authorized actions, so they ask this process
+        // to start the authorization agent instead of it being registered up
+        // front for a session that may never authorize anything.
+        let weak = Rc::downgrade(&app);
+        app.quick.agent_request.replace(Some(Rc::new(move || {
+            if let Some(app) = weak.upgrade() {
+                app.ensure_agent();
+            }
+        })));
         let status = gio::SimpleAction::new_stateful(
             "status",
             None,
@@ -68,7 +100,6 @@ pub fn run() {
         application.add_action(&status);
         app.menu.replace(Some(Menu::new(&app, String::new())));
         app.panel.replace(Some(Panel::new(&app)));
-        app.ensure_agent();
         let action = gio::SimpleAction::new("hide", None);
         let weak = Rc::downgrade(&app);
         action.connect_activate(move |_, _| {
@@ -104,21 +135,6 @@ pub fn run() {
             }
         });
         application.add_action(&action);
-        let weak = Rc::downgrade(&app);
-        let mut index = 0;
-        glib::idle_add_local(move || {
-            let Some(app) = weak.upgrade() else {
-                return glib::ControlFlow::Break;
-            };
-            let panels = ["network", "sound", "power"];
-            app.prepare_quick(panels[index]);
-            index += 1;
-            if index == panels.len() {
-                glib::ControlFlow::Break
-            } else {
-                glib::ControlFlow::Continue
-            }
-        });
         slot.replace(Some(app));
     });
     let slot = controller.clone();
@@ -218,8 +234,6 @@ impl App {
                     app.report_status();
                 }
             });
-            self.quick_settings_ready
-                .set(self.quick_prepared.borrow().len() == 3);
             self.report_status();
         }
     }
@@ -291,6 +305,20 @@ impl App {
         if let Some(menu) = self.menu.borrow().as_ref() {
             menu.hide();
         }
+        self.schedule_trim();
+    }
+    /// Once nothing is on screen, give the memory freed by the popup trees back
+    /// to the kernel. This runs once the current dispatch finishes, so GTK can
+    /// also tear down the widgets that are going away.
+    fn schedule_trim(&self) {
+        if self.trim_scheduled.replace(true) {
+            return;
+        }
+        let scheduled = self.trim_scheduled.clone();
+        glib::idle_add_local_once(move || {
+            trim_allocator();
+            scheduled.set(false);
+        });
     }
     pub fn report_status(&self) {
         if let (Some(menu), Some(action)) = (
@@ -330,9 +358,14 @@ impl App {
             } else {
                 Some(output)
             };
+            if popup.is_none() {
+                self.schedule_trim();
+            }
             action.set_state(
                 &serde_json::json!({
-                "ready": menu.ready() && self.quick_settings_ready.get(),
+                // Quick controls build their widget tree when first opened, so
+                // only the application catalog has a readiness state to report.
+                "ready": menu.ready(),
                     "popup": popup,
                     "output": output,
                 })

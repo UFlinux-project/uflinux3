@@ -250,19 +250,15 @@ async fn execute(bus: gio::DBusConnection, operation: &SystemAction) -> Result<s
         SystemAction::SetPowerButtons{on_ac,on_battery}=>{crate::power::set_buttons(on_ac,on_battery)?;serde_json::to_value(settings_core::power::status()).map_err(|e|e.to_string())}
         SystemAction::SetTimezone{timezone}=>{timezone_set(&timezone)?;Ok(serde_json::json!({"ok":true}))}
         SystemAction::SetTime{utc_seconds}=>{
-            if status().ntp_enabled{return Err("Disable automatic time before setting the clock".into());}
+            if status().time_sync_enabled{return Err("Disable automatic time before setting the clock".into());}
             if !(0..=253402300799).contains(&utc_seconds){return Err("Date must be between 1970 and 9999".into());}
             let time=libc::timespec{tv_sec:utc_seconds as _,tv_nsec:0};
             if unsafe{libc::clock_settime(libc::CLOCK_REALTIME,&time)}!=0{return Err("The kernel rejected the clock change".into());}
             if Path::new("/dev/rtc").exists()||Path::new("/dev/rtc0").exists(){let _=command("/sbin/hwclock",&["-w","-u"],3);}
             Ok(serde_json::json!({"ok":true}))
         }
-        SystemAction::SetNtp{enabled,servers}=>{
-            if servers.is_empty()||servers.len()>8||servers.iter().any(|s|!validate::server(s)){return Err("Choose 1–8 NTP hostnames or IP addresses".into());}
-            let options=servers.iter().map(|s|format!(" -p {s}")).collect::<String>();
-            files::atomic(Path::new("/etc/conf.d/ntpd"),format!("# Managed by UFLinux Settings\nNTPD_OPTS=\"-N{options}\"\n").as_bytes(),0o644)?;
-            if enabled{command("/sbin/rc-update",&["add","ntpd","default"],5)?;command("/sbin/rc-service",&["ntpd","restart"],15)?;}
-            else{if status().ntp_running{command("/sbin/rc-service",&["ntpd","stop"],10)?;}command("/sbin/rc-update",&["del","ntpd","default"],5)?;}
+        SystemAction::SetTimeSync{enabled}=>{
+            settings_core::clock::set_time_sync(enabled)?;
             Ok(serde_json::json!({"ok":true}))
         }
         SystemAction::DdcDiscover=>serde_json::to_value(ddc_discover()?).map_err(|e|e.to_string()),

@@ -92,7 +92,7 @@ def main():
                         if memory.get("ram_mib") != 512 or memory.get("swap") is not False or memory.get("oom") is not False:
                             raise ValueError("Missing installed 512 MiB Settings acceptance for " + mode)
                         if mode == "bios" and not result.get("network_clock"):
-                            raise ValueError("Missing real ConnMan+iwd and BusyBox NTP verification")
+                            raise ValueError("Missing real ConnMan+iwd and ConnMan SNTP verification")
                         power = result.get("power") or {}
                         if not power.get("gtk_authorization_cancel_and_grant") or not power.get("physical_key_do_nothing") or not power.get("physical_key_poweroff") or set(power.get("profiles", [])) != {"power-saver", "balanced", "performance"}:
                             raise ValueError("Missing TLP profiles and BusyBox power-button verification")

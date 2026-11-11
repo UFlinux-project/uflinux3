@@ -4,7 +4,7 @@ use crate::app::App;
 use gtk::prelude::*;
 use std::{
     cell::RefCell,
-    ffi::{c_char, c_int, c_void, CStr, CString},
+    ffi::{CStr, CString, c_char, c_int, c_void},
     rc::{Rc, Weak},
 };
 
@@ -59,7 +59,7 @@ impl Agent {
                                 ptr = unsafe { uf_polkit_register(event, data.cast()) };
                             }
                             let command = if ptr.is_null() {
-                                use futures_util::future::{select, Either};
+                                use futures_util::future::{Either, select};
                                 match select(
                                     Box::pin(receiver.recv()),
                                     glib::timeout_future_seconds(5),

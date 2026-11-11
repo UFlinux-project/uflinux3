@@ -109,12 +109,12 @@ pub fn datetime(app: &Rc<App>, parent: &gtk::Box) {
             label.set_text(&format!(
                 "Timezone: {}\nAutomatic time: {} · Service: {} · Synchronization: {}",
                 s.datetime.timezone,
-                if s.datetime.ntp_enabled {
+                if s.datetime.time_sync_enabled {
                     "enabled"
                 } else {
                     "disabled"
                 },
-                if s.datetime.ntp_running {
+                if s.datetime.sntp_running {
                     "running"
                 } else {
                     "stopped"
@@ -127,38 +127,34 @@ pub fn datetime(app: &Rc<App>, parent: &gtk::Box) {
             ));
         }
     });
-    let servers = entry(
-        parent,
-        "NTP servers",
-        &app.state.borrow().datetime.servers.join(", "),
-    );
-    if servers.text().is_empty() {
-        servers.set_text("pool.ntp.org");
-    }
-    let data = servers.clone();
+    section(parent, "Time servers");
+    let servers = description("");
+    servers.set_wrap(true);
+    servers.set_xalign(0.);
+    parent.append(&servers);
+    let target = servers.downgrade();
+    app.bind_for(Surface::Full, &servers, move |s| {
+        if let Some(label) = target.upgrade() {
+            label.set_text(&format!(
+                "{}\nConnMan uses servers announced by the connected network first, then its configured fallback list.",
+                if s.datetime.timeservers.is_empty() {
+                    "No time server is currently configured.".to_string()
+                } else {
+                    s.datetime.timeservers.join(", ")
+                }
+            ));
+        }
+    });
     toggle(
         app,
         Surface::Full,
         parent,
-        "Automatic date and time (BusyBox NTP)",
-        |s| s.datetime.ntp_enabled,
-        move |enabled| Action::System {
-            operation: SystemAction::SetNtp {
-                enabled,
-                servers: split(&data.text()),
-            },
+        "Automatic date and time (ConnMan SNTP)",
+        |s| s.datetime.time_sync_enabled,
+        |enabled| Action::System {
+            operation: SystemAction::SetTimeSync { enabled },
         },
     );
-    let data = servers.clone();
-    let weak = Rc::downgrade(app);
-    parent.append(&button(app, "Save NTP servers", move || Action::System {
-        operation: SystemAction::SetNtp {
-            enabled: weak
-                .upgrade()
-                .is_some_and(|a| a.state.borrow().datetime.ntp_enabled),
-            servers: split(&data.text()),
-        },
-    }));
     section(parent, "Timezone");
     let mut zones = vec!["UTC".to_string()];
     for line in fs::read_to_string("/usr/share/zoneinfo/zone1970.tab")
@@ -243,18 +239,11 @@ pub fn datetime(app: &Rc<App>, parent: &gtk::Box) {
     let target = save.downgrade();
     app.bind_for(Surface::Full, &save, move |s| {
         if let Some(button) = target.upgrade() {
-            button.set_sensitive(!s.datetime.ntp_enabled);
+            button.set_sensitive(!s.datetime.time_sync_enabled);
         }
     });
     parent.append(&save);
     parent.append(&button(app, "Refresh clock status", || Action::Refresh));
-}
-fn split(text: &str) -> Vec<String> {
-    text.split([',', ' '])
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .collect()
 }
 pub fn appearance(app: &Rc<App>, parent: &gtk::Box) {
     parent.append(&description("Choose a local wallpaper. Images are limited to 16 megapixels and 32 MiB to keep memory use predictable."));

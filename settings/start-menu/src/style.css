@@ -2,6 +2,8 @@
 .uflinux-start-menu .error { color: #c01c28; padding: 8px; }
 /* The shell is transparent and only the card paints a background. */
 .uflinux-start-menu.start-shell { background: transparent; }
+/* Cairo renders the card shadow into a full-output surface. */
+.uflinux-start-menu.start-shell.software-renderer .uflinux-popup-card { box-shadow: none; }
 .uflinux-start-menu .start-heading { opacity: 0.7; padding: 3px 8px; }
 .uflinux-start-menu .start-apps { background: transparent; }
 .uflinux-start-menu .start-apps row { border-radius: 6px; padding: 0; }

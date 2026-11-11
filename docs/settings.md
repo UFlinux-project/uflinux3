@@ -46,7 +46,8 @@ command or D-Bus forwarding API. `uflinux-settingsctl request` reads its request
 from standard input. Never pass credentials as command arguments.
 
 The system helper is a separate root D-Bus service, authorized per typed operation
-with polkit. Its allowed actions are clocks/timezones, NTP, protected Wi-Fi
+with polkit. Its allowed actions are clocks/timezones and time synchronization,
+protected Wi-Fi
 profiles, exact additional routes and identity-checked DDC brightness. It accepts
 no shell commands or arbitrary paths. It normally exits after 45 idle seconds;
 saved routes keep its ConnMan subscription alive. Only the open GTK4 UI registers
@@ -57,7 +58,7 @@ available for administration.
 
 ## Networking and clocks
 
-The small ConnMan 2.0-r1 package retains Alpine’s musl/D-Bus fixes and adds a
+The small ConnMan 2.0-r2 package retains Alpine’s musl/D-Bus fixes and adds a
 checksum-pinned iwd credential-delegation patch. ConnMan 2.0 otherwise rejects
 iwd-managed enterprise connections when no duplicate ConnMan EAP configuration
 exists. Only the iwd driver enables this internal flag; iwd still enforces its
@@ -70,6 +71,9 @@ autoconnect. Its iwd plugin is selected explicitly; wpa_supplicant and
 NetworkManager are absent from the desktop dependency set. iwd's independent IP
 configuration is disabled. Do not enable networking, dhcpcd or another resolver
 manager alongside ConnMan. BusyBox-backed boot services are retained.
+The DNS proxy stays enabled and `ResolvConf` in `/etc/connman/main.conf` points at
+`/etc/resolv.conf`, so the file lists the loopback proxy rather than the name
+servers the rootfs was built with. No separate resolver manager is installed.
 
 Network settings provide scans, radio-block reporting, personal and hidden
 networks, saved connections, reconnect/disconnect/forget, addressing, DNS/search
@@ -86,10 +90,16 @@ are machine-wide and root-readable; secrets are excluded from shared snapshots
 and preferences. Forgetting a connection removes its owned certificate files.
 VPNs, hotspots, tethering, virtual interfaces and Bluetooth are outside this UI.
 
-BusyBox ntpd is the only synchronizer. Before ConnMan starts, its persisted
-TimeUpdates and TimezoneUpdates policies are initialized to manual; its clock
-mutation API is restricted. NTP runs in client mode. Settings provides timezone
-search, server selection and manual time only while NTP is disabled. The RTC
+ConnMan's built-in SNTP client is the only synchronizer; no `ntpd`, `chronyd` or
+`openntpd` runs. Before ConnMan starts, its persisted TimeUpdates policy is
+initialized to `auto` and TimezoneUpdates to `manual`. Clock mutation is
+restricted to root, so an ordinary user cannot bypass polkit by toggling
+synchronization directly; the Settings helper reaches it only after polkit
+authorizes the request. ConnMan adjusts the clock with `adjtimex()`, slewing small
+offsets and stepping larger ones. Settings shows the timeservers ConnMan would
+actually query — those announced by the active connection first, then the
+configured fallback list — and offers manual time only while automatic
+synchronization is off. The RTC
 uses UTC. Synchronization comes from the kernel's actual state, not a successful
 DNS lookup or a running daemon.
 
@@ -191,7 +201,7 @@ Headless tests exercise real labwc output management, rollback and caller
 isolation, PipeWire controls, UI pages and process lifetime. A separate D-Bus
 fixture tests ConnMan credential/cancellation and property transitions; it does
 not certify wireless association. The disposable x86_64 VM adds mac80211_hwsim,
-hostapd personal/hidden/enterprise tests, DHCP/route restoration, BusyBox NTP and
+hostapd personal/hidden/enterprise tests, DHCP/route restoration, ConnMan SNTP and
 the installed memory acceptance test. Test-only hostapd/dnsmasq packages are not
 desktop dependencies. Missing test facilities fail the gate rather than silently
 claiming coverage. Physical HDR, VRR, DDC/CI, suspend and GPU support remain

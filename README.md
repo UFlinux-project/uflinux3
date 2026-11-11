@@ -27,8 +27,8 @@ which architectures have actually passed.
 
 The desktop includes Foot, Nemo, Mako, Transmission, Celluloid, GNOME Disks, File Roller,
 and ConnMan with iwd, PipeWire with
-pipewire-pulse, WirePlumber, and UFLinux Settings in Rust and plain GTK4. BusyBox
-ntpd handles time synchronization. The taskbar opens a combined quick-settings
+pipewire-pulse, WirePlumber, and UFLinux Settings in Rust and plain GTK4. ConnMan's
+SNTP client handles time synchronization. The taskbar opens a combined quick-settings
 flyout. GTK3 and GTK4 apps use Alpine’s adw-gtk3 dark theme. Firefox and uBlock Origin are included on x86, x86_64, aarch64, armv7, ppc64le,
 and riscv64. Firefox uses a streamlined toolbar with horizontal tabs and a hidden
 bookmarks bar; users can change these defaults. Alpine 3.24 does not provide
