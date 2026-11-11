@@ -4,7 +4,9 @@ Use a disposable Linux VM with Python 3.11+, GNU tar, gzip, coreutils, util-linu
 network access, root privileges, and at least 10 GiB free storage. More space is
 useful when retaining several builds. QEMU user emulation and binfmt_misc with the
 `F` flag are required for nonnative architectures. x86 uses the x86_64 kernel's
-32-bit compatibility support. aarch64 builds use native ARM64 GitHub runners.
+32-bit compatibility support. aarch64 and armv7 builds use ARM64 GitHub runners.
+armv7 remains emulated there, because AArch32 support is optional in ARM64 kernels
+and the runner map treats only an identical host architecture as native.
 
 On the configured Ubuntu runners, install `qemu-user-binfmt binfmt-support` and run:
 

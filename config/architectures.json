@@ -15,7 +15,7 @@
     "machine": "virt"
   },
   "armv7": {
-    "runner": "ubuntu-26.04",
+    "runner": "ubuntu-26.04-arm",
     "qemu_user": "arm",
     "machine": "virt"
   },

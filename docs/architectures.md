@@ -5,7 +5,7 @@
 | x86 | native compatibility mode | pc | BIOS and 32-bit UEFI |
 | x86_64 | native | q35 | BIOS and UEFI |
 | aarch64 | native ARM64 runner | virt | UEFI |
-| armv7 | qemu-arm | virt / cortex-a15 | UEFI |
+| armv7 | ARM64 runner, qemu-arm | virt / cortex-a15 | UEFI |
 | ppc64le | qemu-ppc64le | pseries / POWER9 | Open Firmware |
 | s390x | qemu-s390x | s390-ccw-virtio | native IPL / zipl |
 | riscv64 | qemu-riscv64 | virt | OpenSBI and UEFI |
