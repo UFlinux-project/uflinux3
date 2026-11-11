@@ -26,7 +26,7 @@ def tree():
     result=[]
     while queue:
         a=queue.pop();result.append(a)
-        try:queue.extend(list(a))
+        try:queue.extend([c for c in a if c])
         except Exception:pass
         assert len(result)<2000,'Unbounded accessible tree'
     return result

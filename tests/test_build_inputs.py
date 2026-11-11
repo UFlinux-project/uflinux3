@@ -52,10 +52,10 @@ create_image_iso
         data = stream("usr/bin/ironbar", b"test ELF payload")
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "test.apk"
-            path.write_bytes(stream(".SIGN.RSA256.build.rsa.pub", b"signature") + control + data)
+            path.write_bytes(stream(".SIGN.RSA256.build.ec.pub", b"signature") + control + data)
             self.assertEqual(builder.split_apk(path), (control, data))
             before = builder.unsigned_digest(path)
-            path.write_bytes(stream(".SIGN.RSA256.release.rsa.pub", b"other signature") + control + data)
+            path.write_bytes(stream(".SIGN.RSA256.release.ec.pub", b"other signature") + control + data)
             self.assertEqual(builder.unsigned_digest(path), before)
             self.assertEqual(apk_metadata(path)["pkgname"], "ironbar")
 
@@ -65,6 +65,18 @@ create_image_iso
             path.write_bytes(stream("malicious", b"payload") + stream(".PKGINFO", b"pkgname = test") + stream("data", b"x"))
             with self.assertRaisesRegex(ValueError, "Unexpected"):
                 builder.split_apk(path)
+
+    def test_signature_names_lists_every_signature_stream(self):
+        control = stream(".PKGINFO", b"pkgname = ironbar\n")
+        data = stream("usr/bin/ironbar", b"payload")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "test.apk"
+            stream_name = ".SIGN." + builder.SIGN_STREAM + "." + builder.SIGNING_KEY + ".pub"
+            path.write_bytes(stream(stream_name, b"signature") + control + data)
+            self.assertEqual(builder.signature_names(path), [stream_name])
+            path.write_bytes(stream(stream_name, b"one") + stream(".SIGN.RSA512.other.pub", b"two")
+                             + control + data)
+            self.assertEqual(builder.signature_names(path), [stream_name, ".SIGN.RSA512.other.pub"])
 
     def test_streaming_reader_matches_concatenated_gzip(self):
         data = stream(".SIGN.RSA256.key", b"sig") + stream(".PKGINFO", b"pkgname = demo\n") + stream("file", bytes(range(256)) * 400)

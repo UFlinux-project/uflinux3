@@ -7,7 +7,7 @@ import re
 import shutil
 import tempfile
 
-from builder import ARCHES, LOCK, PACKAGE_NAMES, PROJECT, link_or_copy, sha, unsigned_digest
+from builder import ARCHES, BUILD_KEY, LOCK, PACKAGE_NAMES, PROJECT, link_or_copy, sha, unsigned_digest
 from sbom import apk_metadata
 
 
@@ -33,7 +33,7 @@ def collect(out, arch, version):
         upstream = {'uflinux-regreet': LOCK['uflinux-regreet']['version'], 'connman': LOCK['connman']['version'],
                     'uflinux-settings': LOCK['settings']['version'], 'uflinux': version}[origin]
         names, payloads = set(), {}
-        key = (source / 'build.rsa.pub').read_text()
+        key = (source / BUILD_KEY).read_text()
         for package in sorted(source.glob('*.apk')):
             info = apk_metadata(package)
             if (info.get('origin'), info.get('pkgver')) != (origin, upstream + '-r' + revision) or info.get('arch') not in {arch, 'noarch'}:
@@ -71,7 +71,7 @@ def collect(out, arch, version):
         (staging / 'build-keys.json').write_text(json.dumps(keys, indent=2) + '\n')
         # Legacy callers use this key only as a fallback. build-keys.json selects
         # the exact shard key for each input APK during cryptographic verification.
-        (staging / 'build.rsa.pub').write_text(next(iter(keys.values())))
+        (staging / BUILD_KEY).write_text(next(iter(keys.values())))
         if destination.exists():
             shutil.rmtree(destination)
         staging.rename(destination)

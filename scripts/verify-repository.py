@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import urllib.request
 
-from builder import ARCHES, Builder, PROJECT, repository_url, sha, temporary_tree
+from builder import ARCHES, Builder, PROJECT, SIGNING_KEY, TRUSTED_KEY, repository_url, sha, temporary_tree
 
 
 def bounded_download(url, limit=1024 * 1024):
@@ -28,17 +28,17 @@ def main():
     parser.add_argument('--repository-url', help='Published HTTPS repository root; inferred from GITHUB_REPOSITORY by default')
     args = parser.parse_args()
     out = Path(args.outdir).resolve()
-    expected_key = out / 'repository/uflinux.rsa.pub'
+    expected_key = out / 'repository' / (SIGNING_KEY + '.pub')
     public_key = expected_key.read_bytes()
     repository = repository_url(args.repository_url)
     if args.staging:
         staging = args.staging.resolve()
         manifest = (staging / 'releases.json').read_bytes()
-        if (staging / 'uflinux.rsa.pub').read_bytes() != public_key:
+        if (staging / (SIGNING_KEY + '.pub')).read_bytes() != public_key:
             raise ValueError('Staged repository key differs from the verified image key')
     else:
         manifest = bounded_download(repository + '/releases.json')
-        if bounded_download(repository + '/uflinux.rsa.pub', 16384) != public_key:
+        if bounded_download(repository + '/' + SIGNING_KEY + '.pub', 16384) != public_key:
             raise ValueError('Published repository key differs from the verified image key')
     history = json.loads(manifest)
     if not history or history[0]['version'] != args.version:
@@ -75,7 +75,7 @@ def main():
         # untrusted index. The package must still be unavailable to the solver.
         if untrusted_install.returncode == 0 or not re.search(r'untrusted|signature', rejected.stdout + rejected.stderr, re.I):
             raise RuntimeError('The repository index was not rejected without its signing key: ' + rejected.stdout + rejected.stderr)
-        builder.put('etc/apk/keys/uflinux.rsa.pub', public_key.decode())
+        builder.put(TRUSTED_KEY, public_key.decode())
         def apk(*command):
             return builder.chroot('apk', '--no-cache', *command)
         apk('update')

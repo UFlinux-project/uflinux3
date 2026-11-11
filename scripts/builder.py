@@ -25,6 +25,17 @@ import zlib
 PROJECT = Path(__file__).resolve().parents[1]
 LOCK = json.loads((PROJECT / "config/sources.lock.json").read_text())
 ARCHES = json.loads((PROJECT / "config/architectures.json").read_text())
+# apk v2 has no ECDSA signature: apk-tools 3.0.9 knows only the stream names
+# RSA512, RSA256, RSA and DSA, and resolves a trusted key by its filename from a
+# plain public-key PEM (an X.509 certificate is not accepted). UFLinux therefore
+# signs with an EC P-256 key carried in the SHA-256 stream, whose name is fixed
+# by that format limitation rather than by the algorithm actually used.
+SIGN_STREAM = "RSA256"
+SIGNING_KEY = "uflinux.ec"
+SIGNING_PRIVATE = "/var/lib/uflinux/keys/" + SIGNING_KEY
+SIGNING_PUBLIC = SIGNING_PRIVATE + ".pub"
+TRUSTED_KEY = "etc/apk/keys/" + SIGNING_KEY + ".pub"
+BUILD_KEY = "build.ec.pub"
 PACKAGE_NAMES = {
     "connman": {"connman", "connman-dbg", "connman-dev", "connman-doc", "connman-openrc"},
     "uflinux-regreet": {"uflinux-regreet"},
@@ -247,6 +258,15 @@ def unsigned_digest(path):
     return hashlib.sha256(gzip.decompress(control) + gzip.decompress(data)).hexdigest()
 
 
+def signature_names(path):
+    """The .SIGN.<stream>.<key> names carried by an APK, in file order."""
+    names = []
+    for _, raw in gzip_members(Path(path).read_bytes()):
+        with tarfile.open(fileobj=io.BytesIO(raw)) as archive:
+            names.extend(name for name in archive.getnames() if name.startswith(".SIGN."))
+    return names
+
+
 def repository_url(value):
     if not value:
         repo = os.environ.get("GITHUB_REPOSITORY", "")
@@ -277,7 +297,7 @@ class Builder:
         self.env = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/root", "TERM": "dumb",
                     "SOURCE_DATE_EPOCH": self.epoch, "TZ": "UTC", "LC_ALL": "C.UTF-8",
                     "UFLINUX_REPOSITORY_URL": self.url, "UFLINUX_APK_CACHE": "/cache/image-apk",
-                    "sigtype": "RSA256", "ARCH": args.arch}
+                    "sigtype": SIGN_STREAM, "ARCH": args.arch}
         github_repository = os.environ.get("GITHUB_REPOSITORY", "")
         if re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", github_repository):
             self.env["UFLINUX_PROJECT_URL"] = "https://github.com/" + github_repository
@@ -366,8 +386,8 @@ class Builder:
     def signing_key(self, release=False, owner=0):
         directory = self.root / "var/lib/uflinux/keys"
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        private = directory / "uflinux.rsa"
-        public = private.with_suffix(".rsa.pub")
+        private = directory / SIGNING_KEY
+        public = directory / (SIGNING_KEY + ".pub")
         if release:
             raw = os.environ.get("APK_SIGNING_PRIVATE_KEY", "")
             expected = os.environ.get("APK_SIGNING_PUBLIC_KEY", "").replace("\r\n", "\n").strip()
@@ -381,20 +401,27 @@ class Builder:
             fd = os.open(private, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(fd, "w") as stream:
                 stream.write(raw.strip() + "\n")
-            actual = self.chroot("openssl", "pkey", "-in", "/var/lib/uflinux/keys/uflinux.rsa", "-pubout", stdout=subprocess.PIPE).stdout.decode().strip()
+            actual = self.chroot("openssl", "pkey", "-in", SIGNING_PRIVATE, "-pubout", stdout=subprocess.PIPE).stdout.decode().strip()
             if actual != expected:
                 raise RuntimeError("Release public and private signing keys do not match")
+            # apk resolves a trusted key by filename alone, so a key published as
+            # uflinux.ec.pub has to be the algorithm that name advertises.
+            described = self.chroot("openssl", "pkey", "-in", SIGNING_PRIVATE,
+                                    "-text_pub", "-noout", stdout=subprocess.PIPE)
+            if "ASN1 OID: prime256v1" not in described.stdout.decode():
+                raise RuntimeError("The release signing key is not an EC P-256 key")
             public.write_text(expected + "\n")
         elif not private.exists():
-            self.chroot("openssl", "genrsa", "-out", "/var/lib/uflinux/keys/uflinux.rsa", "3072")
-            result = self.chroot("openssl", "rsa", "-in", "/var/lib/uflinux/keys/uflinux.rsa", "-pubout", stdout=subprocess.PIPE)
+            self.chroot("openssl", "genpkey", "-algorithm", "EC",
+                        "-pkeyopt", "ec_paramgen_curve:P-256", "-out", SIGNING_PRIVATE)
+            result = self.chroot("openssl", "pkey", "-in", SIGNING_PRIVATE, "-pubout", stdout=subprocess.PIPE)
             public.write_bytes(result.stdout)
         for path in (directory, private, public):
             os.chown(path, owner, owner)
         private.chmod(0o600)
         public.chmod(0o644)
-        shutil.copy2(public, self.root / "etc/apk/keys/uflinux.rsa.pub")
-        self.env.update(PACKAGER_PRIVKEY="/var/lib/uflinux/keys/uflinux.rsa", PACKAGER_PUBKEY="/var/lib/uflinux/keys/uflinux.rsa.pub")
+        shutil.copy2(public, self.root / TRUSTED_KEY)
+        self.env.update(PACKAGER_PRIVKEY=SIGNING_PRIVATE, PACKAGER_PUBKEY=SIGNING_PUBLIC)
         return public
 
     def build_origin(self, origin, env):
@@ -420,7 +447,7 @@ class Builder:
         # Restored Actions caches belong to the host runner, not uid 1000 here.
         self.chroot("chown", "-R", "builder:builder", "/cache/cargo", "/cache/target")
         self.chroot("install", "-d", "-o", "builder", "-g", "builder", "/home/builder/packages", "/home/builder/.abuild")
-        self.put("home/builder/.abuild/abuild.conf", 'PACKAGER="UFLinux contributors <noreply@example.invalid>"\nPACKAGER_PRIVKEY="/var/lib/uflinux/keys/uflinux.rsa"\nPACKAGER_PUBKEY="/var/lib/uflinux/keys/uflinux.rsa.pub"\n')
+        self.put("home/builder/.abuild/abuild.conf", 'PACKAGER="UFLinux contributors <noreply@example.invalid>"\nPACKAGER_PRIVKEY="' + SIGNING_PRIVATE + '"\nPACKAGER_PUBKEY="' + SIGNING_PUBLIC + '"\n')
         apkbuild = source / "uflinux/APKBUILD"
         apkbuild.write_text(re.sub(r"^pkgver=.*$", "pkgver=" + self.args.version, apkbuild.read_text(), flags=re.M))
         # Only fetch the selected origin's sources in a package shard.
@@ -471,7 +498,7 @@ class Builder:
             if versions.get(info.get("origin")) == info["pkgver"]:
                 shutil.copy2(package, self.packages_dir / package.name)
         (self.out / "metadata" / self.args.arch / "reproducibility.json").unlink(missing_ok=True)
-        shutil.copy2(self.root / "etc/apk/keys/uflinux.rsa.pub", self.packages_dir / "build.rsa.pub")
+        shutil.copy2(self.root / TRUSTED_KEY, self.packages_dir / BUILD_KEY)
         self.manifest("compile")
         dependency_record = self.cache / self.args.arch / "target/uflinux-build-packages.txt"
         if dependency_record.exists():
@@ -495,9 +522,9 @@ class Builder:
         keys = json.loads(key_manifest.read_text()) if key_manifest.exists() else None
         if keys is not None and set(keys) != {p.name for p in self.packages_dir.glob("*.apk")}:
             raise ValueError("Build keys do not cover the complete package set")
-        shutil.copy2(self.packages_dir / "build.rsa.pub", incoming / "build.rsa.pub")
-        # The original signature names the key uflinux.rsa.pub.
-        (incoming / "uflinux.rsa.pub").write_bytes((incoming / "build.rsa.pub").read_bytes())
+        shutil.copy2(self.packages_dir / BUILD_KEY, incoming / BUILD_KEY)
+        # The original signature names the key by its published filename.
+        (incoming / (SIGNING_KEY + ".pub")).write_bytes((incoming / BUILD_KEY).read_bytes())
         public = self.signing_key(release=self.args.release)
         repo = self.root / "repo" / self.args.arch
         if repo.exists():
@@ -505,14 +532,14 @@ class Builder:
         repo.mkdir(parents=True, exist_ok=True)
         for package in sorted(self.packages_dir.glob("*.apk")):
             if keys is not None:
-                (incoming / "uflinux.rsa.pub").write_text(keys[package.name])
+                (incoming / (SIGNING_KEY + ".pub")).write_text(keys[package.name])
             copied = self.root / "incoming/package.apk"
             shutil.copy2(package, copied)
             self.chroot("apk", "--keys-dir", "/incoming", "verify", "/incoming/package.apk")
             control, data = split_apk(copied)
             control_path = self.root / "incoming/control.tar.gz"
             control_path.write_bytes(control)
-            self.chroot("abuild-sign", "-t", "RSA256", "/incoming/control.tar.gz")
+            self.chroot("abuild-sign", "-t", SIGN_STREAM, "/incoming/control.tar.gz")
             (repo / package.name).write_bytes(control_path.read_bytes() + data)
             self.chroot("apk", "verify", "/repo/" + self.args.arch + "/" + package.name)
         self.index(repo)
@@ -520,7 +547,7 @@ class Builder:
         if final.exists():
             shutil.rmtree(final)
         shutil.copytree(repo, final)
-        shutil.copy2(public, self.out / "repository/uflinux.rsa.pub")
+        shutil.copy2(public, self.out / "repository" / (SIGNING_KEY + ".pub"))
         self.manifest("sign")
 
     def index(self, repo):
@@ -528,7 +555,7 @@ class Builder:
         self.chroot("apk", "index", "--description", "UFLinux " + self.args.version,
                     "--rewrite-arch", repo.name, "--no-warnings", "--output", relative + "/APKINDEX.tar.gz",
                     *[relative + "/" + p.name for p in sorted(repo.glob("*.apk"))])
-        self.chroot("abuild-sign", "-t", "RSA256", relative + "/APKINDEX.tar.gz")
+        self.chroot("abuild-sign", "-t", SIGN_STREAM, relative + "/APKINDEX.tar.gz")
 
     def image(self):
         self.tools("xorriso", "mtools", "squashfs-tools", "zstd", "util-linux", "syslinux" if self.args.arch in {"x86", "x86_64"} else "util-linux")
@@ -560,8 +587,8 @@ class Builder:
         if repo.exists():
             shutil.rmtree(repo)
         shutil.copytree(final, repo)
-        public = self.out / "repository/uflinux.rsa.pub"
-        if public.read_bytes() != (self.root / "etc/apk/keys/uflinux.rsa.pub").read_bytes():
+        public = self.out / "repository" / (SIGNING_KEY + ".pub")
+        if public.read_bytes() != (self.root / TRUSTED_KEY).read_bytes():
             raise RuntimeError("Signing key changed between signing and ISO assembly")
         archive = download(LOCK["sources"]["aports"], self.cache / "downloads")
         upstream = self.root / "opt/aports"
@@ -664,7 +691,7 @@ class Builder:
     def verify_installed(self):
         (self.out / "checks" / self.args.arch / "verified.json").unlink(missing_ok=True)
         self.tools("pax-utils", "file", "dbus", "shadow", "wayland-utils", "wlrctl", "wlr-randr", "grim", "procps", "pulseaudio-utils", "libnotify", "py3-gobject3", "py3-atspi", "wtype", "gcc", "musl-dev", "wayland-dev", "libxkbcommon-dev", "desktop-file-utils")
-        self.put("etc/apk/keys/uflinux.rsa.pub", (self.out / "repository/uflinux.rsa.pub").read_text())
+        self.put(TRUSTED_KEY, (self.out / "repository" / (SIGNING_KEY + ".pub")).read_text())
         repo = self.root / "repo" / self.args.arch
         if repo.exists():
             shutil.rmtree(repo)
@@ -816,14 +843,14 @@ def main(argv=None):
                         getattr(builder, "package" if stage == "packages" else stage)()
                     finally:
                         if args.release and stage in {"sign", "image"}:
-                            (builder.root / "var/lib/uflinux/keys/uflinux.rsa").unlink(missing_ok=True)
+                            (builder.root / "var/lib/uflinux/keys" / SIGNING_KEY).unlink(missing_ok=True)
     except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"uflinux-build: {exc}", file=sys.stderr)
         return 1
     finally:
         if args.release:
             # Verification executes the packaged binary after the release key is gone.
-            (builder.root / "var/lib/uflinux/keys/uflinux.rsa").unlink(missing_ok=True)
+            (builder.root / "var/lib/uflinux/keys" / SIGNING_KEY).unlink(missing_ok=True)
     return 0
 
 

@@ -49,14 +49,32 @@ PY
 	rm -rf "$XDG_RUNTIME_DIR"
 }
 trap cleanup EXIT HUP INT TERM
+# A resident process that dies is usually reported much later as a client
+# timeout, because the client falls back to running its own foreground shell.
+# Name the process and show its log at the moment it goes away instead.
+alive() {
+	if ! kill -0 "$1" 2>/dev/null; then
+		echo "$2 exited unexpectedly" >&2
+		if [ -n "${3:-}" ] && [ -f "$3" ]; then
+			echo "--- $2 log ---" >&2
+			tail -40 "$3" >&2
+		fi
+		exit 1
+	fi
+}
 labwc --config-dir "$XDG_RUNTIME_DIR/config" > "$results/labwc.log" 2>&1 &
 compositor=$!; pids="$pids $compositor"
 for _attempt in $(seq 1 60); do
 	[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && break
-	kill -0 "$compositor"
+	alive "$compositor" 'Compositor' "$results/labwc.log"
 	sleep 1
 done
 [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]
+# D-Bus activates a desktop from the environment the session bus saved, not this
+# shell's. Without this a desktop that has to activate itself, because the
+# resident one is gone or not registered yet, opens with no display and the
+# client ends up running a whole second shell in the foreground.
+dbus-update-activation-environment WAYLAND_DISPLAY XDG_RUNTIME_DIR XDG_CURRENT_DESKTOP XDG_SESSION_TYPE
 wayland-info > "$results/wayland.txt"
 grep -q zwlr_foreign_toplevel_manager_v1 "$results/wayland.txt"
 python3 /project/tests/artwork-smoke.py > "$results/artwork.txt"
@@ -125,7 +143,7 @@ mkdir -p /tmp/uflinux-settings-smoke-results
 settings_daemon=$!; pids="$pids $settings_daemon"
 for _attempt in $(seq 1 100); do
     if gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.NameHasOwner org.uflinux.Settings1 | grep -q true; then break; fi
-    kill -0 "$settings_daemon"
+    alive "$settings_daemon" 'Settings service' /tmp/uflinux-settings-smoke-results/service.log
     sleep .1
 done
 gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.NameHasOwner org.uflinux.Settings1 | grep -q true
@@ -142,7 +160,7 @@ grep -q uflinux-smoke "$results/toplevels.txt"
 wlrctl toplevel minimize app_id:uflinux-smoke
 wlrctl toplevel focus app_id:uflinux-smoke
 sleep 3
-kill -0 "$panel"
+alive "$panel" 'Resident desktop' "$results/desktop.log"
 kill -0 "$terminal"
 kill -0 "$background"
 if [ "$notifications_ready" = 1 ]; then
@@ -150,10 +168,12 @@ if [ "$notifications_ready" = 1 ]; then
 	notify-send --expire-time=3000 UFLinux 'Desktop validation passed'
 fi
 for menu_name in network sound power; do
+    alive "$panel" 'Resident desktop' "$results/desktop.log"
     uflinux-desktop --panel "$menu_name" --output HEADLESS-1
     uflinux-desktop --status | python3 -c 'import json,sys; assert json.load(sys.stdin)["popup"] == sys.argv[1]' "$menu_name"
     uflinux-desktop --hide
 done
+alive "$panel" 'Resident desktop' "$results/desktop.log"
 uflinux-desktop --start-menu --output HEADLESS-1
 uflinux-desktop --status | python3 -c 'import json,sys; assert json.load(sys.stdin)["popup"] == "start"'
 uflinux-desktop --hide

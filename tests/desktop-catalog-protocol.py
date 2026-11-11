@@ -16,7 +16,7 @@ def find(name):
         if node.name == name and node.getState().contains(pyatspi.STATE_SHOWING):
             return node
         try:
-            queue.extend(list(node))
+            queue.extend([child for child in node if child])
         except Exception:
             pass
     return None

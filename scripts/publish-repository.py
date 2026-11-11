@@ -9,7 +9,7 @@ import sys
 import tarfile
 import tempfile
 
-from builder import ARCHES, Builder, LOCK, PROJECT, sha, unsigned_digest, PACKAGE_NAMES
+from builder import ARCHES, Builder, LOCK, PROJECT, SIGNING_KEY, sha, unsigned_digest, PACKAGE_NAMES
 from sbom import apk_metadata
 
 ALLOWED = set().union(*PACKAGE_NAMES.values())
@@ -125,7 +125,7 @@ def main():
                         builder.chroot("apk", "verify", f"/repo/{arch}/{name}")
                 builder.index(staging)
                 shutil.copytree(staging, branch / arch)
-            shutil.copy2(public, branch / "uflinux.rsa.pub")
+            shutil.copy2(public, branch / (SIGNING_KEY + ".pub"))
             (branch / "releases.json").write_text(json.dumps(releases, indent=2) + "\n")
             (pages / ".nojekyll").touch()
             (pages / "index.html").write_text('<!doctype html><html lang="en"><meta charset="utf-8"><title>UFLinux APK repository</title><h1>UFLinux</h1><p>Signed Alpine packages. Download installation images from this project’s GitHub Releases.</p></html>\n')
@@ -144,7 +144,7 @@ def main():
             (out / "SHA256SUMS").write_text("".join(sha(p) + "  " + p.name + "\n" for p in sorted(assets)))
         return 0
     finally:
-        (builder.root / "var/lib/uflinux/keys/uflinux.rsa").unlink(missing_ok=True)
+        (builder.root / "var/lib/uflinux/keys" / SIGNING_KEY).unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

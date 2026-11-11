@@ -33,10 +33,10 @@ class ShardTests(unittest.TestCase):
             for name in names:
                 path = packages / (name + '-' + version + '.apk')
                 info = f'pkgname = {name}\npkgver = {version}\norigin = {origin}\narch = x86_64\n'.encode()
-                path.write_bytes(stream('.SIGN.RSA256.uflinux.rsa.pub', b'sig') + stream('.PKGINFO', info) + stream('usr/share/example', b'data'))
+                path.write_bytes(stream('.SIGN.' + builder.SIGN_STREAM + '.' + builder.SIGNING_KEY + '.pub', b'sig') + stream('.PKGINFO', info) + stream('usr/share/example', b'data'))
                 records[str(path.relative_to(root))] = {'sha256': builder.sha(path)}
                 payloads[path.name] = builder.unsigned_digest(path)
-            (packages / 'build.rsa.pub').write_text('test key for ' + origin)
+            (packages / builder.BUILD_KEY).write_text('test key for ' + origin)
             metadata = root / 'metadata/x86_64'
             metadata.mkdir(parents=True)
             record = {'arch': 'x86_64', 'version': '0.1.0', 'package': origin, 'sources': builder.LOCK,

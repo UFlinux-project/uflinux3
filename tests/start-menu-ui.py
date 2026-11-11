@@ -51,7 +51,7 @@ def tree(root=None):
         item = queue.pop(0)
         if item.getRoleName() == 'frame' and not item.getState().contains(pyatspi.STATE_SHOWING): continue
         found.append(item)
-        try: queue.extend(list(item))
+        try: queue.extend([child for child in item if child])
         except Exception: pass
         assert len(found) < 6000, 'Unbounded launcher widget tree'
     return found
@@ -66,6 +66,21 @@ def diagnostics(kind, error, traceback):
         command('grim', str(results / 'start-menu-failure.png'))
         (results / 'start-menu-tree.json').write_text(json.dumps([(a.name, a.getRoleName()) for a in tree()], ensure_ascii=False, indent=2))
     except Exception: pass
+    # A missing menu is usually because the resident desktop is gone: a client
+    # then starts its own foreground shell and fails as a timeout instead.
+    # Say so, and show the reason, rather than a tree of AT-SPI lookups.
+    try:
+        pid = int(os.environ['UFLINUX_DESKTOP_PID'])
+    except (KeyError, ValueError):
+        pid = 0
+    # os.kill() would signal the whole process group for pid 0, so only probe a
+    # pid that was actually reported.
+    if pid and not os.path.isdir('/proc/%d' % pid):
+        print('Resident desktop (pid %d) exited during this test' % pid, file=sys.stderr)
+        try:
+            tail = Path(os.environ['UFLINUX_DESKTOP_LOG']).read_text().splitlines()[-40:]
+            print('\n'.join(tail), file=sys.stderr)
+        except OSError: pass
     sys.__excepthook__(kind, error, traceback)
 sys.excepthook = diagnostics
 def open_menu():

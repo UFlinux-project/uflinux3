@@ -400,9 +400,7 @@ impl Menu {
     // window again on the next presentation and gtk4-layer-shell recreates the
     // layer surface from the state already configured for this window.
     fn release_surface(&self) {
-        if self.window.is_realized() {
-            gtk::prelude::WidgetExt::unrealize(&self.window);
-        }
+        crate::popup::release_window_surface(&self.window);
     }
     // Build and allocate the default screen without mapping a Wayland surface.
     // GTK/compositor buffers are created on presentation, not by flashing a window.

@@ -74,7 +74,7 @@ def run():
             while queue:
                 node = queue.pop(0)
                 if node.name == label and node.getRoleName() in ('button', 'push button'): return
-                try: queue.extend(list(node))
+                try: queue.extend([child for child in node if child])
                 except Exception: pass
             time.sleep(.05)
         raise AssertionError('Desktop status did not become ' + label)
@@ -85,7 +85,7 @@ def run():
             while queue:
                 node = queue.pop(0)
                 if node.name == name and node.getRoleName() == 'slider': return node
-                try: queue.extend(list(node))
+                try: queue.extend([child for child in node if child])
                 except Exception: pass
         return None
     def wait_stream(name):

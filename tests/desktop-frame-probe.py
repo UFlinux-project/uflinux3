@@ -58,7 +58,7 @@ def usable(menu):
                     if menu != 'start' and node.getRoleName() in ('button', 'push button', 'slider', 'check box', 'switch'):
                         return True
                 try:
-                    queue.extend(list(node))
+                    queue.extend([child for child in node if child])
                 except Exception:
                     pass
     return False

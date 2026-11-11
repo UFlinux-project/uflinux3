@@ -42,8 +42,16 @@ Never commit it or upload `.state`; that directory contains development keys and
 temporarily contains the release key during signing. Published metadata includes
 only public keys and key paths, not private PEM contents.
 
-The initial signing key uses the stable filename `uflinux.rsa.pub`; apk v2
-signatures refer to that filename. Keep the same key across routine releases.
+UFLinux signs with an **EC P-256** key. apk v2 has no ECDSA signature: apk-tools
+3.0.9 recognises only the stream names `RSA512`, `RSA256`, `RSA` and `DSA`, and
+selects a trusted key by its **filename** from a plain public-key PEM, so an
+X.509 certificate is not accepted as a key. The EC signature is therefore carried
+in the SHA-256 stream, and the stream name `RSA256` describes that digest, not the
+algorithm. `abuild-sign` supports this directly: it accepts any OpenSSL-capable
+private key under `-t RSA256`.
+
+The signing key uses the stable filename `uflinux.ec.pub`; apk v2 signatures refer
+to that filename. Keep the same key across routine releases.
 For a planned rotation, distribute the replacement public key to installed systems
 through an independently authenticated channel before switching the signing
 secret. Replacing an already trusted key is an administrator operation; this

@@ -33,6 +33,12 @@ try:
     wait(lambda s:any(d['name']=='uflinux_alternate' for d in s['outputs']))
     # Exercise the taskbar selector through GTK, including its live selected marker.
     subprocess.run(['uflinux-desktop','--panel','sound','--output','HEADLESS-1'],check=True)
+    def accessible_children(item):
+        # A child accessible can be torn down between two hops of the walk, in
+        # which case pyatspi reports it as None. Skip the gap instead of
+        # abandoning the rest of the queue.
+        try: return [child for child in item if child is not None]
+        except Exception: return []
     def find_control(name):
         queue=[app for app in pyatspi.Registry.getDesktop(0) if app.name=='uflinux-desktop']
         while queue:
@@ -41,8 +47,8 @@ try:
                 if (item.name==name and item.getRoleName() in ('button','push button','toggle button')
                         and item.getState().contains(pyatspi.STATE_SHOWING)
                         and item.queryAction().nActions): return item
-                queue.extend(list(item))
-            except (RuntimeError,LookupError): pass
+            except (RuntimeError,LookupError,AttributeError): pass
+            queue.extend(accessible_children(item))
         return None
     def wait_control(*names):
         for _ in range(600):
@@ -61,8 +67,8 @@ try:
                 if action.nActions:
                     assert action.doAction(0)
                     return
-            except (NotImplementedError,RuntimeError): pass
-            queue.extend(list(item))
+            except (NotImplementedError,RuntimeError,AttributeError): pass
+            queue.extend(accessible_children(item))
         raise AssertionError('Control has no accessible action')
     click(wait_control('Choose output device'))
     # WirePlumber may already have made the new sink the default.

@@ -4,14 +4,15 @@
 2. Enable Actions and choose **GitHub Actions** as the Pages source.
 3. Configure the `github-pages` environment to allow deployment from version tags
    such as `v*`; its default branch restrictions may otherwise reject tag builds.
-4. Generate a persistent RSA key outside this repository:
+4. Generate a persistent EC signing key outside this repository:
 
    ```sh
    install -d -m 700 "$HOME/.config/uflinux"
-   openssl genrsa -out "$HOME/.config/uflinux/uflinux.rsa" 3072
-   chmod 600 "$HOME/.config/uflinux/uflinux.rsa"
-   openssl rsa -in "$HOME/.config/uflinux/uflinux.rsa" -pubout \
-     -out "$HOME/.config/uflinux/uflinux.rsa.pub"
+   openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
+     -out "$HOME/.config/uflinux/uflinux.ec"
+   chmod 600 "$HOME/.config/uflinux/uflinux.ec"
+   openssl pkey -in "$HOME/.config/uflinux/uflinux.ec" -pubout \
+     -out "$HOME/.config/uflinux/uflinux.ec.pub"
    ```
 
 5. Add two Actions secrets containing the **PEM file contents**, not paths or
@@ -84,7 +85,7 @@ gh attestation verify uflinux-apk-repository.tar.gz --repo OWNER/REPO
 ```
 
 Download the assets named in SHA256SUMS before checking it. The repository snapshot
-contains `uflinux.rsa.pub`; install it under the same name in `/etc/apk/keys` when
+contains `uflinux.ec.pub`; install it under the same name in `/etc/apk/keys` when
 manually configuring a client. Obtain and verify the initial key through the
 authenticated release, rather than treating a checksum downloaded beside a file
 as independent authentication.

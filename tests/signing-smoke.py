@@ -10,7 +10,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from builder import ARCHES, LOCK, PROJECT, unsigned_digest, temporary_tree
+from builder import ARCHES, BUILD_KEY, LOCK, PROJECT, SIGNING_KEY, SIGN_STREAM, signature_names, unsigned_digest, temporary_tree
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--arch", choices=ARCHES, required=True)
@@ -27,8 +27,9 @@ if not before:
 (PROJECT / ".cache").mkdir(exist_ok=True)
 with temporary_tree(prefix="signing-smoke-", dir=PROJECT / ".cache") as temporary:
     temporary = Path(temporary)
-    private = temporary / "test.rsa"
-    subprocess.run(["openssl", "genrsa", "-out", str(private), "3072"], check=True)
+    private = temporary / "test.ec"
+    subprocess.run(["openssl", "genpkey", "-algorithm", "EC",
+                    "-pkeyopt", "ec_paramgen_curve:P-256", "-out", str(private)], check=True)
     private.chmod(0o600)
     public = subprocess.check_output(["openssl", "pkey", "-in", str(private), "-pubout"], text=True)
     private_text = private.read_text()
@@ -51,10 +52,22 @@ with temporary_tree(prefix="signing-smoke-", dir=PROJECT / ".cache") as temporar
     after = {p.name: unsigned_digest(p) for p in (scratch / "repository" / args.arch).glob("*.apk")}
     if before != after:
         raise RuntimeError("Resigning changed APK control/data streams")
-    staged_key = temporary / "roots" / args.arch / "root/var/lib/uflinux/keys/uflinux.rsa"
+    # The published key must really be EC, while apk v2 keeps naming the
+    # signature stream after its digest rather than its algorithm.
+    published = scratch / "repository" / (SIGNING_KEY + ".pub")
+    described = subprocess.run(["openssl", "pkey", "-pubin", "-in", str(published),
+                                "-text", "-noout"], text=True, capture_output=True)
+    if described.returncode or "EC" not in described.stdout or "prime256v1" not in described.stdout:
+        raise RuntimeError("The published signing key is not an EC P-256 public key: " + described.stderr)
+    stream = ".SIGN." + SIGN_STREAM + "." + SIGNING_KEY + ".pub"
+    for package in sorted((scratch / "repository" / args.arch).glob("*.apk")):
+        if signature_names(package) != [stream]:
+            raise RuntimeError(f"{package.name} does not carry the expected signature stream: "
+                               + str(signature_names(package)))
+    staged_key = temporary / "roots" / args.arch / "root/var/lib/uflinux/keys" / SIGNING_KEY
     if staged_key.exists():
         raise RuntimeError("The successful signing command retained its private key")
-    env["APK_SIGNING_PUBLIC_KEY"] = (source / "build.rsa.pub").read_text()
+    env["APK_SIGNING_PUBLIC_KEY"] = (source / BUILD_KEY).read_text()
     rejected = subprocess.run(command, env=env, text=True, capture_output=True)
     if not rejected.returncode or "public and private signing keys do not match" not in rejected.stderr:
         raise RuntimeError("A mismatched signing keypair was not explicitly rejected")

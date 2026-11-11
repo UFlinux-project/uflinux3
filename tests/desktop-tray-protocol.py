@@ -135,7 +135,7 @@ def run(marker):
                 if node.name == NAME and node.getRoleName() in ('button', 'push button'):
                     assert node.queryAction().doAction(0)
                     break
-                try: queue.extend(list(node))
+                try: queue.extend([child for child in node if child])
                 except Exception: pass
             else:
                 if child.poll() is not None: raise AssertionError('Tray fixture exited')
@@ -156,7 +156,7 @@ def run(marker):
                 if node.name == 'Updated action' and node.getRoleName() in ('button', 'push button', 'menu item'):
                     assert node.queryAction().doAction(0)
                     break
-                try: queue.extend(list(node))
+                try: queue.extend([child for child in node if child])
                 except Exception: pass
             else:
                 time.sleep(.05)

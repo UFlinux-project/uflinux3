@@ -22,8 +22,9 @@
 !/settings/shared/
 __pycache__/
 *.pyc
-*.rsa
-*.rsa.pub
+uflinux.ec
+uflinux.ec.pub
+test.ec
 *.pem
 *.key
 .venv/

@@ -224,11 +224,9 @@ impl App {
                 window.set_visible(false);
                 // Unmapping alone keeps the Wayland surface, the renderer and its
                 // back buffer, so a hidden shell would hold a full-output
-                // allocation for the rest of the session. Unrealizing releases all
-                // three; the shell realizes again when it is presented.
-                if window.is_realized() {
-                    gtk::prelude::WidgetExt::unrealize(&window);
-                }
+                // allocation for the rest of the session. Releasing the surface
+                // drops all three; the shell realizes again when it is presented.
+                crate::popup::release_window_surface(&window);
                 if *self.quick_panel.borrow() == "network" {
                     let request = self
                         .state
