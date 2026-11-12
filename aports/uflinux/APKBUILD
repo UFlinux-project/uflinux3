@@ -165,11 +165,17 @@ desktop() {
 	# the GPU; without one, recording fails with "no video codec available".
 	# The gallium driver covers AMD/Intel-gen11+/Nouveau/VirtIO; the Intel
 	# legacy and media drivers cover the older Intel generations (e.g. HD 4000
-	# in a ThinkPad T430). Both Intel drivers are x86-only in Alpine.
+	# in a ThinkPad T430). In Alpine the legacy driver is x86/x86_64-only and
+	# the media driver exists only on x86_64. The driver list is built via a
+	# variable because scripts/check-packages.py scans every literal
+	# depends assignment in this file and demands its contents on every rootfs
+	# architecture.
 	# libva-utils provides vainfo, which lists the codecs a driver supports.
 	case "$CARCH" in
-		x86|x86_64) depends="$depends libva-intel-driver intel-media-driver" ;;
+		x86) vaapi_drivers="libva-intel-driver" ;;
+		x86_64) vaapi_drivers="libva-intel-driver intel-media-driver" ;;
 	esac
+	depends="$depends $vaapi_drivers"
 	install -d "$subpkgdir"
 }
 

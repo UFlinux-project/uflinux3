@@ -59,13 +59,20 @@ class PortalTests(unittest.TestCase):
     def test_desktop_meta_ships_vaapi_drivers(self):
         # Without a VA-API driver the recorder exits with "no video codec
         # available" (exit 52). The gallium driver is arch-independent in
-        # Alpine; the two Intel drivers are x86-only and gated on CARCH.
+        # Alpine; the Intel drivers are gated per architecture because Alpine
+        # ships the legacy driver on x86/x86_64 only and the media driver on
+        # x86_64 only. The gated list must NOT appear in a literal
+        # depends="..." string: scripts/check-packages.py parses every
+        # depends="..." literal and demands it on every rootfs architecture.
         desktop = self.apkbuild.split('desktop() {')[1]
         self.assertIn('mesa-va-gallium', desktop)
+        self.assertIn('libva-utils', desktop)
+        self.assertIn('x86) vaapi_drivers="libva-intel-driver"', desktop)
+        self.assertIn('x86_64) vaapi_drivers="libva-intel-driver intel-media-driver"', desktop)
+        self.assertIn('depends="$depends $vaapi_drivers"', desktop)
         for package in ('libva-intel-driver', 'intel-media-driver'):
             with self.subTest(package=package):
-                self.assertIn(package, desktop)
-        self.assertIn('x86|x86_64', desktop)
+                self.assertNotIn(f'depends="$depends {package}', desktop)
 
 
 class PackagingTests(unittest.TestCase):
