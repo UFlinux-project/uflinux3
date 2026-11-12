@@ -27,6 +27,15 @@ required.update({"tlp", "tlp-openrc", "tlp-udev"})
 required.update({"py3-atspi", "wtype", "gcc", "musl-dev", "wayland-dev", "libxkbcommon-dev", "desktop-file-utils", "wlr-randr"})
 required.update({"autoconf", "automake", "dbus-dev", "glib-dev", "libmnl-dev", "libnftnl-dev", "libtool", "readline-dev", "linux-headers"})
 
+# Packages built from this repository's own aports tree are not in the Alpine
+# repositories; they are compiled by the build jobs before the image is assembled.
+local = set()
+for recipe in (root / "aports").glob("*/APKBUILD"):
+    name = re.search(r'^pkgname="?([^"\s]+)"?$', recipe.read_text(), re.M)
+    if name:
+        local.add(name.group(1))
+required -= local
+
 
 def check(arch):
     found = set()
