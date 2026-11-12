@@ -56,6 +56,17 @@ class PortalTests(unittest.TestCase):
             with self.subTest(package=package):
                 self.assertIn(package, desktop)
 
+    def test_desktop_meta_ships_vaapi_drivers(self):
+        # Without a VA-API driver the recorder exits with "no video codec
+        # available" (exit 52). The gallium driver is arch-independent in
+        # Alpine; the two Intel drivers are x86-only and gated on CARCH.
+        desktop = self.apkbuild.split('desktop() {')[1]
+        self.assertIn('mesa-va-gallium', desktop)
+        for package in ('libva-intel-driver', 'intel-media-driver'):
+            with self.subTest(package=package):
+                self.assertIn(package, desktop)
+        self.assertIn('x86|x86_64', desktop)
+
 
 class PackagingTests(unittest.TestCase):
     def test_the_tool_is_a_settings_subpackage(self):

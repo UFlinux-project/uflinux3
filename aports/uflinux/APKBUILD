@@ -160,7 +160,16 @@ desktop() {
 		greetd greetd-openrc uflinux-regreet=0.2.0-r0 cage polkit-elogind
 		connman=2.0-r2 connman-openrc=2.0-r2 iwd iwd-openrc busybox-openrc tzdata
 		pipewire pipewire-pulse wireplumber upower font-ubuntu-nerd font-ubuntu-mono-nerd font-noto font-noto-cjk papirus-icon-theme adwaita-icon-theme
-		mesa-dri-gallium doas"
+		mesa-dri-gallium mesa-va-gallium libva-utils doas"
+	# Hardware video encoding for gpu-screen-recorder needs a VA-API driver for
+	# the GPU; without one, recording fails with "no video codec available".
+	# The gallium driver covers AMD/Intel-gen11+/Nouveau/VirtIO; the Intel
+	# legacy and media drivers cover the older Intel generations (e.g. HD 4000
+	# in a ThinkPad T430). Both Intel drivers are x86-only in Alpine.
+	# libva-utils provides vainfo, which lists the codecs a driver supports.
+	case "$CARCH" in
+		x86|x86_64) depends="$depends libva-intel-driver intel-media-driver" ;;
+	esac
 	install -d "$subpkgdir"
 }
 

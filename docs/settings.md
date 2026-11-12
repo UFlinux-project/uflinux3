@@ -37,6 +37,8 @@ recording options live behind an Advanced expander, mirroring the backend's own 
 the expander state is itself a preference. The page also reports whether the
 `gpu-screen-recorder` backend was detected and can re-run that probe. Print Screen opens
 the capture overlay, and Shift or Ctrl plus Print Screen starts a recording straight away.
+Hardware encoding needs a VA-API driver; the desktop meta ships the Mesa gallium driver
+plus both Intel VA-API drivers (x86) so recording works out of the box on AMD and Intel GPUs.
 
 ## Services and authorization
 
