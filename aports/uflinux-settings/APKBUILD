@@ -78,7 +78,7 @@ desktop() {
 }
 screencapture() {
 	pkgdesc="UFLinux screenshot and screen recording tool"
-	depends="gpu-screen-recorder xdg-desktop-portal xdg-desktop-portal-wlr notification-daemon"
+	depends="gpu-screen-recorder xdg-desktop-portal xdg-desktop-portal-wlr mako"
 	amove usr/bin/uflinux-screencapture usr/share/applications/org.uflinux.ScreenCapture.desktop
 }
 installer_ui() {
