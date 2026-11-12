@@ -32,10 +32,14 @@ command('--hide')
 wait(lambda: status()['ready'] and status()['popup'] is None, 'Desktop did not prepare its hidden menus')
 assert 'libpulse' not in Path(f'/proc/{desktop}/maps').read_text(), 'Desktop links the audio backend'
 baseline = pss(desktop)
+# The log holds GTK warnings with multi-byte characters, so the byte offset
+# must slice bytes, not the decoded text, or the marker loses its prefix.
 start_offset = log_path.stat().st_size
+def tail():
+    return log_path.read_bytes()[start_offset:].decode('utf-8', 'replace')
 command('--start-menu', '--output', 'HEADLESS-1')
 wait(lambda: status()['popup'] == 'start', 'Start did not open')
-wait(lambda: 'UFLINUX_START_MENU_FIRST_FRAME_MS=' in log_path.read_text()[start_offset:], 'No painted Start frame')
+wait(lambda: 'UFLINUX_START_MENU_FIRST_FRAME_MS=' in tail(), 'No painted Start frame')
 command('--hide')
 samples = []
 for _ in range(10):
@@ -45,7 +49,7 @@ for _ in range(10):
 closed = pss(desktop)
 before = ticks(desktop); began = time.monotonic(); time.sleep(2)
 idle = (ticks(desktop) - before) / os.sysconf('SC_CLK_TCK') / (time.monotonic() - began) * 100
-frames = [float(v) for v in re.findall(r'UFLINUX_START_MENU_FIRST_FRAME_MS=([\d.]+)', log_path.read_text()[start_offset:])]
+frames = [float(v) for v in re.findall(r'UFLINUX_START_MENU_FIRST_FRAME_MS=([\d.]+)', tail())]
 # This smoke run is diagnostic; native release gates use the dedicated multi-session harness.
 metrics = {'start_frame_ms': frames, 'desktop_initial_pss_bytes': baseline,
            'desktop_closed_pss_bytes': closed, 'desktop_peak_pss_bytes': max(samples),
