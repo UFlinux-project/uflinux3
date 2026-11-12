@@ -9,8 +9,16 @@ class MatrixTests(unittest.TestCase):
     def test_main_and_prs_smoke_without_release_secrets(self):
         for event,ref in [('push','refs/heads/main'),('pull_request','refs/tags/v0.1.0')]:
             result=ci.configuration(event,ref)
-            self.assertEqual([m['arch'] for m in result['matrix']['include']],['x86_64'])
+            self.assertEqual([m['arch'] for m in result['matrix']['include']],
+                ['x86_64','ppc64le','riscv64','s390x'])
             self.assertEqual(result['release'],'false')
+    def test_main_and_prs_boot_images_for_secrets_free_architectures(self):
+        for event,ref in [('push','refs/heads/main'),('pull_request','refs/tags/v0.1.0')]:
+            modes={}
+            for job in ci.configuration(event,ref)['vm']['include']:
+                modes.setdefault(job['arch'],set()).add(job['mode'])
+            self.assertEqual(modes,{'x86_64':{'bios','uefi'},'ppc64le':{'native'},
+                'riscv64':{'uefi'},'s390x':{'native'}})
     def test_manual_runs_cover_all_architectures_without_release_secrets(self):
         result=ci.configuration('workflow_dispatch','refs/heads/main')
         self.assertEqual(len(result['matrix']['include']),7)
@@ -30,7 +38,7 @@ class MatrixTests(unittest.TestCase):
             self.assertEqual({job['mode'] for job in jobs if job['arch'] == arch}, {'native'})
 
     def test_each_architecture_has_four_independent_jobs(self):
-        for event,ref,count in [('pull_request','refs/heads/main',4),('workflow_dispatch','refs/heads/main',28)]:
+        for event,ref,count in [('pull_request','refs/heads/main',16),('workflow_dispatch','refs/heads/main',28)]:
             result=ci.configuration(event,ref)
             jobs=result['packages']['include']
             self.assertEqual(len(jobs),count)

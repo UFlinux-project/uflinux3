@@ -14,7 +14,10 @@ def configuration(event, ref):
     version = ref.removeprefix("refs/tags/v") if release else lock["distribution"]["version"]
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:_(?:alpha|beta|rc)[0-9]+)?", version):
         raise ValueError("Tag must be v followed by an Alpine-compatible version")
-    selected = list(arches) if release or event == "workflow_dispatch" else ["x86_64"]
+    # Ordinary commits build images and boot them in QEMU on every architecture
+    # with a reachable emulator on the x86 runner; the ARM targets stay on
+    # releases and manual dispatches.
+    selected = list(arches) if release or event == "workflow_dispatch" else ["x86_64", "ppc64le", "riscv64", "s390x"]
     matrix = {"include": [{"arch": arch, "runner": arches[arch]["runner"]} for arch in selected]}
     packages = {"include": [{"arch": arch, "runner": arches[arch]["runner"], "package": package}
                              for arch in selected for package in ("connman", "uflinux-regreet", "uflinux-settings", "uflinux")]}
