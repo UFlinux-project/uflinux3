@@ -31,13 +31,15 @@ class PortalTests(unittest.TestCase):
         self.apkbuild = read(UFLINUX / 'APKBUILD')
 
     def test_both_drop_ins_are_shipped(self):
-        for name in ('labwc-portals.conf', 'xdg-desktop-portal-wlr-config'):
+        for name in ('labwc-portals.conf', 'xdg-desktop-portal-wlr-labwc'):
             with self.subTest(name=name):
                 self.assertIn(name, self.apkbuild.split('build()')[0])
 
     def test_drop_ins_land_in_the_xdg_directories(self):
         self.assertIn('install -Dm644 "$srcdir/labwc-portals.conf" "$pkgdir/etc/xdg/xdg-desktop-portal/labwc-portals.conf"', self.apkbuild)
-        self.assertIn('install -Dm644 "$srcdir/xdg-desktop-portal-wlr-config" "$pkgdir/etc/xdg/xdg-desktop-portal-wlr/config"', self.apkbuild)
+        # Installed under the desktop-specific name (not "config"): Alpine's
+        # xdg-desktop-portal-wlr package owns /etc/xdg/xdg-desktop-portal-wlr/config.
+        self.assertIn('install -Dm644 "$srcdir/xdg-desktop-portal-wlr-labwc" "$pkgdir/etc/xdg/xdg-desktop-portal-wlr/labwc"', self.apkbuild)
 
     def test_screen_cast_is_pinned_to_the_wlr_backend(self):
         # XDG_CURRENT_DESKTOP is labwc, and the file name must match it in lower case.
@@ -46,7 +48,7 @@ class PortalTests(unittest.TestCase):
         self.assertIn('org.freedesktop.impl.portal.ScreenCast=wlr', conf)
 
     def test_portal_frame_rate_is_capped(self):
-        self.assertIn('max_fps=60', read(UFLINUX / 'xdg-desktop-portal-wlr-config'))
+        self.assertIn('max_fps=60', read(UFLINUX / 'xdg-desktop-portal-wlr-labwc'))
 
     def test_desktop_meta_pulls_in_the_capture_stack(self):
         desktop = self.apkbuild.split('desktop() {')[1]

@@ -103,10 +103,10 @@ package() {
 	install -Dm644 "$srcdir/mako.conf" "$pkgdir/etc/xdg/mako/config"
 	install -Dm644 "$srcdir/labwc-portals.conf" "$pkgdir/etc/xdg/xdg-desktop-portal/labwc-portals.conf"
 	# Desktop-specific drop-in: portal-wlr checks
-	# <dir>/xdg-desktop-portal-wlr/$XDG_CURRENT_DESKTOP/config before the plain
+	# <dir>/xdg-desktop-portal-wlr/$XDG_CURRENT_DESKTOP before the plain
 	# "config" file, and Alpine's xdg-desktop-portal-wlr package owns
 	# /etc/xdg/xdg-desktop-portal-wlr/config (apk refuses to overwrite it).
-	install -Dm644 "$srcdir/xdg-desktop-portal-wlr-labwc-config" "$pkgdir/etc/xdg/xdg-desktop-portal-wlr/labwc/config"
+	install -Dm644 "$srcdir/xdg-desktop-portal-wlr-labwc" "$pkgdir/etc/xdg/xdg-desktop-portal-wlr/labwc"
 	install -Dm644 "$srcdir/firefox-defaults.js" "$pkgdir/usr/lib/firefox/browser/defaults/preferences/uflinux.js"
 	install -Dm644 "$srcdir/45-uflinux-fonts.conf" "$pkgdir/etc/fonts/conf.d/45-uflinux-fonts.conf"
 	install -Dm644 "$srcdir/gtk-settings.ini" "$pkgdir/etc/xdg/gtk-3.0/settings.ini"
