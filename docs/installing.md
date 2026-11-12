@@ -109,7 +109,8 @@ Use `~/.config/labwc/` for personal compositor overrides. Defaults live in
 shows battery status where available and a bolt on desktops. Super+Space opens the
 launcher; Super+Enter opens a terminal; Super+E opens files; Super+D shows the
 desktop. Super+I opens Settings; the taskbar has separate Network, Sound and Power menus.
-Audio and brightness hotkeys use the same settings backend.
+Print Screen opens the screenshot and recording tool, and Shift or Ctrl plus Print Screen
+starts a screen recording. Audio and brightness hotkeys use the same settings backend.
 
 To roll back a custom package, inspect the retained versions with `apk policy`,
 then explicitly select the matching older package and dependency versions. For

@@ -1,0 +1,335 @@
+From 285dd4f775ee8f2d7bf0a125c4c1972f345a0b13 Mon Sep 17 00:00:00 2001
+From: panmourovaty <panmourovaty@centrum.cz>
+Date: Thu, 12 Nov 2026 09:45:04 +0100
+Subject: [PATCH 5/9] Wire v4l2 mem2mem encoder into codec selection
+
+Creates the v4l2 backend for HW_V4L2, probes v4l2 codecs, filters them
+against ffmpeg, and auto-selects the v4l2 encoder when no GPU encoder is
+available (before the cpu fallback).
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+---
+ include/recorder/codec_select.h |   4 +-
+ src/cli/commands.c              |   2 +-
+ src/recorder/codec_select.c     | 154 +++++++++++++++++++++++++++++---
+ 3 files changed, 144 insertions(+), 16 deletions(-)
+
+diff --git a/include/recorder/codec_select.h b/include/recorder/codec_select.h
+index 0e6d230..c992f0d 100644
+--- a/include/recorder/codec_select.h
++++ b/include/recorder/codec_select.h
+@@ -15,13 +15,15 @@ typedef struct gsr_video_encoder gsr_video_encoder;
+ gsr_video_encoder* create_video_encoder(gsr_egl *egl, const gsr_recorder_settings *settings);
+ 
+ bool get_supported_video_codecs(gsr_egl *egl, gsr_video_codec video_codec, bool use_software_video_encoder, bool cleanup, gsr_supported_video_codecs *video_codecs);
+-void set_supported_video_codecs_ffmpeg(gsr_supported_video_codecs *supported_video_codecs, gsr_supported_video_codecs *supported_video_codecs_vulkan, gsr_gpu_vendor vendor);
++/* Any of the three codec sets may be NULL. The v4l2 set is only relevant when built with -Dv4l2_encoder=enabled */
++void set_supported_video_codecs_ffmpeg(gsr_supported_video_codecs *supported_video_codecs, gsr_supported_video_codecs *supported_video_codecs_vulkan, gsr_supported_video_codecs *supported_video_codecs_v4l2, gsr_gpu_vendor vendor);
+ 
+ vec2i codec_get_max_resolution(gsr_video_codec video_codec, bool use_software_video_encoder, const gsr_supported_video_codecs *supported_video_codecs);
+ bool codec_supports_resolution(vec2i codec_max_resolution, vec2i capture_resolution);
+ /* Returns -1 if none is available */
+ gsr_video_codec select_appropriate_video_codec_automatically(vec2i video_size, bool yuv444, const gsr_supported_video_codecs *supported_video_codecs);
+ void force_cpu_encoding(gsr_recorder_settings *settings);
++void force_v4l2_encoding(gsr_recorder_settings *settings);
+ 
+ gsr_audio_codec select_audio_codec_with_fallback(gsr_audio_codec audio_codec, const char *file_extension, bool uses_amix, bool audio_codec_specified);
+ /* Changes the video codec to one supported by the container, if needed. This has to run before the capture is created so hdr capture (and tonemapping) matches the final video codec */
+diff --git a/src/cli/commands.c b/src/cli/commands.c
+index b5d1736..e7f9210 100644
+--- a/src/cli/commands.c
++++ b/src/cli/commands.c
+@@ -89,7 +89,7 @@ static void list_supported_video_codecs(gsr_egl *egl) {
+     gsr_supported_video_codecs supported_video_codecs_software;
+     get_supported_video_codecs(egl, GSR_VIDEO_CODEC_H264, true, false, &supported_video_codecs_software);
+ 
+-    set_supported_video_codecs_ffmpeg(&supported_video_codecs, &supported_video_codecs_vulkan, egl->gpu_info.vendor);
++    set_supported_video_codecs_ffmpeg(&supported_video_codecs, &supported_video_codecs_vulkan, NULL, egl->gpu_info.vendor);
+ 
+     const gsr_named_video_codec video_codecs[] = {
+         { "h264",              &supported_video_codecs.h264 },
+diff --git a/src/recorder/codec_select.c b/src/recorder/codec_select.c
+index 4e36e39..2792a3f 100644
+--- a/src/recorder/codec_select.c
++++ b/src/recorder/codec_select.c
+@@ -7,6 +7,10 @@
+ #include "../../include/codec_query/nvenc.h"
+ #include "../../include/codec_query/vaapi.h"
+ #include "../../include/codec_query/vulkan.h"
++#ifdef GSR_V4L2_ENCODER
++#include "../../include/encoder/video/v4l2_m2m.h"
++#include "../../include/codec_query/v4l2_m2m.h"
++#endif
+ #include "../../include/log.h"
+ 
+ #include <libavformat/avformat.h>
+@@ -26,6 +30,16 @@ gsr_video_encoder* create_video_encoder(gsr_egl *egl, const gsr_recorder_setting
+         return video_encoder;
+     }
+ 
++#ifdef GSR_V4L2_ENCODER
++    if(settings->video_encoder == GSR_VIDEO_ENCODER_HW_V4L2) {
++        gsr_video_encoder_v4l2_m2m_params params;
++        params.egl = egl;
++        params.color_depth = color_depth;
++        video_encoder = gsr_video_encoder_v4l2_m2m_create(&params);
++        return video_encoder;
++    }
++#endif
++
+     if(video_codec_is_vulkan(settings->video_codec)) {
+         gsr_video_encoder_vulkan_params params;
+         params.egl = egl;
+@@ -71,6 +85,11 @@ bool get_supported_video_codecs(gsr_egl *egl, gsr_video_codec video_codec, bool
+         return true;
+     }
+ 
++#ifdef GSR_V4L2_ENCODER
++    if(video_codec_is_v4l2(video_codec))
++        return gsr_get_supported_video_codecs_v4l2_m2m(video_codecs, NULL, cleanup);
++#endif
++
+     if(video_codec_is_vulkan(video_codec))
+         return gsr_get_supported_video_codecs_vulkan(video_codecs, egl->card_path, &egl->vulkan_device_index, cleanup);
+ 
+@@ -114,32 +133,36 @@ static const AVCodec* get_ffmpeg_video_codec(gsr_video_codec video_codec, gsr_gp
+         case GSR_VIDEO_CODEC_AV1_HDR_VULKAN:
+         case GSR_VIDEO_CODEC_AV1_10BIT_VULKAN:
+             return avcodec_find_encoder_by_name("av1_vulkan");
++        case GSR_VIDEO_CODEC_H264_V4L2:
++            return avcodec_find_encoder_by_name("h264_v4l2m2m");
++        case GSR_VIDEO_CODEC_HEVC_V4L2:
++            return avcodec_find_encoder_by_name("hevc_v4l2m2m");
+     }
+     return NULL;
+ }
+ 
+-void set_supported_video_codecs_ffmpeg(gsr_supported_video_codecs *supported_video_codecs, gsr_supported_video_codecs *supported_video_codecs_vulkan, gsr_gpu_vendor vendor) {
+-    if(!get_ffmpeg_video_codec(GSR_VIDEO_CODEC_H264, vendor)) {
++void set_supported_video_codecs_ffmpeg(gsr_supported_video_codecs *supported_video_codecs, gsr_supported_video_codecs *supported_video_codecs_vulkan, gsr_supported_video_codecs *supported_video_codecs_v4l2, gsr_gpu_vendor vendor) {
++    if(supported_video_codecs && !get_ffmpeg_video_codec(GSR_VIDEO_CODEC_H264, vendor)) {
+         supported_video_codecs->h264.supported = false;
+     }
+ 
+-    if(!get_ffmpeg_video_codec(GSR_VIDEO_CODEC_HEVC, vendor)) {
++    if(supported_video_codecs && !get_ffmpeg_video_codec(GSR_VIDEO_CODEC_HEVC, vendor)) {
+         supported_video_codecs->hevc.supported = false;
+         supported_video_codecs->hevc_hdr.supported = false;
+         supported_video_codecs->hevc_10bit.supported = false;
+     }
+ 
+-    if(!get_ffmpeg_video_codec(GSR_VIDEO_CODEC_AV1, vendor)) {
++    if(supported_video_codecs && !get_ffmpeg_video_codec(GSR_VIDEO_CODEC_AV1, vendor)) {
+         supported_video_codecs->av1.supported = false;
+         supported_video_codecs->av1_hdr.supported = false;
+         supported_video_codecs->av1_10bit.supported = false;
+     }
+ 
+-    if(!get_ffmpeg_video_codec(GSR_VIDEO_CODEC_VP8, vendor)) {
++    if(supported_video_codecs && !get_ffmpeg_video_codec(GSR_VIDEO_CODEC_VP8, vendor)) {
+         supported_video_codecs->vp8.supported = false;
+     }
+ 
+-    if(!get_ffmpeg_video_codec(GSR_VIDEO_CODEC_VP9, vendor)) {
++    if(supported_video_codecs && !get_ffmpeg_video_codec(GSR_VIDEO_CODEC_VP9, vendor)) {
+         supported_video_codecs->vp9.supported = false;
+     }
+ 
+@@ -160,6 +183,16 @@ void set_supported_video_codecs_ffmpeg(gsr_supported_video_codecs *supported_vid
+             supported_video_codecs_vulkan->av1_10bit.supported = false;
+         }
+     }
++
++    if(supported_video_codecs_v4l2) {
++        if(!get_ffmpeg_video_codec(GSR_VIDEO_CODEC_H264_V4L2, vendor)) {
++            supported_video_codecs_v4l2->h264.supported = false;
++        }
++
++        if(!get_ffmpeg_video_codec(GSR_VIDEO_CODEC_HEVC_V4L2, vendor)) {
++            supported_video_codecs_v4l2->hevc.supported = false;
++        }
++    }
+ }
+ 
+ gsr_audio_codec select_audio_codec_with_fallback(gsr_audio_codec audio_codec, const char *file_extension, bool uses_amix, bool audio_codec_specified) {
+@@ -254,6 +287,8 @@ static const gsr_supported_video_codec* get_supported_video_codec(const gsr_supp
+         case GSR_VIDEO_CODEC_AV1_VULKAN:        return &supported_video_codecs->av1;
+         case GSR_VIDEO_CODEC_AV1_HDR_VULKAN:    return &supported_video_codecs->av1_hdr;
+         case GSR_VIDEO_CODEC_AV1_10BIT_VULKAN:  return &supported_video_codecs->av1_10bit;
++        case GSR_VIDEO_CODEC_H264_V4L2:         return &supported_video_codecs->h264;
++        case GSR_VIDEO_CODEC_HEVC_V4L2:         return &supported_video_codecs->hevc;
+     }
+     return NULL;
+ }
+@@ -311,6 +346,16 @@ static const AVCodec* get_av_codec_if_supported(gsr_video_codec video_codec, gsr
+                 return get_ffmpeg_video_codec(video_codec, egl->gpu_info.vendor);
+             break;
+         }
++        case GSR_VIDEO_CODEC_H264_V4L2: {
++            if(supported_video_codecs->h264.supported)
++                return get_ffmpeg_video_codec(video_codec, egl->gpu_info.vendor);
++            break;
++        }
++        case GSR_VIDEO_CODEC_HEVC_V4L2: {
++            if(supported_video_codecs->hevc.supported)
++                return get_ffmpeg_video_codec(video_codec, egl->gpu_info.vendor);
++            break;
++        }
+         case GSR_VIDEO_CODEC_VP8: {
+             if(supported_video_codecs->vp8.supported)
+                 return get_ffmpeg_video_codec(video_codec, egl->gpu_info.vendor);
+@@ -381,6 +426,16 @@ vec2i codec_get_max_resolution(gsr_video_codec video_codec, bool use_software_vi
+                 return supported_video_codecs->vp9.max_resolution;
+             break;
+         }
++        case GSR_VIDEO_CODEC_H264_V4L2: {
++            if(supported_video_codecs->h264.supported)
++                return supported_video_codecs->h264.max_resolution;
++            break;
++        }
++        case GSR_VIDEO_CODEC_HEVC_V4L2: {
++            if(supported_video_codecs->hevc.supported)
++                return supported_video_codecs->hevc.max_resolution;
++            break;
++        }
+     }
+     return (vec2i){0, 0};
+ }
+@@ -408,10 +463,19 @@ void force_cpu_encoding(gsr_recorder_settings *settings) {
+     }
+ }
+ 
++void force_v4l2_encoding(gsr_recorder_settings *settings) {
++    settings->video_codec = GSR_VIDEO_CODEC_H264_V4L2;
++    settings->video_encoder = GSR_VIDEO_ENCODER_HW_V4L2;
++}
++
+ static bool video_codec_supports_yuv444(const gsr_supported_video_codecs *supported_video_codecs, const gsr_recorder_settings *settings) {
+     if(settings->video_encoder == GSR_VIDEO_ENCODER_HW_CPU)
+         return settings->video_codec == GSR_VIDEO_CODEC_H264;
+ 
++    // V4L2 mem2mem encoders only accept NV12 input
++    if(settings->video_encoder == GSR_VIDEO_ENCODER_HW_V4L2)
++        return false;
++
+     const gsr_supported_video_codec *supported_video_codec = get_supported_video_codec(supported_video_codecs, settings->video_codec);
+     return supported_video_codec && supported_video_codec->yuv444.supported;
+ }
+@@ -487,6 +551,10 @@ static int pick_video_codec(gsr_egl *egl, gsr_recorder_settings *settings, bool
+                 }
+                 return pick_video_codec(egl, settings, true, low_power, supported_video_codecs, video_codec);
+             }
++            case GSR_VIDEO_CODEC_H264_V4L2:
++            case GSR_VIDEO_CODEC_HEVC_V4L2:
++                // No fallback. Either the v4l2m2m encoder works or recording fails.
++                break;
+         }
+ 
+         video_codec_f = get_av_codec_if_supported(settings->video_codec, egl, settings->video_encoder == GSR_VIDEO_ENCODER_HW_CPU, supported_video_codecs);
+@@ -544,11 +612,40 @@ gsr_video_codec select_appropriate_video_codec_automatically(vec2i video_size, b
+ }
+ 
+ int select_video_codec_with_fallback(vec2i video_size, gsr_recorder_settings *settings, const char *file_extension, gsr_egl *egl, bool *low_power, const AVCodec **video_codec) {
++    bool use_v4l2_encoder = false;
++#ifdef GSR_V4L2_ENCODER
++    use_v4l2_encoder = (settings->video_encoder == GSR_VIDEO_ENCODER_HW_V4L2);
++    if(use_v4l2_encoder && !video_codec_is_v4l2(settings->video_codec)) {
++        if(settings->video_codec == (gsr_video_codec)GSR_VIDEO_CODEC_AUTO || settings->video_codec == GSR_VIDEO_CODEC_H264) {
++            settings->video_codec = GSR_VIDEO_CODEC_H264_V4L2;
++        } else if(settings->video_codec == GSR_VIDEO_CODEC_HEVC) {
++            settings->video_codec = GSR_VIDEO_CODEC_HEVC_V4L2;
++        } else {
++            gsr_log(GSR_LOG_LEVEL_ERROR, "video codec '%s' is not supported with -encoder v4l2. Only h264 and hevc are supported by v4l2 mem2mem encoders.", video_codec_to_string(settings->video_codec));
++            return GSR_ERROR_VIDEO_CODEC_UNSUPPORTED;
++        }
++    }
++#endif
++
+     gsr_supported_video_codecs supported_video_codecs_non_vulkan;
++#ifdef GSR_V4L2_ENCODER
++    if(use_v4l2_encoder) {
++        if(!gsr_get_supported_video_codecs_v4l2_m2m(&supported_video_codecs_non_vulkan, settings->v4l2_device, true)) {
++            gsr_log(GSR_LOG_LEVEL_ERROR, "failed to query v4l2 mem2mem encoders. Make sure a v4l2 m2m encoder exists on your system%s%s. Run 'gpu-screen-recorder --info' to list v4l2 encoders.",
++                settings->v4l2_device ? " at device " : "", settings->v4l2_device ? settings->v4l2_device : "");
++            return GSR_ERROR_VIDEO_CODEC_QUERY_FAILED;
++        }
++    } else
++#endif
+     get_supported_video_codecs(egl, settings->video_codec, settings->video_encoder == GSR_VIDEO_ENCODER_HW_CPU, true, &supported_video_codecs_non_vulkan);
+ 
+     gsr_supported_video_codecs supported_video_codecs_vulkan = supported_video_codecs_non_vulkan;
+-    set_supported_video_codecs_ffmpeg(&supported_video_codecs_non_vulkan, &supported_video_codecs_vulkan, egl->gpu_info.vendor);
++#ifdef GSR_V4L2_ENCODER
++    if(use_v4l2_encoder)
++        set_supported_video_codecs_ffmpeg(NULL, NULL, &supported_video_codecs_non_vulkan, egl->gpu_info.vendor);
++    else
++#endif
++        set_supported_video_codecs_ffmpeg(&supported_video_codecs_non_vulkan, &supported_video_codecs_vulkan, NULL, egl->gpu_info.vendor);
+ 
+     gsr_supported_video_codecs *supported_video_codecs = video_codec_is_vulkan(settings->video_codec)
+         ? &supported_video_codecs_vulkan
+@@ -557,11 +654,20 @@ int select_video_codec_with_fallback(vec2i video_size, gsr_recorder_settings *se
+     const bool video_codec_auto = settings->video_codec == (gsr_video_codec)GSR_VIDEO_CODEC_AUTO;
+     if(video_codec_auto) {
+         if(strcmp(file_extension, "webm") == 0) {
++#ifdef GSR_V4L2_ENCODER
++            if(settings->video_encoder == GSR_VIDEO_ENCODER_HW_V4L2) {
++                gsr_log(GSR_LOG_LEVEL_ERROR, "webm requires the vp8 codec which is not supported by v4l2 mem2mem encoders. Use a different container or video codec.");
++                return GSR_ERROR_VIDEO_CODEC_UNSUPPORTED;
++            }
++#endif
+             gsr_log(GSR_LOG_LEVEL_INFO, "using vp8 encoder because a codec was not specified and the file extension is .webm");
+             settings->video_codec = GSR_VIDEO_CODEC_VP8;
+         } else if(settings->video_encoder == GSR_VIDEO_ENCODER_HW_CPU) {
+             gsr_log(GSR_LOG_LEVEL_INFO, "using h264 encoder because a codec was not specified");
+             settings->video_codec = GSR_VIDEO_CODEC_H264;
++        } else if(settings->video_encoder == GSR_VIDEO_ENCODER_HW_V4L2) {
++            gsr_log(GSR_LOG_LEVEL_INFO, "using h264 v4l2 encoder because a codec was not specified");
++            settings->video_codec = GSR_VIDEO_CODEC_H264_V4L2;
+         } else if(settings->video_encoder != GSR_VIDEO_ENCODER_HW_CPU) {
+             const bool yuv444 = settings->pixel_format == GSR_PIXEL_FORMAT_YUV444;
+             settings->video_codec = select_appropriate_video_codec_automatically(video_size, yuv444, &supported_video_codecs_non_vulkan);
+@@ -572,13 +678,33 @@ int select_video_codec_with_fallback(vec2i video_size, gsr_recorder_settings *se
+             }
+ 
+             if(settings->video_codec == (gsr_video_codec)-1) {
+-                if(settings->fallback_cpu_encoding) {
+-                    gsr_log(GSR_LOG_LEVEL_WARNING, "gpu encoding is not available on your system or your gpu doesn't support recording at the resolution you are trying to record, trying cpu encoding instead because -fallback-cpu-encoding is enabled. Install the proper vaapi drivers on your system (if supported) if you experience performance issues");
+-                    force_cpu_encoding(settings);
+-                } else {
+-                    gsr_log(GSR_LOG_LEVEL_ERROR, "no video encoder was specified and neither h264, hevc nor av1 are supported on your system or you are trying to capture at a resolution higher than your system supports for each codec.\n"
+-                        "  Ensure that you have installed the proper vaapi driver. If your gpu doesn't support video encoding then you can run gpu-screen-recorder with \"-fallback-cpu-encoding yes\" option to use cpu encoding.");
+-                    return GSR_ERROR_NO_VIDEO_CODEC_AVAILABLE;
++#ifdef GSR_V4L2_ENCODER
++                // No GPU encoder available. If a v4l2 mem2mem encoder exists (raspberry pi, radxa, rockchip, ...) then use it.
++                gsr_supported_video_codecs v4l2_video_codecs;
++                if(gsr_get_supported_video_codecs_v4l2_m2m(&v4l2_video_codecs, settings->v4l2_device, true)
++                    && (video_codec_can_be_selected_automatically(&v4l2_video_codecs.h264, video_size, false) || video_codec_can_be_selected_automatically(&v4l2_video_codecs.hevc, video_size, false))) {
++                    set_supported_video_codecs_ffmpeg(NULL, NULL, &v4l2_video_codecs, egl->gpu_info.vendor);
++                    const gsr_video_codec v4l2_codec = select_appropriate_video_codec_automatically(video_size, false, &v4l2_video_codecs);
++                    if(v4l2_codec != (gsr_video_codec)-1) {
++                        gsr_log(GSR_LOG_LEVEL_WARNING, "gpu encoding is not available on your system, using v4l2 mem2mem encoder at %s instead. Specify a codec with -v4l2-device if you have multiple encoder devices", gsr_v4l2_m2m_get_device_path());
++                        force_v4l2_encoding(settings);
++                        if(v4l2_codec == GSR_VIDEO_CODEC_HEVC)
++                            settings->video_codec = GSR_VIDEO_CODEC_HEVC_V4L2;
++                        memcpy(&supported_video_codecs_non_vulkan, &v4l2_video_codecs, sizeof(supported_video_codecs_non_vulkan));
++                        supported_video_codecs = &supported_video_codecs_non_vulkan;
++                    }
++                }
++                if(settings->video_codec == (gsr_video_codec)-1)
++#endif
++                {
++                    if(settings->fallback_cpu_encoding) {
++                        gsr_log(GSR_LOG_LEVEL_WARNING, "gpu encoding is not available on your system or your gpu doesn't support recording at the resolution you are trying to record, trying cpu encoding instead because -fallback-cpu-encoding is enabled. Install the proper vaapi drivers on your system (if supported) if you experience performance issues");
++                        force_cpu_encoding(settings);
++                    } else {
++                        gsr_log(GSR_LOG_LEVEL_ERROR, "no video encoder was specified and neither h264, hevc nor av1 are supported on your system or you are trying to capture at a resolution higher than your system supports for each codec.\n"
++                            "  Ensure that you have installed the proper vaapi driver. If your gpu doesn't support video encoding then you can run gpu-screen-recorder with \"-fallback-cpu-encoding yes\" option to use cpu encoding.");
++                        return GSR_ERROR_NO_VIDEO_CODEC_AVAILABLE;
++                    }
+                 }
+             }
+         }
+-- 
+2.56.0
+

@@ -6,7 +6,7 @@ state, ConnMan authentication and display rollback. The privileged system helper
 uses polkit and normally exits after 45 idle seconds; saved additional routes keep
 its ConnMan subscription alive. Authentication uses libpolkit-agent-1 and PAM.
 
-Open `uflinux-settings`, use `--page network|displays|audio|power|default-apps|datetime|appearance|about`,
+Open `uflinux-settings`, use `--page network|displays|audio|power|default-apps|datetime|appearance|screen-capture|about`,
 or `--panel network|sound|power --output DP-1` for the taskbar menus.
 `--quick-settings` remains an alias for the Network panel. The separate resident `uflinux-start-menu
 [--output DP-1]` toggles the ArcMenu-inspired launcher. It prepares its fixed
@@ -48,6 +48,14 @@ to labwc, not a claim of per-monitor activation. Mirroring is unavailable on thi
 compositor. Brightness requires a kernel backlight or a responding DDC/CI display.
 Additional routes use protocol 242 and only recorded routes are removed. Wallpapers
 are local files with a 16-megapixel/32-MiB limit; previews are downscaled.
+
+`screencapture/` is the Print Screen tool shipped as the `uflinux-screencapture` package.
+It starts on demand and exits when the capture is done; nothing runs permanently. It reads
+its preferences from the Settings service over session D-Bus, so the Screen Capture page
+is the only editor, and it captures through the `gpu-screen-recorder` backend, using the
+desktop portal for window capture. `uflinux-screencapture [--screenshot|--record]
+[--target screen|window|area] [--delay SECONDS] [--silent]` bypasses the chooser;
+screenshots go to the configured folder and the clipboard.
 
 Build with `cargo build --workspace --release --locked`; packaging uses frozen
 resolution and cargo auditable. Run `cargo test --workspace --locked`. Generate

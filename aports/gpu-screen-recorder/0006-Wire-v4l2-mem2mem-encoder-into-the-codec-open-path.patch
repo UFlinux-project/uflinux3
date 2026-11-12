@@ -1,0 +1,173 @@
+From 718d1213b5921c9a9092e945fa85e1fe2d90ada2 Mon Sep 17 00:00:00 2001
+From: panmourovaty <panmourovaty@centrum.cz>
+Date: Thu, 12 Nov 2026 09:47:58 +0100
+Subject: [PATCH 6/9] Wire v4l2 mem2mem encoder into the codec open path
+
+- get_pixel_format() returns NV12 for the v4l2 encoder (its raw output
+  queue only accepts NV12)
+- create_video_codec_context(): skip vaapi-specific global_quality and
+  the rc_mode av_opt_set block for v4l2 (ffmpeg's v4l2m2m encoders have
+  no rc_mode option; rate control comes from bit_rate / qmin / qmax),
+  support fixed-QP through qmin/qmax, skip b-frames from -tune quality
+- open_video_hardware(): skip QP/rc_mode dict options for v4l2 and pass
+  the -v4l2-device value through the patched ffmpeg video_device option
+  when available
+- recorder.c: validate codec choice for -encoder v4l2 and pass the new
+  get_pixel_format argument
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+---
+ include/recorder/video_codec.h |  2 +-
+ src/recorder/recorder.c        | 11 +++++++-
+ src/recorder/video_codec.c     | 46 ++++++++++++++++++++++++++++------
+ 3 files changed, 49 insertions(+), 10 deletions(-)
+
+diff --git a/include/recorder/video_codec.h b/include/recorder/video_codec.h
+index 9ff1aec..bb80946 100644
+--- a/include/recorder/video_codec.h
++++ b/include/recorder/video_codec.h
+@@ -9,7 +9,7 @@
+ #include <libavcodec/avcodec.h>
+ 
+ int video_quality_to_h264_equivalent_qp(gsr_video_quality video_quality);
+-enum AVPixelFormat get_pixel_format(gsr_video_codec video_codec, gsr_gpu_vendor vendor, gsr_pixel_format pixel_format, bool use_software_video_encoder);
++enum AVPixelFormat get_pixel_format(gsr_video_codec video_codec, gsr_gpu_vendor vendor, gsr_pixel_format pixel_format, bool use_software_video_encoder, bool use_v4l2_video_encoder);
+ 
+ AVCodecContext* create_video_codec_context(enum AVPixelFormat pix_fmt, const AVCodec *codec, const gsr_egl *egl, const gsr_recorder_settings *settings, int width, int height);
+ bool open_video_software(AVCodecContext *codec_context, const gsr_recorder_settings *settings);
+diff --git a/src/recorder/recorder.c b/src/recorder/recorder.c
+index 0557703..0fed802 100644
+--- a/src/recorder/recorder.c
++++ b/src/recorder/recorder.c
+@@ -225,6 +225,15 @@ static int recorder_setup_video_encoder(gsr_recorder *self) {
+         return GSR_ERROR_GENERIC;
+     }
+ 
++#ifdef GSR_V4L2_ENCODER
++    if(self->settings.video_encoder == GSR_VIDEO_ENCODER_HW_V4L2 && self->settings.video_codec != (gsr_video_codec)GSR_VIDEO_CODEC_AUTO &&
++            self->settings.video_codec != GSR_VIDEO_CODEC_H264 && self->settings.video_codec != GSR_VIDEO_CODEC_HEVC &&
++            !video_codec_is_v4l2(self->settings.video_codec)) {
++        gsr_log(GSR_LOG_LEVEL_ERROR, "-encoder v4l2 was specified but the codec '%s' is not supported. -encoder v4l2 supports only h264 and hevc", video_codec_to_string(self->settings.video_codec));
++        return GSR_ERROR_GENERIC;
++    }
++#endif
++
+     self->low_power = false;
+     const AVCodec *video_codec_f = NULL;
+     const int select_video_codec_result = select_video_codec_with_fallback(self->video_size, &self->settings, self->file_extension, self->egl, &self->low_power, &video_codec_f);
+@@ -232,7 +241,7 @@ static int recorder_setup_video_encoder(gsr_recorder *self) {
+         return select_video_codec_result;
+     }
+ 
+-    const enum AVPixelFormat video_pix_fmt = get_pixel_format(self->settings.video_codec, self->egl->gpu_info.vendor, self->settings.pixel_format, self->settings.video_encoder == GSR_VIDEO_ENCODER_HW_CPU);
++    const enum AVPixelFormat video_pix_fmt = get_pixel_format(self->settings.video_codec, self->egl->gpu_info.vendor, self->settings.pixel_format, self->settings.video_encoder == GSR_VIDEO_ENCODER_HW_CPU, self->settings.video_encoder == GSR_VIDEO_ENCODER_HW_V4L2);
+     self->video_codec_context = create_video_codec_context(video_pix_fmt, video_codec_f, self->egl, &self->settings, self->video_size.x, self->video_size.y);
+     if(!self->settings.is_replaying)
+         self->video_stream = create_stream(self->av_format_context, self->video_codec_context);
+diff --git a/src/recorder/video_codec.c b/src/recorder/video_codec.c
+index a6ee115..f9388fa 100644
+--- a/src/recorder/video_codec.c
++++ b/src/recorder/video_codec.c
+@@ -41,6 +41,7 @@ static int vbr_get_quality_parameter(AVCodecContext *codec_context, gsr_video_qu
+ 
+ AVCodecContext *create_video_codec_context(enum AVPixelFormat pix_fmt, const AVCodec *codec, const gsr_egl *egl, const gsr_recorder_settings *settings, int width, int height) {
+     const bool use_software_video_encoder = settings->video_encoder == GSR_VIDEO_ENCODER_HW_CPU;
++    const bool use_v4l2_video_encoder = settings->video_encoder == GSR_VIDEO_ENCODER_HW_V4L2;
+     const bool hdr = video_codec_is_hdr(settings->video_codec);
+     AVCodecContext *codec_context = avcodec_alloc_context3(codec);
+ 
+@@ -129,18 +130,26 @@ AVCodecContext *create_video_codec_context(enum AVPixelFormat pix_fmt, const AVC
+     if (codec_context->codec_id == AV_CODEC_ID_MPEG1VIDEO)
+         codec_context->mb_decision = 2;
+ 
+-    const bool uses_vaapi_encoder = !use_software_video_encoder && egl->gpu_info.vendor != GSR_GPU_VENDOR_NVIDIA && !video_codec_is_vulkan(settings->video_codec);
++    const bool uses_vaapi_encoder = !use_software_video_encoder && !use_v4l2_video_encoder && egl->gpu_info.vendor != GSR_GPU_VENDOR_NVIDIA && !video_codec_is_vulkan(settings->video_codec);
+     if(uses_vaapi_encoder && settings->bitrate_mode != GSR_BITRATE_MODE_CBR) {
+-        // 8 bit / 10 bit = 80%, and increase it even more
++        // 8 bit / 10 bit = 80%, and increase it more
+         const float quality_multiply = hdr ? (8.0f/10.0f * 0.7f) : 1.0f;
+         codec_context->global_quality = video_quality_to_codec_quality_value(codec_context->codec_id, settings->video_quality) * quality_multiply;
++    } else if(use_v4l2_video_encoder && settings->bitrate_mode == GSR_BITRATE_MODE_QP) {
++        // v4l2 mem2mem has no global_quality support. ffmpeg forwards qmin/qmax to the device.
++        const int quality = vbr_get_quality_parameter(codec_context, settings->video_quality, hdr);
++        codec_context->qmin = quality;
++        codec_context->qmax = quality;
++        codec_context->bit_rate = 100000;
+     }
+ 
+     av_opt_set_int(codec_context->priv_data, "b_ref_mode", 0, 0);
+     //av_opt_set_int(codec_context->priv_data, "cbr", true, 0);
+ 
+-    if(egl->gpu_info.vendor != GSR_GPU_VENDOR_NVIDIA || video_codec_is_vulkan(settings->video_codec)) {
++    if(!use_v4l2_video_encoder && (egl->gpu_info.vendor != GSR_GPU_VENDOR_NVIDIA || video_codec_is_vulkan(settings->video_codec))) {
+         // TODO: More options, better options
++        // v4l2 mem2mem encoders have no rc_mode option. They support CBR and VBR through
++        // bit_rate (and fixed QP through qmin/qmax), which are set above.
+         //codec_context->bit_rate = codec_context->width * codec_context->height;
+         switch(settings->bitrate_mode) {
+             case GSR_BITRATE_MODE_QP: {
+@@ -181,6 +190,8 @@ AVCodecContext *create_video_codec_context(enum AVPixelFormat pix_fmt, const AVC
+         // WebRTC (whip) doesn't support b-frames
+         if(settings->container_format && strcmp(settings->container_format, "whip") == 0)
+             gsr_log(GSR_LOG_LEVEL_WARNING, "whip (webrtc) doesn't support b-frames, ignoring b-frames that would otherwise be enabled by -tune quality");
++        else if(use_v4l2_video_encoder)
++            gsr_log(GSR_LOG_LEVEL_WARNING, "v4l2 mem2mem encoders don't support b-frames, ignoring b-frames that would otherwise be enabled by -tune quality");
+         else
+             codec_context->max_b_frames = 2;
+     }
+@@ -315,19 +326,35 @@ static void video_hardware_set_qp(AVCodecContext *codec_context, gsr_video_quali
+ bool open_video_hardware(AVCodecContext *codec_context, bool low_power, const gsr_egl *egl, const gsr_recorder_settings *settings) {
+     const gsr_color_depth color_depth = video_codec_to_bit_depth(settings->video_codec);
+     const bool hdr = video_codec_is_hdr(settings->video_codec);
++    const bool use_v4l2_video_encoder = settings->video_encoder == GSR_VIDEO_ENCODER_HW_V4L2;
+     AVDictionary *options = NULL;
+ 
+-    if(settings->bitrate_mode == GSR_BITRATE_MODE_QP)
++    if(settings->bitrate_mode == GSR_BITRATE_MODE_QP && !use_v4l2_video_encoder)
+         video_hardware_set_qp(codec_context, settings->video_quality, hdr, &options);
+ 
+-    video_set_rc(settings->video_codec, egl->gpu_info.vendor, settings->bitrate_mode, &options);
++    // v4l2 mem2mem encoders have no rc_mode option. Bitrate control is configured
++    // through bit_rate / qmin / qmax in the codec context (see create_video_codec_context).
++    if(!use_v4l2_video_encoder)
++        video_set_rc(settings->video_codec, egl->gpu_info.vendor, settings->bitrate_mode, &options);
+ 
+     // TODO: Enable multipass
+ 
+     const bool yuv444 = settings->pixel_format == GSR_PIXEL_FORMAT_YUV444;
+     dict_set_profile(codec_context, egl->gpu_info.vendor, color_depth, settings->video_codec, yuv444, &options);
+ 
+-    if(video_codec_is_vulkan(settings->video_codec)) {
++    if(use_v4l2_video_encoder) {
++        // The video_device option is added to ffmpeg's v4l2_m2m encoders by a patch
++        // (see subprojects/packagefiles). Ignore it if the option is missing so that
++        // gpu-screen-recorder still works with an unpatched ffmpeg when there is only
++        // one v4l2 m2m encoder device on the system.
++        if(settings->v4l2_device) {
++            if(av_opt_find(codec_context->priv_data, "video_device", NULL, 0, AV_OPT_SEARCH_FAKE_OBJ) || av_opt_find(codec_context, "video_device", NULL, 0, 0)) {
++                av_dict_set(&options, "video_device", settings->v4l2_device, 0);
++            } else {
++                gsr_log(GSR_LOG_LEVEL_WARNING, "your ffmpeg doesn't support the video_device option, ignoring -v4l2-device. The first v4l2 m2m encoder found in /dev will be used");
++            }
++        }
++    } else if(video_codec_is_vulkan(settings->video_codec)) {
+         av_dict_set_int(&options, "async_depth", 3, 0);
+         // TODO: Set "ull" or "ll" only if low power mode is not enabled
+         av_dict_set(&options, "tune", "ll", 0); // Low latency
+@@ -419,8 +446,11 @@ bool open_video_hardware(AVCodecContext *codec_context, bool low_power, const gs
+     return true;
+ }
+ 
+-enum AVPixelFormat get_pixel_format(gsr_video_codec video_codec, gsr_gpu_vendor vendor, gsr_pixel_format pixel_format, bool use_software_video_encoder) {
+-    if(use_software_video_encoder) {
++enum AVPixelFormat get_pixel_format(gsr_video_codec video_codec, gsr_gpu_vendor vendor, gsr_pixel_format pixel_format, bool use_software_video_encoder, bool use_v4l2_video_encoder) {
++    if(use_v4l2_video_encoder) {
++        // v4l2 mem2mem encoders only accept NV12 on their raw input queue
++        return AV_PIX_FMT_NV12;
++    } else if(use_software_video_encoder) {
+         return pixel_format == GSR_PIXEL_FORMAT_YUV444 ? AV_PIX_FMT_YUV444P : AV_PIX_FMT_NV12;
+     } else {
+         if(video_codec_is_vulkan(video_codec))
+-- 
+2.56.0
+

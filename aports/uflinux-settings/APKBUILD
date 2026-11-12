@@ -10,7 +10,8 @@ depends="uflinux-desktop=$pkgver-r$pkgrel $pkgname-daemon=$pkgver-r$pkgrel $pkgn
 makedepends="cargo cargo-auditable gtk4.0-dev gtk4-layer-shell-dev pulseaudio-dev polkit-dev
 	eudev-dev vulkan-loader-dev mesa-dev pkgconf"
 subpackages="$pkgname-dbg $pkgname-doc $pkgname-daemon:daemon $pkgname-system:system
-	$pkgname-system-openrc:system_openrc uflinux-installer-ui:installer_ui uflinux-desktop:desktop"
+	$pkgname-system-openrc:system_openrc uflinux-installer-ui:installer_ui uflinux-desktop:desktop
+	uflinux-screencapture:screencapture"
 options="net"
 # Generated from the repository by scripts/settings-source.py, independently verified.
 source="$pkgname-$pkgver.tar"
@@ -26,8 +27,8 @@ prepare() {
 	default_prepare
 	cargo fetch --locked --target="$CTARGET"
 	# Source bundles normalize timestamps. Never reuse stale workspace binaries.
-	cargo clean -p uflinux-desktop -p uflinux-installer -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
-	cargo clean --release -p uflinux-desktop -p uflinux-installer -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system
+	cargo clean -p uflinux-desktop -p uflinux-installer -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system -p uflinux-screencapture
+	cargo clean --release -p uflinux-desktop -p uflinux-installer -p settings-core -p uflinux-settings -p uflinux-settings-daemon -p uflinux-settings-system -p uflinux-screencapture
 }
 build() {
 	# abuild enables Rust debug info when a -dbg subpackage exists.
@@ -49,6 +50,8 @@ package() {
 	install -Dm755 "$target/uflinux-settingsd" "$pkgdir/usr/libexec/uflinux-settingsd"
 	install -Dm755 "$target/uflinux-settings-system" "$pkgdir/usr/libexec/uflinux-settings-system"
 	install -Dm644 data/org.uflinux.Settings.desktop "$pkgdir/usr/share/applications/org.uflinux.Settings.desktop"
+	install -Dm755 "$target/uflinux-screencapture" "$pkgdir/usr/bin/uflinux-screencapture"
+	install -Dm644 data/org.uflinux.ScreenCapture.desktop "$pkgdir/usr/share/applications/org.uflinux.ScreenCapture.desktop"
 	install -Dm644 data/org.uflinux.Settings.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/org.uflinux.Settings.svg"
 	install -Dm644 data/org.uflinux.Settings.service "$pkgdir/usr/share/dbus-1/services/org.uflinux.Settings.service"
 	install -Dm644 data/org.uflinux.Settings1.service "$pkgdir/usr/share/dbus-1/services/org.uflinux.Settings1.service"
@@ -72,6 +75,11 @@ desktop() {
 	pkgdesc="UFLinux panel, Start menu and quick controls"
 	depends="$pkgname-daemon=$pkgver-r$pkgrel $pkgname-system=$pkgver-r$pkgrel"
 	amove usr/bin/uflinux-desktop usr/share/dbus-1/services/org.uflinux.Desktop.service
+}
+screencapture() {
+	pkgdesc="UFLinux screenshot and screen recording tool"
+	depends="gpu-screen-recorder xdg-desktop-portal xdg-desktop-portal-wlr notification-daemon"
+	amove usr/bin/uflinux-screencapture usr/share/applications/org.uflinux.ScreenCapture.desktop
 }
 installer_ui() {
 	pkgdesc="Live UFLinux GTK4 installer"

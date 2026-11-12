@@ -18,6 +18,9 @@
     <keybind key="W-Right"><action name="SnapToEdge" direction="right"/></keybind>
     <keybind key="W-Up"><action name="Maximize"/></keybind>
     <keybind key="W-Down"><action name="UnMaximize"/></keybind>
+    <keybind key="Print"><action name="Execute" command="uflinux-screencapture"/></keybind>
+    <keybind key="S-Print"><action name="Execute" command="uflinux-screencapture --record"/></keybind>
+    <keybind key="C-Print"><action name="Execute" command="uflinux-screencapture --record"/></keybind>
     <keybind key="XF86AudioRaiseVolume"><action name="Execute" command="uflinux-settingsctl volume 5"/></keybind>
     <keybind key="XF86AudioLowerVolume"><action name="Execute" command="uflinux-settingsctl volume -5"/></keybind>
     <keybind key="XF86AudioMute"><action name="Execute" command="uflinux-settingsctl mute"/></keybind>

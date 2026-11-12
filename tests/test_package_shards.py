@@ -25,6 +25,7 @@ class ShardTests(unittest.TestCase):
             packages = root / 'packages/x86_64'
             packages.mkdir(parents=True)
             upstream = {'uflinux-regreet': builder.LOCK['uflinux-regreet']['version'], 'connman': builder.LOCK['connman']['version'],
+                        'gpu-screen-recorder': builder.LOCK['gpu-screen-recorder']['version'],
                         'uflinux-settings': builder.LOCK['settings']['version'], 'uflinux': '0.1.0'}[origin]
             recipe = (builder.PROJECT / 'aports' / origin / 'APKBUILD').read_text()
             revision = re.search(r'^pkgrel=([0-9]+)$', recipe, re.M)[1]
@@ -118,8 +119,8 @@ class InputArchiveTests(unittest.TestCase):
             command=[sys.executable,str(builder.PROJECT/'scripts/release-inputs.py'),'--arch','x86_64','--version','0.1.0']
             subprocess.run(command,cwd=root,check=True,capture_output=True)
             entries=(root/'out/SHA256SUMS-x86_64-inputs').read_text().splitlines()
-            self.assertEqual(len(entries),11)
-            self.assertEqual(len(list((root/'out').glob('uflinux-*.tar.gz'))),11)
+            self.assertEqual(len(entries),13)
+            self.assertEqual(len(list((root/'out').glob('uflinux-*.tar.gz'))),13)
             (directory/'uflinux-settings/cargo-sources.tar.gz').unlink()
             rejected=subprocess.run(command,cwd=root,capture_output=True)
             self.assertNotEqual(rejected.returncode,0)

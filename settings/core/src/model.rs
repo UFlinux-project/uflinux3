@@ -10,6 +10,11 @@ pub struct Snapshot {
     pub datetime: DateTime,
     #[serde(default)]
     pub power: Power,
+    #[serde(default)]
+    pub screen_capture: ScreenCapture,
+    /// Probed from the capture backend at startup; runtime-only and never persisted.
+    #[serde(default)]
+    pub capture_capabilities: CaptureCapabilities,
     pub about: BTreeMap<String, String>,
     pub error: Option<String>,
 }
@@ -202,6 +207,310 @@ pub struct Wallpaper {
     pub file: String,
     pub fit: String,
 }
+/// User preferences for uflinux-screencapture. The capture tool reads this section
+/// over D-Bus and never writes it, so the tool itself stays daemonless.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScreenCapture {
+    pub image_format: CaptureFormat,
+    /// Empty means "$XDG_PICTURES_DIR/Screenshots".
+    pub screenshot_dir: String,
+    pub copy_to_clipboard: bool,
+    pub flash: bool,
+    pub delay_seconds: u8,
+    pub include_cursor: bool,
+    pub target: CaptureTarget,
+    pub advanced_view: bool,
+    pub quality: CaptureQuality,
+    /// Only used when quality is ConstantBitrate, mirroring the backend frontend.
+    pub bitrate_kbps: u32,
+    pub fps: u8,
+    pub audio_source: AudioSource,
+    /// None means "let the backend choose".
+    pub video_codec: Option<String>,
+    pub container: Option<String>,
+    pub audio_codec: Option<AudioCodec>,
+    pub framerate_mode: FramerateMode,
+    pub color_range: ColorRange,
+}
+
+/// What the installed gpu-screen-recorder actually supports. The settings page
+/// filters its option lists with this so a user cannot choose an unavailable codec.
+#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CaptureCapabilities {
+    pub backend_available: bool,
+    pub image_formats: Vec<String>,
+    pub video_codecs: Vec<String>,
+    pub containers: Vec<String>,
+}
+impl CaptureCapabilities {
+    /// True when the backend can write this image format (or is unknown, in which
+    /// case the UI keeps every option available rather than hiding the default).
+    pub fn supports_image(&self, id: &str) -> bool {
+        !self.backend_available || self.image_formats.iter().any(|f| f == id)
+    }
+    /// Known codecs the backend reports it can encode, in the fixed display order.
+    pub fn video_codec_list(&self) -> Vec<String> {
+        self.filter(&VIDEO_CODECS, &self.video_codecs)
+    }
+    /// Known containers the backend reports it can write, in the fixed display order.
+    pub fn container_list(&self) -> Vec<String> {
+        self.filter(&CONTAINERS, &self.containers)
+    }
+    fn filter(&self, known: &[&str], reported: &[String]) -> Vec<String> {
+        if !self.backend_available {
+            return known.iter().map(|k| (*k).to_string()).collect();
+        }
+        known
+            .iter()
+            .filter(|k| reported.iter().any(|r| r == *k))
+            .map(|k| (*k).to_string())
+            .collect()
+    }
+}
+
+impl Default for ScreenCapture {
+    fn default() -> Self {
+        Self {
+            image_format: CaptureFormat::default(),
+            screenshot_dir: String::new(),
+            copy_to_clipboard: true,
+            flash: true,
+            delay_seconds: 0,
+            include_cursor: true,
+            target: CaptureTarget::default(),
+            advanced_view: false,
+            quality: CaptureQuality::default(),
+            bitrate_kbps: DEFAULT_BITRATE_KBPS,
+            fps: DEFAULT_FPS,
+            audio_source: AudioSource::default(),
+            video_codec: None,
+            container: None,
+            audio_codec: None,
+            framerate_mode: FramerateMode::default(),
+            color_range: ColorRange::default(),
+        }
+    }
+}
+
+pub const DEFAULT_FPS: u8 = 60;
+pub const DEFAULT_BITRATE_KBPS: u32 = 15000;
+pub const MAX_BITRATE_KBPS: u32 = 500_000;
+pub const MAX_DELAY_SECONDS: u8 = 30;
+pub const MAX_FPS: u8 = 240;
+
+/// Video codec names accepted by the backend's -k option.
+pub const VIDEO_CODECS: [&str; 19] = [
+    "auto",
+    "h264",
+    "hevc",
+    "av1",
+    "vp8",
+    "vp9",
+    "hevc_hdr",
+    "av1_hdr",
+    "hevc_10bit",
+    "av1_10bit",
+    "h264_vulkan",
+    "hevc_vulkan",
+    "hevc_10bit_vulkan",
+    "av1_vulkan",
+    "av1_hdr_vulkan",
+    "av1_10bit_vulkan",
+    "h264_v4l2",
+    "hevc_v4l2",
+    "h264_software",
+];
+
+/// Container names accepted by the backend's -c option.
+pub const CONTAINERS: [&str; 5] = ["mp4", "mkv", "flv", "webm", "mp3"];
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CaptureFormat {
+    Png,
+    Jpeg,
+    #[default]
+    Webp,
+}
+impl CaptureFormat {
+    pub fn extension(self) -> &'static str {
+        match self {
+            Self::Png => "png",
+            Self::Jpeg => "jpg",
+            Self::Webp => "webp",
+        }
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Png => "PNG",
+            Self::Jpeg => "JPEG",
+            Self::Webp => "WebP",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CaptureTarget {
+    #[default]
+    Screen,
+    Window,
+    Area,
+}
+impl CaptureTarget {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Screen => "Entire screen",
+            Self::Window => "Window",
+            Self::Area => "Selection",
+        }
+    }
+}
+
+/// Mirrors the quality presets of the backend's own GTK frontend.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CaptureQuality {
+    Medium,
+    High,
+    #[default]
+    VeryHigh,
+    Ultra,
+    ConstantBitrate,
+}
+impl CaptureQuality {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::VeryHigh => "very_high",
+            Self::Ultra => "ultra",
+            Self::ConstantBitrate => "cbr",
+        }
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Medium => "Medium",
+            Self::High => "High",
+            Self::VeryHigh => "Very high",
+            Self::Ultra => "Ultra",
+            Self::ConstantBitrate => "Constant bitrate",
+        }
+    }
+    pub fn hint(self) -> &'static str {
+        match self {
+            Self::VeryHigh => "Recommended for recording",
+            Self::ConstantBitrate => "Recommended for live streaming",
+            _ => "",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AudioSource {
+    #[default]
+    None,
+    Output,
+    Input,
+    OutputAndInput,
+}
+impl AudioSource {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::None => "No audio",
+            Self::Output => "System output",
+            Self::Input => "Microphone",
+            Self::OutputAndInput => "System output and microphone",
+        }
+    }
+    /// The value for the backend's -a option, or None when nothing is captured.
+    pub fn backend(self) -> Option<&'static str> {
+        match self {
+            Self::None => None,
+            Self::Output => Some("default_output"),
+            Self::Input => Some("default_input"),
+            Self::OutputAndInput => Some("default_output|default_input"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FramerateMode {
+    #[default]
+    Auto,
+    Constant,
+    Variable,
+    Content,
+}
+impl FramerateMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "Automatic",
+            Self::Constant => "Constant",
+            Self::Variable => "Variable",
+            Self::Content => "Sync to content",
+        }
+    }
+    /// The value for the backend's -fm option; Auto leaves the flag out entirely.
+    pub fn backend(self) -> Option<&'static str> {
+        match self {
+            Self::Auto => None,
+            Self::Constant => Some("cfr"),
+            Self::Variable => Some("vfr"),
+            Self::Content => Some("content"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ColorRange {
+    #[default]
+    Limited,
+    Full,
+}
+impl ColorRange {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Limited => "Limited",
+            Self::Full => "Full",
+        }
+    }
+    /// Limited is the backend default, so only Full produces a flag.
+    pub fn backend(self) -> Option<&'static str> {
+        match self {
+            Self::Limited => None,
+            Self::Full => Some("full"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AudioCodec {
+    #[default]
+    Opus,
+    Aac,
+}
+impl AudioCodec {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Opus => "opus",
+            Self::Aac => "aac",
+        }
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Opus => "Opus",
+            Self::Aac => "AAC",
+        }
+    }
+}
+
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct DateTime {
     pub timezone: String,
@@ -350,6 +659,11 @@ pub enum Action {
     SetAppearance {
         appearance: Appearance,
     },
+    SetScreenCapture {
+        screen_capture: ScreenCapture,
+    },
+    ResetScreenCapture,
+    ScreenCaptureCapabilities,
     System {
         operation: SystemAction,
     },

@@ -39,6 +39,8 @@ BUILD_KEY = "build.ec.pub"
 PACKAGE_NAMES = {
     "connman": {"connman", "connman-dbg", "connman-dev", "connman-doc", "connman-openrc"},
     "uflinux-regreet": {"uflinux-regreet"},
+    "gpu-screen-recorder": {"gpu-screen-recorder", "gpu-screen-recorder-dbg",
+                            "gpu-screen-recorder-dev", "gpu-screen-recorder-doc"},
     "uflinux-settings": {"uflinux-settings", "uflinux-settings-daemon", "uflinux-settings-dbg",
                          "uflinux-settings-doc", "uflinux-settings-system", "uflinux-settings-system-openrc", "uflinux-installer-ui", "uflinux-desktop"},
     "uflinux": {"uflinux", "uflinux-defaults", "uflinux-desktop-meta", "uflinux-installer",
@@ -452,7 +454,7 @@ class Builder:
         apkbuild.write_text(re.sub(r"^pkgver=.*$", "pkgver=" + self.args.version, apkbuild.read_text(), flags=re.M))
         # Only fetch the selected origin's sources in a package shard.
         selected = (self.args.package,) if getattr(self.args, "package", None) else tuple(PACKAGE_NAMES)
-        for origin in ("connman", "uflinux-regreet"):
+        for origin in ("connman", "uflinux-regreet", "gpu-screen-recorder"):
             if origin in selected:
                 archive = download(LOCK["sources"][origin], self.cache / "downloads")
                 suffix = "tar.xz" if origin == "connman" else "tar.gz"
@@ -484,7 +486,7 @@ class Builder:
             self.build_origin(package, env)
         from sbom import apk_metadata
         versions = {}
-        for origin, version in (("uflinux-regreet", LOCK["uflinux-regreet"]["version"]), ("connman",LOCK["connman"]["version"]), ("uflinux-settings", LOCK["settings"]["version"]), ("uflinux", self.args.version)):
+        for origin, version in (("uflinux-regreet", LOCK["uflinux-regreet"]["version"]), ("connman",LOCK["connman"]["version"]), ("gpu-screen-recorder", LOCK["gpu-screen-recorder"]["version"]), ("uflinux-settings", LOCK["settings"]["version"]), ("uflinux", self.args.version)):
             if origin not in selected:
                 continue
             recipe = (source / origin / "APKBUILD").read_text()
@@ -616,7 +618,7 @@ class Builder:
         # A development key may change while APK control hashes stay the same.
         # Always fetch custom packages from the freshly signed local repository.
         for path in (self.cache / self.args.arch / "image-apk").glob("*.apk"):
-            if path.name.startswith(("uflinux-", "connman-")):
+            if path.name.startswith(("uflinux-", "connman-", "gpu-screen-recorder-")):
                 path.unlink()
         if (self.root / "image-work").exists():
             shutil.rmtree(self.root / "image-work")

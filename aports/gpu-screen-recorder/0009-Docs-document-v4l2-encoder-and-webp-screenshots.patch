@@ -1,0 +1,88 @@
+From ee4ecd0f1422274deec4eed576ce0f0e11737f03 Mon Sep 17 00:00:00 2001
+From: panmourovaty <panmourovaty@centrum.cz>
+Date: Thu, 12 Nov 2026 09:51:13 +0100
+Subject: [PATCH 9/9] Docs: document v4l2 encoder and webp screenshots
+
+- README: list v4l2 mem2mem codecs and webp among supported formats,
+  add libwebp to runtime dependencies
+- man page: mention screenshot extensions and webp under -o, add a webp
+  screenshot example
+- fix webp_screenshots meson option description
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+---
+ README.md             |  4 ++++
+ gpu-screen-recorder.1 | 10 ++++++++++
+ meson_options.txt     |  2 +-
+ 3 files changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/README.md b/README.md
+index 710c846..6991ccb 100644
+--- a/README.md
++++ b/README.md
+@@ -17,6 +17,8 @@ Supported video codecs:
+ * AV1 (Optionally with HDR)
+ * VP8
+ * VP9
++* H264/HEVC through V4L2 mem2mem hardware encoders (`-encoder v4l2`), for single board computers
++  like Raspberry Pi, Radxa or Rockchip boards which have no GPU-accelerated encoder
+ 
+ Supported audio codecs:
+ * Opus (default)
+@@ -26,6 +28,7 @@ Supported audio codecs:
+ Supported image formats:
+ * JPEG
+ * PNG
++* WebP
+ 
+ This software works on X11 and Wayland on AMD, Intel and NVIDIA.
+ 
+@@ -96,6 +99,7 @@ When building GPU Screen Recorder with portal support (`-Dportal=true` meson opt
+ * libglvnd (which provides libgl, libglx and libegl) is needed. Your system needs to support at least OpenGL ES 3.0 (released in 2012)
+ * vulkan-icd-loader (which provides the runtime vulkan library. This is only needed if vulkan video encoding option is used)
+ * libturbojpeg (aka libjpeg-turbo) is needed when capturing camera with mjpeg pixel format option, or for faster jpeg screenshots
++* libwebp is needed for webp screenshots
+ 
+ There are also additional dependencies needed at runtime depending on your GPU vendor:
+ 
+diff --git a/gpu-screen-recorder.1 b/gpu-screen-recorder.1
+index 8bb4949..2fe539e 100644
+--- a/gpu-screen-recorder.1
++++ b/gpu-screen-recorder.1
+@@ -487,6 +487,9 @@ section for the protocol. Has no effect when taking a screenshot.
+ .TP
+ .BI \-o " output"
+ Output file path (or directory for replay mode). Required except when outputting to stdout.
++When the output file ends with an image extension (.jpg, .jpeg, .png or .webp), a single
++screenshot is taken instead of recording a video. WebP screenshots require libwebp to be
++installed.
+ .TP
+ .BI \-ro " directory"
+ Output directory for regular recordings during replay/streaming mode.
+@@ -751,6 +754,13 @@ gpu-screen-recorder -w screen -o screenshot.jpg
+ .PP
+ .RE
+ .fi
++.B Take a webp screenshot:
++.nf
++.RS
++gpu-screen-recorder -w screen -o screenshot.webp
++.PP
++.RE
++.fi
+ .B Record screen and camera:
+ .nf
+ .RS
+diff --git a/meson_options.txt b/meson_options.txt
+index eaa3ef5..80711eb 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -6,4 +6,4 @@ option('app_audio', type : 'boolean', value : true, description : 'Build with su
+ option('plugin_examples', type : 'boolean', value : false, description : 'Build plugin examples')
+ option('ffmpeg_static', type : 'boolean', value : false, description : 'Download FFmpeg and its dependencies and link them statically into gpu-screen-recorder instead of using the system ffmpeg. This makes GPU Screen Recorder work on GTX 1080 and older NVIDIA GPUs. Requires make, nasm, cmake and perl')
+ option('v4l2_encoder', type : 'boolean', value : true, description : 'Build with support for hardware encoding through V4L2 mem2mem devices (-encoder v4l2). Used on single board computers (Raspberry Pi, Radxa, Rockchip) that have no GPU-accelerated encoder. Requires FFmpeg compiled with the v4l2_m2m encoders')
+-option('webp_screenshots', type : 'boolean', value : true, description : 'Save screenshots as webp (-screenshot-format webp or a .webp filename). Requires libwebp at runtime')
++option('webp_screenshots', type : 'boolean', value : true, description : 'Save screenshots as webp (an output filename ending with .webp). Requires libwebp at runtime')
+-- 
+2.56.0
+

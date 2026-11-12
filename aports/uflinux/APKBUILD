@@ -19,7 +19,8 @@ source="uflinux-openrc.conf uflinux.plymouth uflinux-spinner.svg uflinux-lock.sv
 	uflinux-bootsplash uflinux-initramfs-init uflinux-initramfs-splash uflinux-plymouth.files uflinux-splash.initd uflinux-splash-stop.initd LICENSE uflinux-session uflinux-compositor uflinux-autostart uflinux-theme-sync uflinux-install uflinux-install-gui-backend
 	uflinux-live.initd uflinux.desktop uflinux-logo.svg artwork-NOTICE labwc-rc.xml labwc-menu.xml
 	labwc-autostart labwc-environment mako.conf
-	gtk-settings.ini 90-uflinux.gschema.override 45-uflinux-fonts.conf firefox-defaults.js regreet.toml greetd-installed.toml greetd-live.toml greetd.pam
+	gtk-settings.ini 90-uflinux.gschema.override 45-uflinux-fonts.conf firefox-defaults.js
+	labwc-portals.conf xdg-desktop-portal-wlr-config regreet.toml greetd-installed.toml greetd-live.toml greetd.pam
 	connman.conf connman.confd iwd.conf uflinux-network-init uflinux-connman.conf
 	https://download.gnome.org/sources/gnome-backgrounds/3.38/gnome-backgrounds-3.38.0.tar.xz
 	labwc-themes-6a2e3634.tar.gz::https://codeload.github.com/labwc/labwc-themes/tar.gz/6a2e3634eef03e7f124359ad28ed5da2d931f96d"
@@ -100,6 +101,8 @@ package() {
 	install -Dm644 "$srcdir/labwc-autostart" "$pkgdir/etc/xdg/labwc/autostart"
 	install -Dm644 "$srcdir/labwc-environment" "$pkgdir/etc/xdg/labwc/environment"
 	install -Dm644 "$srcdir/mako.conf" "$pkgdir/etc/xdg/mako/config"
+	install -Dm644 "$srcdir/labwc-portals.conf" "$pkgdir/etc/xdg/xdg-desktop-portal/labwc-portals.conf"
+	install -Dm644 "$srcdir/xdg-desktop-portal-wlr-config" "$pkgdir/etc/xdg/xdg-desktop-portal-wlr/config"
 	install -Dm644 "$srcdir/firefox-defaults.js" "$pkgdir/usr/lib/firefox/browser/defaults/preferences/uflinux.js"
 	install -Dm644 "$srcdir/45-uflinux-fonts.conf" "$pkgdir/etc/fonts/conf.d/45-uflinux-fonts.conf"
 	install -Dm644 "$srcdir/gtk-settings.ini" "$pkgdir/etc/xdg/gtk-3.0/settings.ini"
@@ -146,7 +149,8 @@ initramfs() {
 desktop() {
 	pkgdesc="UFLinux minimal desktop dependencies"
 	depends="uflinux-release=$pkgver-r$pkgrel uflinux-defaults=$pkgver-r$pkgrel uflinux-bootsplash-openrc=$pkgver-r$pkgrel
-		xdg-user-dirs labwc uflinux-desktop uflinux-settings foot nemo mako swaybg
+		xdg-user-dirs labwc uflinux-desktop uflinux-settings uflinux-screencapture gpu-screen-recorder
+		xdg-desktop-portal xdg-desktop-portal-wlr foot nemo mako swaybg
 		transmission-gtk celluloid gnome-disk-utility file-roller
 		eudev eudev-openrc elogind elogind-openrc dbus dbus-openrc dbus-x11
 		greetd greetd-openrc uflinux-regreet=0.2.0-r0 cage polkit-elogind
@@ -208,7 +212,7 @@ e7547d393b9489bfaf96ea7f1f580099e8d01487e7a59cc897001032e0f0f424b68d77d21e92ac38
 e6df4f4a610b45f3426de64299f2fcc0e53691cf4f62a571cc9a3a0c168628042f31ea328e202bcec79d0aa62204e370265b38ea131772c8c548a5b1a19a9d11  uflinux.desktop
 f1c52e9fb8613e71ef77817ffcfad4638be5fba1c606218562955ad6a0d75a087bce62ed514d8687af9fa25940d64513ba0b535f1de370c51a1db9b2ed399256  uflinux-logo.svg
 17da1c30e1f7b8441f113b0d38bea115439e6238ffb063d71638b28d2e994b1bc06e04a421bc5bfedcf05c48825eeaae47a172a0f047f381af12551401123224  artwork-NOTICE
-aa7246e56d2805550b325932cce4b4e7a6ea8e3bb754ac6bf92c2e28e25e5da0e3e697166a397674b8fc087d78507af7181520fb18c3391bef623f0c3a05a7c8  labwc-rc.xml
+424c57a142889e91c0c1e6ef9a38fb66066a221e973036c7c5aa0b500afce8199023d382626a7e2d8cb995886cfe91ac77d0b370be27e10f218ff3fc8d6096cb  labwc-rc.xml
 0e3bb10cffaf6d2279fc225e5908119dadfe4dda0125041844f265c26dc488486b8c30274e784a7a85ad77afb5bc96bdb2b038d371f59261e63fec1b5e9dc324  labwc-menu.xml
 f25b2a1b852ea3519078d149f2ab86eedaddb811a2f4c6437a4e572072ddf7b758fa8b2570c9ba6f266ed2ac585a5e3f11e056a8e6e77df3de89c8814f9acb7e  labwc-autostart
 f635e02bd8f0b6b859571a578336b978585dc93baae7a6a9d4ee74aa038d29c813706cd72ae5c8a90391b0f05d37b33bcfb8c146c969ffbd6da5680dcd6dd9ed  labwc-environment
@@ -217,6 +221,8 @@ f635e02bd8f0b6b859571a578336b978585dc93baae7a6a9d4ee74aa038d29c813706cd72ae5c8a9
 dc4a105d7982c7270f2f2cd4e5c6648ba8ff5a21167c29b84b014e9f5ae4e4cddf6cd827a8159e297f1e032809d0634b3bf627d553e03c431eada91b2779ac2c  90-uflinux.gschema.override
 1209352f7b7d7d06bb842aafd88dfb4bfe0fabee3c734bc58308c482683767644d1c941da8d8a5e4c9dfc6f84415821c223d44b372e18da35459499e22567308  45-uflinux-fonts.conf
 e66c6e8e3c9381090221eb26517651c62dae180f1df7afac010d9e900da1e552fa22aa7b759724ad1a12592c50a44c119f0ed2103baacc3befa381fdeaa5096c  firefox-defaults.js
+36e1638b8b0300bd9dbc0df89e8a47fb5681c61efd026c82df901a3882a5bf679d8a9a985ffc0ac3680413287227262c2988a5196bca17ac6b43d56db09d369f  labwc-portals.conf
+9eaee64c71dd41d18127cee42dae69d572997b47dfd773f8a84b3717738147fc527c2911e7f0fef5ec60cb636507992fd7d46bdc8e570fc605272e9ea3cd9704  xdg-desktop-portal-wlr-config
 fa40df7c964c2374a9bf5d077b26a1c10f08d3b6481898a185ebf4f9927025d9b11a4cd9c51ee87d59703b2b732308ab20bc6956c5815b1e41ab2fd75fdeb518  regreet.toml
 bbfbc3518964638a260fa7a6b62707ad2e0e35ea55764de9cbf293466e3d03b14e01b0c4af876a227edb1cd87f005f48c401c998e46cb38a9f3e1c4792067c19  greetd-installed.toml
 4c37d6c1ee918a488d8359b43184d530e60ba303f907e2990de78a6776ebfb8925bc4fb3ef93be28035306150fd894d1fea84cb457b168f644984c5de672ce59  greetd-live.toml

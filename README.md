@@ -29,7 +29,10 @@ The desktop includes Foot, Nemo, Mako, Transmission, Celluloid, GNOME Disks, Fil
 and ConnMan with iwd, PipeWire with
 pipewire-pulse, WirePlumber, and UFLinux Settings in Rust and plain GTK4. ConnMan's
 SNTP client handles time synchronization. The taskbar opens a combined quick-settings
-flyout. GTK3 and GTK4 apps use Alpine’s adw-gtk3 dark theme. Firefox and uBlock Origin are included on x86, x86_64, aarch64, armv7, ppc64le,
+flyout. Print Screen opens a GNOME-style screenshot and recording tool that saves WebP
+images to your Pictures folder, copies them to the clipboard and records video through a
+patched GPU screen recorder; only the Settings tab for it is always available, the capture
+tool itself runs on demand. GTK3 and GTK4 apps use Alpine’s adw-gtk3 dark theme. Firefox and uBlock Origin are included on x86, x86_64, aarch64, armv7, ppc64le,
 and riscv64. Firefox uses a streamlined toolbar with horizontal tabs and a hidden
 bookmarks bar; users can change these defaults. Alpine 3.24 does not provide
 Firefox for s390x.

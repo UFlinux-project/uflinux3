@@ -1,4 +1,4 @@
-use crate::{audio, devices, display, network};
+use crate::{audio, capture, devices, display, network};
 use gio::prelude::*;
 use glib::variant::ToVariant;
 use settings_core::{bus, *};
@@ -61,7 +61,9 @@ pub fn run() -> Result<()> {
         let connection=gio::bus_get_future(gio::BusType::Session).await.map_err(|e|e.to_string())?;
         let system=gio::bus_get_future(gio::BusType::System).await.map_err(|e|e.to_string())?;
         let appearance=files::read_json(&files::config_dir().join("appearance.json"));
-        let app=Rc::new(App{bus:connection.clone(),system,view:RefCell::new(Snapshot{appearance,datetime:clock::status(),power:power::status(),about:information(),..Snapshot::default()}),
+        let screen_capture:ScreenCapture=files::read_json(&files::config_dir().join("screen-capture.json"));
+        let screen_capture=capture::validate(&screen_capture).map(|()|screen_capture).unwrap_or_default();
+        let app=Rc::new(App{bus:connection.clone(),system,view:RefCell::new(Snapshot{appearance,screen_capture,datetime:clock::status(),power:power::status(),about:information(),..Snapshot::default()}),
             network:RefCell::new(None),audio:RefCell::new(None),audio_retry:Cell::new(false),display:RefCell::new(None),pending:RefCell::new(None),applying:Cell::new(false),wallpaper:RefCell::new(None),publishing:Cell::new(false),restored:Cell::new(false),brightness_pending:Cell::new(false),ddc_pending:Cell::new(false),ddc_busy:Cell::new(false),ddc_dirty:Cell::new(false)});
         app.view.borrow_mut().displays.renderer=std::env::var("UFLINUX_RENDERER").unwrap_or_else(|_|"User-selected / compositor default".into());
         app.view.borrow_mut().displays.hdr_requested=fs::read_to_string(hdr_path()).ok().and_then(|s|files::hdr_requested(&s)).unwrap_or(false);
@@ -131,6 +133,11 @@ pub fn run() -> Result<()> {
         });
         let initial=app.clone();glib::MainContext::default().spawn_local(async move{
             let appearance=initial.view.borrow().appearance.clone();let _=initial.set_appearance(appearance,false).await;
+        });
+        let probed=app.clone();glib::MainContext::default().spawn_local(async move{
+            let caps=capture::probe().await;
+            probed.view.borrow_mut().capture_capabilities=caps;
+            probed.publish();
         });
         let weak=Rc::downgrade(&app);
         glib::timeout_add_local(Duration::from_secs(15),move||{
@@ -484,6 +491,37 @@ impl App {
             }
             Action::SetAppearance { appearance } => {
                 self.set_appearance(appearance.clone(), true).await?;
+            }
+            Action::SetScreenCapture { screen_capture } => {
+                capture::validate(screen_capture)?;
+                files::save_json(
+                    &files::config_dir().join("screen-capture.json"),
+                    screen_capture,
+                    0o600,
+                )?;
+                self.view.borrow_mut().screen_capture = screen_capture.clone();
+                self.publish();
+            }
+            Action::ResetScreenCapture => {
+                let defaults = ScreenCapture::default();
+                files::save_json(
+                    &files::config_dir().join("screen-capture.json"),
+                    &defaults,
+                    0o600,
+                )?;
+                self.view.borrow_mut().screen_capture = defaults;
+                self.publish();
+            }
+            Action::ScreenCaptureCapabilities => {
+                let caps = self.view.borrow().capture_capabilities.clone();
+                if caps.backend_available {
+                    return Ok(serde_json::to_value(caps).map_err(|_| "Invalid capture state")?);
+                }
+                let caps = capture::probe().await;
+                let value = serde_json::to_value(&caps).map_err(|_| "Invalid capture state")?;
+                self.view.borrow_mut().capture_capabilities = caps;
+                self.publish();
+                return Ok(value);
             }
             Action::System { operation } => {
                 if matches!(operation, SystemAction::DdcDiscover) {

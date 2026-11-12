@@ -46,8 +46,12 @@ regreet = (ROOT / "aports/uflinux-regreet/APKBUILD").read_text()
 assert lock["sources"]["uflinux-regreet"]["sha512"] in regreet
 for name, digest in lock["uflinux-regreet"]["patches"].items():
     assert hashlib.sha512((ROOT / "aports/uflinux-regreet" / name).read_bytes()).hexdigest() == digest
+recorder = (ROOT / "aports/gpu-screen-recorder/APKBUILD").read_text()
+assert lock["sources"]["gpu-screen-recorder"]["sha512"] in recorder
+for name, digest in lock["gpu-screen-recorder"]["patches"].items():
+    assert hashlib.sha512((ROOT / "aports/gpu-screen-recorder" / name).read_bytes()).hexdigest() == digest
 assert "libadwaita" not in (ROOT / "settings/Cargo.lock").read_text()
-for origin in ("connman", "uflinux-regreet", "uflinux-settings"):
+for origin in ("connman", "gpu-screen-recorder", "uflinux-regreet", "uflinux-settings"):
     recipe_arches = re.search(r'^arch="([^"]+)"$', (ROOT / "aports" / origin / "APKBUILD").read_text(), re.M)
     assert recipe_arches and set(recipe_arches.group(1).split()) == set(arches), f"{origin} architecture list differs from build matrix"
 for name, digest in lock["image"]["patches"].items():

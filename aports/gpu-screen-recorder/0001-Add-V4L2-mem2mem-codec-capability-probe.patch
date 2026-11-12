@@ -1,0 +1,268 @@
+From 2748c62e4b0baf84eb6467cd1d34fd114960992d Mon Sep 17 00:00:00 2001
+From: panmourovaty <panmourovaty@centrum.cz>
+Date: Thu, 12 Nov 2026 09:36:38 +0100
+Subject: [PATCH 1/9] Add V4L2 mem2mem codec capability probe
+
+Probes /dev/video* nodes the same way ffmpeg's v4l2m2m encoders do
+(VIDIOC_QUERYCAP + VIDIOC_TRY_FMT of NV12 on the OUTPUT queue and the
+coded fourcc on the CAPTURE queue) and reports H.264/HEVC support plus
+the frame size limit from VIDIOC_ENUM_FRAMESIZES. Used to enable the
+V4L2 encoder backend on boards whose only hardware encoder is a mem2mem
+device (Raspberry Pi, Radxa, Rockchip).
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+---
+ include/codec_query/v4l2_m2m.h |  14 +++
+ src/codec_query/v4l2_m2m.c     | 219 +++++++++++++++++++++++++++++++++
+ 2 files changed, 233 insertions(+)
+ create mode 100644 include/codec_query/v4l2_m2m.h
+ create mode 100644 src/codec_query/v4l2_m2m.c
+
+diff --git a/include/codec_query/v4l2_m2m.h b/include/codec_query/v4l2_m2m.h
+new file mode 100644
+index 0000000..db15f73
+--- /dev/null
++++ b/include/codec_query/v4l2_m2m.h
+@@ -0,0 +1,14 @@
++#ifndef GSR_CODEC_QUERY_V4L2_M2M_H
++#define GSR_CODEC_QUERY_V4L2_M2M_H
++
++#include "codec_query.h"
++
++/* |device_path| is an optional /dev/videoX node to probe (from -v4l2-device). When NULL,
++   every /dev/video* node is probed the same way ffmpeg's v4l2_m2m encoders do. */
++bool gsr_get_supported_video_codecs_v4l2_m2m(gsr_supported_video_codecs *video_codecs, const char *device_path, bool cleanup);
++
++/* The /dev/videoX node found by the last successful call to
++   gsr_get_supported_video_codecs_v4l2_m2m, or NULL. Only valid until the next call. */
++const char *gsr_v4l2_m2m_get_device_path(void);
++
++#endif /* GSR_CODEC_QUERY_V4L2_M2M_H */
+diff --git a/src/codec_query/v4l2_m2m.c b/src/codec_query/v4l2_m2m.c
+new file mode 100644
+index 0000000..eafa345
+--- /dev/null
++++ b/src/codec_query/v4l2_m2m.c
+@@ -0,0 +1,219 @@
++#include "../../include/codec_query/v4l2_m2m.h"
++#include "../../include/log.h"
++
++#include <libavcodec/avcodec.h>
++
++#include <dirent.h>
++#include <fcntl.h>
++#include <limits.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++#include <sys/ioctl.h>
++#include <linux/videodev2.h>
++
++/*
++ * Probes /dev/video* nodes for V4L2 mem2mem encoders. The order and the checks mirror
++ * what ffmpeg's v4l2_m2m encoders do when they open a device (see ff_v4l2_m2m_codec_init),
++ * so a codec reported as supported here is one ffmpeg is able to use.
++ */
++
++static char probed_device_path[PATH_MAX] = "";
++
++const char *gsr_v4l2_m2m_get_device_path(void) {
++    return probed_device_path[0] ? probed_device_path : NULL;
++}
++
++static bool node_is_mplane(struct v4l2_capability *cap) {
++    if((cap->capabilities & (V4L2_CAP_VIDEO_CAPTURE_MPLANE | V4L2_CAP_VIDEO_OUTPUT_MPLANE)) &&
++       (cap->capabilities & V4L2_CAP_STREAMING))
++        return true;
++    return (cap->capabilities & V4L2_CAP_VIDEO_M2M_MPLANE) != 0;
++}
++
++static bool node_is_splane(struct v4l2_capability *cap) {
++    if((cap->capabilities & (V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_OUTPUT)) &&
++       (cap->capabilities & V4L2_CAP_STREAMING))
++        return true;
++    return (cap->capabilities & V4L2_CAP_VIDEO_M2M) != 0;
++}
++
++/* Returns true when the queue accepts |fourcc|. An encoder node takes raw frames on its
++   output queue and produces the coded stream on its capture queue, so checking one queue
++   with a raw fourcc and the other with a coded fourcc is what separates encoders from
++   capture-only and decoder-only nodes. */
++static bool queue_supports_format(int fd, unsigned int type, uint32_t fourcc) {
++    struct v4l2_format fmt;
++    memset(&fmt, 0, sizeof(fmt));
++    fmt.type = type;
++
++    if(V4L2_TYPE_IS_MULTIPLANAR(type)) {
++        fmt.fmt.pix_mp.width = 1920;
++        fmt.fmt.pix_mp.height = 1080;
++        fmt.fmt.pix_mp.pixelformat = fourcc;
++        fmt.fmt.pix_mp.field = V4L2_FIELD_NONE;
++        fmt.fmt.pix_mp.num_planes = 1;
++    } else {
++        fmt.fmt.pix.width = 1920;
++        fmt.fmt.pix.height = 1080;
++        fmt.fmt.pix.pixelformat = fourcc;
++        fmt.fmt.pix.field = V4L2_FIELD_NONE;
++    }
++
++    return ioctl(fd, VIDIOC_TRY_FMT, &fmt) == 0;
++}
++
++/* Reads the size limits of the raw queue. Drivers that do not report framesizes (or report
++   a type we cannot interpret) leave |max_resolution| at {0,0}, which upstream treats as
++   "no limit". */
++/* VIDIOC_ENUM_FRAMESIZES is not queue-type specific, so this works on either queue. */
++static void query_max_resolution(int fd, uint32_t fourcc, vec2i *max_resolution) {
++    struct v4l2_frmsizeenum frmsize;
++    memset(&frmsize, 0, sizeof(frmsize));
++    frmsize.index = 0;
++    frmsize.pixel_format = fourcc;
++
++    if(ioctl(fd, VIDIOC_ENUM_FRAMESIZES, &frmsize) != 0)
++        return;
++
++    if(frmsize.type == V4L2_FRMSIZE_TYPE_DISCRETE) {
++        unsigned int widest = frmsize.discrete.width;
++        unsigned int tallest = frmsize.discrete.height;
++
++        for(;;) {
++            struct v4l2_frmsizeenum next;
++            memset(&next, 0, sizeof(next));
++            next.index = frmsize.index + 1;
++            next.pixel_format = fourcc;
++            if(ioctl(fd, VIDIOC_ENUM_FRAMESIZES, &next) != 0 || next.pixel_format != fourcc)
++                break;
++            if(next.type != V4L2_FRMSIZE_TYPE_DISCRETE)
++                break;
++            widest = next.discrete.width > widest ? next.discrete.width : widest;
++            tallest = next.discrete.height > tallest ? next.discrete.height : tallest;
++            frmsize = next;
++        }
++
++        max_resolution->x = (int)widest;
++        max_resolution->y = (int)tallest;
++    } else if(frmsize.type == V4L2_FRMSIZE_TYPE_STEPWISE || frmsize.type == V4L2_FRMSIZE_TYPE_CONTINUOUS) {
++        max_resolution->x = (int)frmsize.stepwise.max_width;
++        max_resolution->y = (int)frmsize.stepwise.max_height;
++    }
++}
++
++/* Probes one node. Returns a bitmask of the codecs the node can encode (1 = h264,
++   2 = hevc) and stores the size limit reported by the driver in |max_resolution|. */
++static int probe_node(const char *path, vec2i *max_resolution) {
++    int result = 0;
++
++    const int fd = open(path, O_RDWR | O_NONBLOCK);
++    if(fd == -1)
++        return 0;
++
++    struct v4l2_capability cap;
++    memset(&cap, 0, sizeof(cap));
++    if(ioctl(fd, VIDIOC_QUERYCAP, &cap) != 0)
++        goto done;
++
++    unsigned int output_type, capture_type;
++    if(node_is_mplane(&cap)) {
++        output_type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
++        capture_type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
++    } else if(node_is_splane(&cap)) {
++        output_type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
++        capture_type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
++    } else {
++        goto done;
++    }
++
++    /* The encoder takes NV12 on its output queue. ffmpeg requires the pixel format the
++       caller uses (GSR always uses NV12 for this backend) to be the negotiated one. */
++    if(!queue_supports_format(fd, output_type, V4L2_PIX_FMT_NV12))
++        goto done;
++
++    int codecs = 0;
++    if(queue_supports_format(fd, capture_type, V4L2_PIX_FMT_H264) && avcodec_find_encoder_by_name("h264_v4l2m2m"))
++        codecs |= 1;
++    if(queue_supports_format(fd, capture_type, V4L2_PIX_FMT_HEVC) && avcodec_find_encoder_by_name("hevc_v4l2m2m"))
++        codecs |= 2;
++
++    if(codecs == 0)
++        goto done;
++
++    query_max_resolution(fd, V4L2_PIX_FMT_NV12, max_resolution);
++    result = codecs;
++
++    done:
++    close(fd);
++    return result;
++}
++
++bool gsr_get_supported_video_codecs_v4l2_m2m(gsr_supported_video_codecs *video_codecs, const char *device_path, bool cleanup) {
++    (void)cleanup;
++    memset(video_codecs, 0, sizeof(*video_codecs));
++
++    probed_device_path[0] = '\0';
++
++    char requested[PATH_MAX] = "";
++    if(device_path && device_path[0]) {
++        if(strncmp(device_path, "/dev/", 5) == 0) {
++            snprintf(requested, sizeof(requested), "%s", device_path);
++        } else {
++            snprintf(requested, sizeof(requested), "/dev/%s", device_path);
++        }
++    }
++
++    /* ffmpeg walks /dev in readdir order and uses the first node that passes its probe, so
++       walk the nodes in the same order and report the first match as the device in use. */
++    DIR *dirp = opendir("/dev");
++    if(!dirp) {
++        gsr_log(GSR_LOG_LEVEL_ERROR, "gsr_get_supported_video_codecs_v4l2_m2m: failed to open /dev");
++        return false;
++    }
++
++    bool found = false;
++    struct dirent *entry = NULL;
++    while((entry = readdir(dirp)) != NULL) {
++        if(strncmp(entry->d_name, "video", 5) != 0)
++            continue;
++
++        char path[PATH_MAX];
++        snprintf(path, sizeof(path), "/dev/%s", entry->d_name);
++
++        if(requested[0] && strcmp(path, requested) != 0)
++            continue;
++
++        vec2i max_resolution = {0, 0};
++        const int codecs = probe_node(path, &max_resolution);
++        if(codecs == 0)
++            continue;
++
++        if(codecs & 1) {
++            video_codecs->h264.supported = true;
++            video_codecs->h264.max_resolution = max_resolution;
++        }
++        if(codecs & 2) {
++            video_codecs->hevc.supported = true;
++            video_codecs->hevc.max_resolution = max_resolution;
++        }
++
++        snprintf(probed_device_path, sizeof(probed_device_path), "%s", path);
++        found = true;
++        break;
++    }
++
++    closedir(dirp);
++
++    if(!found) {
++        if(requested[0]) {
++            gsr_log(GSR_LOG_LEVEL_ERROR, "gsr_get_supported_video_codecs_v4l2_m2m: %s is not a V4L2 m2m encoder", requested);
++        }
++        return false;
++    }
++
++    gsr_log(GSR_LOG_LEVEL_DEBUG, "gsr_get_supported_video_codecs_v4l2_m2m: using device %s", probed_device_path);
++    return true;
++}
+-- 
+2.56.0
+

@@ -129,7 +129,8 @@ for _ in range(60):
         time.sleep(.5)
 else:
     raise AssertionError('Settings did not start')
-for page in ('network', 'displays', 'audio', 'power', 'default-apps', 'datetime', 'appearance', 'about'):
+for page in ('network', 'displays', 'audio', 'power', 'default-apps', 'datetime', 'appearance',
+             'screen-capture', 'about'):
     run('uflinux-settings', '--page', page)
     time.sleep(.4)
 full_pss = pss(gui_pid())

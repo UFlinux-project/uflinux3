@@ -46,6 +46,7 @@ if [ "${UFLINUX_TEST_CONNMAN_FIXTURE:-0}" = 1 ]; then
 fi
 python3 "$(dirname "$0")/settings-display-protocol.py"
 python3 "$(dirname "$0")/settings-preferences-protocol.py"
+python3 "$(dirname "$0")/settings-capture-protocol.py"
 daemon=$(cat "$results/service.pid")
 printf '%s\n' '{"action":"set-volume","input":false,"device":"","percent":42}' | uflinux-settingsctl request
 for _attempt in $(seq 1 20); do
@@ -103,12 +104,15 @@ grep -q org.uflinux.Settings "$results/windows.txt"
 sh "$(dirname "$0")/build-ui-driver.sh" /tmp/uflinux-ui-driver
 python3 "$(dirname "$0")/settings-ui-protocol.py"
 python3 "$(dirname "$0")/start-menu-ui.py"
-for page in network displays audio power default-apps datetime appearance about; do
+for page in network displays audio power default-apps datetime appearance screen-capture about; do
 	/usr/bin/uflinux-settings --page "$page"
 	sleep 1
 	kill -0 "$gui"
 	grim "$results/$page.png"
 	if [ "$page" = audio ]; then python3 "$(dirname "$0")/settings-audio-protocol.py"; fi
+	if [ "$page" = screen-capture ]; then
+		python3 "$(dirname "$0")/settings-capture-ui-protocol.py"
+	fi
 done
 uflinux-desktop --panel network --output HEADLESS-1
 sleep 2

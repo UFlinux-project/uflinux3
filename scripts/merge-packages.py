@@ -31,6 +31,7 @@ def collect(out, arch, version):
         recipe = (PROJECT / 'aports' / origin / 'APKBUILD').read_text()
         revision = re.search(r'^pkgrel=([0-9]+)$', recipe, re.M)[1]
         upstream = {'uflinux-regreet': LOCK['uflinux-regreet']['version'], 'connman': LOCK['connman']['version'],
+                    'gpu-screen-recorder': LOCK['gpu-screen-recorder']['version'],
                     'uflinux-settings': LOCK['settings']['version'], 'uflinux': version}[origin]
         names, payloads = set(), {}
         key = (source / BUILD_KEY).read_text()

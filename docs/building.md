@@ -30,9 +30,9 @@ Stages share `--workdir` (default `.state`) and `--outdir` (default `out`). Down
 APK, Cargo, and compiler caches use `--cache` (default `.cache/build`). A lockfile
 change requires a fresh work directory, but verified downloads can be reused.
 
-GitHub compiles four independent origins per architecture: `connman`,
-`uflinux-regreet`, `uflinux-settings` and `uflinux`. PR/main builds schedule five compile jobs;
-manual/tag runs schedule 35, with at most eight compile jobs running together.
+GitHub compiles five independent origins per architecture: `connman`,
+`gpu-screen-recorder`, `uflinux-regreet`, `uflinux-settings` and `uflinux`. PR/main builds schedule
+twenty compile jobs; manual/tag runs schedule 35, with at most eight compile jobs running together.
 Each origin has its own VM, development signing key, timeout and cache. Heavy Rust
 builds and their native clean-rebuild comparisons run independently. Signing and
 ISO assembly wait for a complete validated set of APKs.
@@ -46,7 +46,7 @@ sudo --preserve-env=APK_REPOSITORY_URL python3 scripts/reproducibility.py \
   --arch x86_64 --version 0.1.0 --package uflinux-settings
 ```
 
-Repeat independently for the other three origins. `--package` automatically uses
+Repeat independently for the other four origins. `--package` automatically uses
 `.state/ORIGIN` and `.cache/build/ORIGIN`, writing below
 `out/package-shards/ARCH/ORIGIN`. Explicit work/cache directory overrides must
 remain distinct for concurrent builds. Shards support only `packages`/`bootstrap`

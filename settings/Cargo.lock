@@ -1031,6 +1031,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "uflinux-screencapture"
+version = "0.1.0"
+dependencies = [
+ "gdk-pixbuf",
+ "gio",
+ "glib",
+ "gtk4",
+ "gtk4-layer-shell",
+ "libc",
+ "serde",
+ "serde_json",
+ "settings-core",
+]
+
+[[package]]
 name = "uflinux-settings"
 version = "0.1.0"
 dependencies = [

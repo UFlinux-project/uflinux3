@@ -1,0 +1,158 @@
+From 677d021940e673aa4f8345c2a9748fb0658548b3 Mon Sep 17 00:00:00 2001
+From: panmourovaty <panmourovaty@centrum.cz>
+Date: Thu, 12 Nov 2026 09:36:38 +0100
+Subject: [PATCH 3/9] Build: add v4l2_encoder option and ffmpeg v4l2m2m support
+
+- new v4l2_encoder meson option compiles the probe + backend and defines
+  GSR_V4L2_ENCODER
+- extra/build_ffmpeg.sh builds h264/hevc v4l2m2m encoders and passes
+  --enable-v4l2-m2m when building ffmpeg statically
+- ffmpeg.wrap applies a packagefiles patch adding a video_device option
+  to the v4l2m2m encoders so a specific /dev/videoN node can be selected
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+---
+ extra/build_ffmpeg.sh                         |  5 +-
+ meson.build                                   | 12 ++++
+ meson_options.txt                             |  2 +
+ subprojects/ffmpeg.wrap                       |  2 +-
+ .../ffmpeg-v4l2-add-video-device-option.patch | 61 +++++++++++++++++++
+ 5 files changed, 79 insertions(+), 3 deletions(-)
+ create mode 100644 subprojects/packagefiles/ffmpeg-v4l2-add-video-device-option.patch
+
+diff --git a/extra/build_ffmpeg.sh b/extra/build_ffmpeg.sh
+index e33f31e..c30b9fe 100755
+--- a/extra/build_ffmpeg.sh
++++ b/extra/build_ffmpeg.sh
+@@ -130,7 +130,7 @@ case $library in
+     ffmpeg)
+         require_program nasm
+ 
+-        encoders=aac,flac,libx264,libopus,libmp3lame,h264_nvenc,hevc_nvenc,av1_nvenc,h264_vaapi,hevc_vaapi,vp8_vaapi,vp9_vaapi,h264_vulkan,hevc_vulkan
++        encoders=aac,flac,libx264,libopus,libmp3lame,h264_nvenc,hevc_nvenc,av1_nvenc,h264_vaapi,hevc_vaapi,vp8_vaapi,vp9_vaapi,h264_vulkan,hevc_vulkan,h264_v4l2m2m,hevc_v4l2m2m
+         muxers=mp4,mov,matroska,webm,flv,mpegts,hls,whip,mp3
+         protocols=file,pipe,tcp,udp,http,https,tls,rtmp,rtmps,libsrt
+         filters=abuffer,abuffersink,amix,aresample,aformat,anull
+@@ -180,7 +180,8 @@ case $library in
+             --enable-nvenc \
+             --enable-cuda \
+             --enable-vaapi \
+-            --enable-vulkan
++            --enable-vulkan \
++            --enable-v4l2-m2m
+         build() {
+             "$source_dir/configure" "$@"
+             make -j"$jobs"
+diff --git a/meson.build b/meson.build
+index 76a2007..7cdae9c 100644
+--- a/meson.build
++++ b/meson.build
+@@ -134,6 +134,18 @@ if uses_pipewire == true
+     ]
+ endif
+ 
++if get_option('v4l2_encoder') == true
++    src += [
++        'src/codec_query/v4l2_m2m.c',
++        'src/encoder/video/v4l2_m2m.c',
++    ]
++    add_project_arguments('-DGSR_V4L2_ENCODER', language : 'c')
++endif
++
++if get_option('webp_screenshots') == true
++    add_project_arguments('-DGSR_WEBP', language : 'c')
++endif
++
+ add_project_arguments('-DGSR_VERSION="' + meson.project_version() + '"', language: 'c')
+ 
+ executable('gsr-kms-server', 'kms/server/kms_server.c', dependencies : dependency('libdrm'), c_args : '-fstack-protector-all', install : true)
+diff --git a/meson_options.txt b/meson_options.txt
+index 98c19c7..eaa3ef5 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -5,3 +5,5 @@ option('portal', type : 'boolean', value : true, description : 'Build with suppo
+ option('app_audio', type : 'boolean', value : true, description : 'Build with support for recording a single audio source (-a app: option). Requires pipewire')
+ option('plugin_examples', type : 'boolean', value : false, description : 'Build plugin examples')
+ option('ffmpeg_static', type : 'boolean', value : false, description : 'Download FFmpeg and its dependencies and link them statically into gpu-screen-recorder instead of using the system ffmpeg. This makes GPU Screen Recorder work on GTX 1080 and older NVIDIA GPUs. Requires make, nasm, cmake and perl')
++option('v4l2_encoder', type : 'boolean', value : true, description : 'Build with support for hardware encoding through V4L2 mem2mem devices (-encoder v4l2). Used on single board computers (Raspberry Pi, Radxa, Rockchip) that have no GPU-accelerated encoder. Requires FFmpeg compiled with the v4l2_m2m encoders')
++option('webp_screenshots', type : 'boolean', value : true, description : 'Save screenshots as webp (-screenshot-format webp or a .webp filename). Requires libwebp at runtime')
+diff --git a/subprojects/ffmpeg.wrap b/subprojects/ffmpeg.wrap
+index d086138..813b592 100644
+--- a/subprojects/ffmpeg.wrap
++++ b/subprojects/ffmpeg.wrap
+@@ -4,4 +4,4 @@ source_url = https://ffmpeg.org/releases/ffmpeg-9.0.tar.xz
+ source_filename = ffmpeg-9.0.tar.xz
+ source_hash = 7f607a00dd0d28a729d5a4811205812eef01cf6ef6155025febb6f36a9062d52
+ patch_directory = ffmpeg
+-diff_files = ffmpeg-nvenc-runtime-api-version.patch, ffmpeg-mbedtls-default-ca-certs.patch
++diff_files = ffmpeg-nvenc-runtime-api-version.patch, ffmpeg-mbedtls-default-ca-certs.patch, ffmpeg-v4l2-add-video-device-option.patch
+diff --git a/subprojects/packagefiles/ffmpeg-v4l2-add-video-device-option.patch b/subprojects/packagefiles/ffmpeg-v4l2-add-video-device-option.patch
+new file mode 100644
+index 0000000..3247ebc
+--- /dev/null
++++ b/subprojects/packagefiles/ffmpeg-v4l2-add-video-device-option.patch
+@@ -0,0 +1,61 @@
++--- a/libavcodec/v4l2_m2m.h
+++++ b/libavcodec/v4l2_m2m.h
++@@ -38,7 +38,9 @@
++ 
++ #define V4L_M2M_DEFAULT_OPTS \
++     { "num_output_buffers", "Number of buffers in the output context",\
++-        OFFSET(num_output_buffers), AV_OPT_TYPE_INT, { .i64 = 16 }, 2, INT_MAX, FLAGS }
+++        OFFSET(num_output_buffers), AV_OPT_TYPE_INT, { .i64 = 16 }, 2, INT_MAX, FLAGS }, \
+++    { "video_device", "Use only this video node (e.g. /dev/video11) instead of probing /dev",\
+++        OFFSET(video_device), AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, FLAGS }
++ 
++ typedef struct V4L2m2mContext {
++     char devname[PATH_MAX];
++@@ -75,6 +77,12 @@
++ 
++     int num_output_buffers;
++     int num_capture_buffers;
+++
+++    /*
+++     * Optional video node to use instead of probing every /dev/video* entry.
+++     * Either a full path ("/dev/video11") or a node name ("video11").
+++     */
+++    const char *video_device;
++ } V4L2m2mPriv;
++ 
++ /**
++--- a/libavcodec/v4l2_m2m.c
+++++ b/libavcodec/v4l2_m2m.c
++@@ -295,6 +295,32 @@
++ 
++     V4L2m2mContext *s = priv->context;
++ 
+++    /*
+++     * When the caller knows which node contains the codec (for example an
+++     * m2m device whose stateless encoder lives on a specific video node),
+++     * probe that node only. Without this the first node that happens to
+++     * expose a matching format wins, which is not necessarily the encoder.
+++     */
+++    if (priv->video_device && priv->video_device[0]) {
+++        const char *name = priv->video_device;
+++        if (strncmp(name, "/dev/", 5) == 0)
+++            name += 5;
+++
+++        snprintf(s->devname, sizeof(s->devname), "/dev/%s", name);
+++        ret = v4l2_probe_driver(s);
+++        if (ret)
+++            av_log(s->avctx, AV_LOG_ERROR, "Could not use the requested device %s\n", s->devname);
+++        else
+++            av_log(s->avctx, AV_LOG_INFO, "Using device %s\n", s->devname);
+++
+++        if (ret)
+++            memset(s->devname, 0, sizeof(s->devname));
+++        else
+++            ret = v4l2_configure_contexts(s);
+++
+++        return ret;
+++    }
+++
++     dirp = opendir("/dev");
++     if (!dirp)
++         return AVERROR(errno);
+-- 
+2.56.0
+

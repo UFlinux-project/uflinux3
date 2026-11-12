@@ -38,11 +38,11 @@ class MatrixTests(unittest.TestCase):
             self.assertEqual({job['mode'] for job in jobs if job['arch'] == arch}, {'native'})
 
     def test_each_architecture_has_four_independent_jobs(self):
-        for event,ref,count in [('pull_request','refs/heads/main',16),('workflow_dispatch','refs/heads/main',28)]:
+        for event,ref,count in [('pull_request','refs/heads/main',20),('workflow_dispatch','refs/heads/main',35)]:
             result=ci.configuration(event,ref)
             jobs=result['packages']['include']
             self.assertEqual(len(jobs),count)
             for architecture in result['matrix']['include']:
                 selected=[job for job in jobs if job['arch']==architecture['arch']]
-                self.assertEqual({job['package'] for job in selected},{'connman','uflinux-regreet','uflinux-settings','uflinux'})
+                self.assertEqual({job['package'] for job in selected},{'connman','gpu-screen-recorder','uflinux-regreet','uflinux-settings','uflinux'})
                 self.assertTrue(all(job['runner']==architecture['runner'] for job in selected))

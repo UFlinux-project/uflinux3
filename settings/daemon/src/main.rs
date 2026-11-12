@@ -1,4 +1,5 @@
 mod audio;
+mod capture;
 mod devices;
 mod display;
 mod network;

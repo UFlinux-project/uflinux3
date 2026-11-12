@@ -1,0 +1,8 @@
+# Default xdg-desktop-portal-wlr configuration for UFLinux.
+#
+# gpu-screen-recorder captures the compositor directly, so this only affects
+# window capture, which goes through the portal. portal-wlr is damage-driven:
+# max_fps caps the frame rate, it does not force one, so a still screen always
+# costs fewer frames than a full-screen capture at the same rate.
+[screencast]
+max_fps=60

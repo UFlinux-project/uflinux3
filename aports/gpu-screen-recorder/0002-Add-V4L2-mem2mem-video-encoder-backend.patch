@@ -1,0 +1,213 @@
+From afdfcce1ecb2d2cace2d0381907e9065c48b6b9d Mon Sep 17 00:00:00 2001
+From: panmourovaty <panmourovaty@centrum.cz>
+Date: Thu, 12 Nov 2026 09:36:38 +0100
+Subject: [PATCH 2/9] Add V4L2 mem2mem video encoder backend
+
+Encoder backend for the ffmpeg h264_v4l2m2m/hevc_v4l2m2m encoders. Like
+the software backend it renders into per-plane textures and reads them
+back into a system-memory NV12 AVFrame, but aligns lines to 16 and
+honours the frame linesize during readback, which VPU encoders require.
+The frame allocation is the seam for a future zero-copy (dmabuf) path.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+---
+ include/encoder/video/v4l2_m2m.h |  15 +++
+ src/encoder/video/v4l2_m2m.c     | 164 +++++++++++++++++++++++++++++++
+ 2 files changed, 179 insertions(+)
+ create mode 100644 include/encoder/video/v4l2_m2m.h
+ create mode 100644 src/encoder/video/v4l2_m2m.c
+
+diff --git a/include/encoder/video/v4l2_m2m.h b/include/encoder/video/v4l2_m2m.h
+new file mode 100644
+index 0000000..bb05b22
+--- /dev/null
++++ b/include/encoder/video/v4l2_m2m.h
+@@ -0,0 +1,15 @@
++#ifndef GSR_ENCODER_VIDEO_V4L2_M2M_H
++#define GSR_ENCODER_VIDEO_V4L2_M2M_H
++
++#include "video.h"
++
++typedef struct gsr_egl gsr_egl;
++
++typedef struct {
++    gsr_egl *egl;
++    gsr_color_depth color_depth;
++} gsr_video_encoder_v4l2_m2m_params;
++
++gsr_video_encoder* gsr_video_encoder_v4l2_m2m_create(const gsr_video_encoder_v4l2_m2m_params *params);
++
++#endif /* GSR_ENCODER_VIDEO_V4L2_M2M_H */
+diff --git a/src/encoder/video/v4l2_m2m.c b/src/encoder/video/v4l2_m2m.c
+new file mode 100644
+index 0000000..2cd8cc3
+--- /dev/null
++++ b/src/encoder/video/v4l2_m2m.c
+@@ -0,0 +1,164 @@
++#include "../../../include/encoder/video/v4l2_m2m.h"
++#include "../../../include/log.h"
++#include "../../../include/egl.h"
++#include "../../../include/utils.h"
++
++#include <libavcodec/avcodec.h>
++#include <libavutil/frame.h>
++
++#include <stdlib.h>
++
++/*
++ * Encoder backend for the ffmpeg v4l2m2m encoders (h264_v4l2m2m, hevc_v4l2m2m) used by
++ * single board computers whose V4L2 mem2mem device is the only hardware encoder available.
++ *
++ * Those encoders consume plain system-memory NV12 frames, so this backend is the same shape
++ * as the software one: render into per-plane textures, read them back into an AVFrame and let
++ * libavcodec queue the frame. The only difference is a stricter line alignment because VPUs
++ * (bcm2835-isa, rkvenc, mpp) reject or silently corrupt rows that are not aligned.
++ */
++
++#define LINESIZE_ALIGNMENT 16
++
++/* glReadPixels row stride, in pixels. Not declared by the minimal gl subset in egl.h. */
++#define GSR_GL_PACK_ROW_LENGTH 0x0D02
++
++typedef struct {
++    gsr_video_encoder_v4l2_m2m_params params;
++    gsr_video_encoder_texture_format texture_format;
++
++    unsigned int target_textures[GSR_COLOR_CONVERSION_MAX_DESTINATION_TEXTURES];
++    vec2i texture_sizes[GSR_COLOR_CONVERSION_MAX_DESTINATION_TEXTURES];
++} gsr_video_encoder_v4l2_m2m;
++
++static bool gsr_video_encoder_v4l2_m2m_setup_textures(gsr_video_encoder_v4l2_m2m *self, AVCodecContext *video_codec_context, AVFrame *frame) {
++    int res = av_frame_get_buffer(frame, LINESIZE_ALIGNMENT);
++    if(res < 0) {
++        gsr_log(GSR_LOG_LEVEL_ERROR, "gsr_video_encoder_v4l2_m2m_setup_textures: av_frame_get_buffer failed: %d", res);
++        return false;
++    }
++
++    res = av_frame_make_writable(frame);
++    if(res < 0) {
++        gsr_log(GSR_LOG_LEVEL_ERROR, "gsr_video_encoder_v4l2_m2m_setup_textures: av_frame_make_writable failed: %d", res);
++        return false;
++    }
++
++    for(int i = 0; i < self->texture_format.num_planes; ++i) {
++        const gsr_video_encoder_plane_format *plane = &self->texture_format.planes[i];
++        self->texture_sizes[i] = (vec2i){ video_codec_context->width / plane->size_divisor, video_codec_context->height / plane->size_divisor };
++        self->target_textures[i] = gl_create_texture(self->params.egl, self->texture_sizes[i].x, self->texture_sizes[i].y, plane->internal_format, plane->format, GL_NEAREST);
++        if(self->target_textures[i] == 0) {
++            gsr_log(GSR_LOG_LEVEL_ERROR, "gsr_video_encoder_v4l2_m2m_setup_textures: failed to create opengl texture");
++            return false;
++        }
++    }
++
++    return true;
++}
++
++static void gsr_video_encoder_v4l2_m2m_stop(gsr_video_encoder_v4l2_m2m *self, AVCodecContext *video_codec_context);
++
++static bool gsr_video_encoder_v4l2_m2m_start(gsr_video_encoder *encoder, AVCodecContext *video_codec_context, AVFrame *frame) {
++    gsr_video_encoder_v4l2_m2m *self = encoder->priv;
++
++    video_codec_context->width = FFALIGN(video_codec_context->width, LINESIZE_ALIGNMENT);
++    video_codec_context->height = FFALIGN(video_codec_context->height, 2);
++
++    frame->width = video_codec_context->width;
++    frame->height = video_codec_context->height;
++
++    if(!gsr_video_encoder_v4l2_m2m_setup_textures(self, video_codec_context, frame)) {
++        gsr_video_encoder_v4l2_m2m_stop(self, video_codec_context);
++        return false;
++    }
++
++    return true;
++}
++
++static void gsr_video_encoder_v4l2_m2m_stop(gsr_video_encoder_v4l2_m2m *self, AVCodecContext *video_codec_context) {
++    (void)video_codec_context;
++    self->params.egl->glDeleteTextures(GSR_COLOR_CONVERSION_MAX_DESTINATION_TEXTURES, self->target_textures);
++    for(int i = 0; i < GSR_COLOR_CONVERSION_MAX_DESTINATION_TEXTURES; ++i) {
++        self->target_textures[i] = 0;
++    }
++}
++
++/*
++ * TODO(dmabuf): the frame is allocated with av_frame_get_buffer, which is also the seam for a
++ * zero-copy path: allocate the planes from the encoder's own V4L2 buffers (or export them as
++ * dmabufs) and hand ffmpeg an AVFrame whose AVBufferRefs point at them, which removes the
++ * readback below. Everything above this function stays the same.
++ */
++static void gsr_video_encoder_v4l2_m2m_prepare_frame(gsr_video_encoder *encoder, AVFrame *frame, gsr_color_conversion *color_conversion) {
++    (void)encoder;
++    (void)color_conversion;
++    const int res = av_frame_make_writable(frame);
++    if(res < 0) {
++        gsr_log(GSR_LOG_LEVEL_ERROR, "gsr_video_encoder_v4l2_m2m_prepare_frame: av_frame_make_writable failed: %d", res);
++    }
++}
++
++static void gsr_video_encoder_v4l2_m2m_copy_textures_to_frame(gsr_video_encoder *encoder, AVFrame *frame, gsr_color_conversion *color_conversion) {
++    gsr_video_encoder_v4l2_m2m *self = encoder->priv;
++    gsr_egl *egl = self->params.egl;
++
++    for(int i = 0; i < self->texture_format.num_planes; ++i) {
++        const gsr_video_encoder_plane_format *plane = &self->texture_format.planes[i];
++
++        /* Unlike the software backend, honour the frame's line size. The planes are aligned to
++           LINESIZE_ALIGNMENT, so reading rows back packed would skew every row after the first
++           whenever the driver asks for a wider stride. */
++        const int row_length = plane->bytes_per_pixel > 0 ? frame->linesize[i] / plane->bytes_per_pixel : 0;
++        egl->glPixelStorei(GSR_GL_PACK_ROW_LENGTH, row_length);
++        gsr_color_conversion_read_destination_texture(color_conversion, i, 0, 0, frame->width / plane->size_divisor, frame->height / plane->size_divisor, plane->format, GL_UNSIGNED_BYTE, frame->data[i]);
++        egl->glPixelStorei(GSR_GL_PACK_ROW_LENGTH, 0);
++    }
++}
++
++static void gsr_video_encoder_v4l2_m2m_get_textures(gsr_video_encoder *encoder, unsigned int *textures, vec2i *texture_sizes, int *num_textures, gsr_destination_color *destination_color) {
++    gsr_video_encoder_v4l2_m2m *self = encoder->priv;
++    for(int i = 0; i < self->texture_format.num_planes; ++i) {
++        textures[i] = self->target_textures[i];
++        texture_sizes[i] = self->texture_sizes[i];
++    }
++    *num_textures = self->texture_format.num_planes;
++    *destination_color = self->texture_format.destination_color;
++}
++
++static void gsr_video_encoder_v4l2_m2m_destroy(gsr_video_encoder *encoder, AVCodecContext *video_codec_context) {
++    gsr_video_encoder_v4l2_m2m_stop(encoder->priv, video_codec_context);
++    free(encoder->priv);
++    free(encoder);
++}
++
++gsr_video_encoder* gsr_video_encoder_v4l2_m2m_create(const gsr_video_encoder_v4l2_m2m_params *params) {
++    if(params->color_depth != GSR_COLOR_DEPTH_8_BITS) {
++        gsr_log(GSR_LOG_LEVEL_ERROR, "gsr_video_encoder_v4l2_m2m_create: v4l2 m2m encoders only support 8 bit color");
++        return NULL;
++    }
++
++    gsr_video_encoder *encoder = calloc(1, sizeof(gsr_video_encoder));
++    if(!encoder)
++        return NULL;
++
++    gsr_video_encoder_v4l2_m2m *encoder_v4l2 = calloc(1, sizeof(gsr_video_encoder_v4l2_m2m));
++    if(!encoder_v4l2) {
++        free(encoder);
++        return NULL;
++    }
++
++    encoder_v4l2->params = *params;
++    encoder_v4l2->texture_format = gsr_video_encoder_get_texture_format(GSR_DESTINATION_COLOR_NV12);
++
++    *encoder = (gsr_video_encoder) {
++        .start = gsr_video_encoder_v4l2_m2m_start,
++        .prepare_frame = gsr_video_encoder_v4l2_m2m_prepare_frame,
++        .copy_textures_to_frame = gsr_video_encoder_v4l2_m2m_copy_textures_to_frame,
++        .get_textures = gsr_video_encoder_v4l2_m2m_get_textures,
++        .destroy = gsr_video_encoder_v4l2_m2m_destroy,
++        .priv = encoder_v4l2
++    };
++
++    return encoder;
++}
+-- 
+2.56.0
+

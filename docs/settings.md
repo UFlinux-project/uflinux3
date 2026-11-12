@@ -2,7 +2,7 @@
 
 Settings is a Rust workspace using plain GTK4, application-local CSS and the
 user's GTK theme. It does not depend on libadwaita, GNOME Settings or GNOME
-Settings Daemon. Super+I opens the eight-page sidebar interface. Dynamic network
+Settings Daemon. Super+I opens the nine-page sidebar interface. Dynamic network
 lists use GtkListView; pages are constructed on demand and discarded when left.
 Image previews are bounded; arbitrary remote wallpapers are not downloaded.
 
@@ -19,8 +19,8 @@ uflinux-settingsctl mute
 uflinux-settingsctl power-profile balanced
 ```
 
-Other page names are `displays`, `audio`, `power`, `default-apps`, `datetime`, `appearance`
-and `about`. The Network panel provides connection selection, credentials and
+Other page names are `displays`, `audio`, `power`, `default-apps`, `datetime`, `appearance`,
+`screen-capture` and `about`. The Network panel provides connection selection, credentials and
 radio controls. Sound provides input, output and application audio controls;
 Power provides battery status, brightness and power modes. Controls for absent
 hardware are hidden; use the arrow beside an input or output volume slider to
@@ -29,6 +29,14 @@ available from each panel's Settings link. `--quick-settings` is an alias for th
 Network panel. Escape, an outside click or a repeated taskbar click dismisses the
 active panel. Ironbar supplies the originating monitor. The GUI reuses its
 process and exits after its last window closes; no shell processes poll status.
+
+Screen Capture configures `uflinux-screencapture`, the tool launched by Print Screen. It
+sets the screenshot format and folder, clipboard copying, flash, cursor capture and delay,
+plus the recording target, quality preset, audio source and frame rate. The remaining
+recording options live behind an Advanced expander, mirroring the backend's own frontend;
+the expander state is itself a preference. The page also reports whether the
+`gpu-screen-recorder` backend was detected and can re-run that probe. Print Screen opens
+the capture overlay, and Shift or Ctrl plus Print Screen starts a recording straight away.
 
 ## Services and authorization
 

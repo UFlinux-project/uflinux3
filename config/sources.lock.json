@@ -22,6 +22,10 @@
       "url": "https://download.gnome.org/sources/gnome-backgrounds/3.38/gnome-backgrounds-3.38.0.tar.xz",
       "sha512": "01000409d6d54af81e520b8b292c24bb64e763a493c69cf71cabb9f885c7feee5a1805db40e2d0544834c40b7866f889c106e9816fd8e8b8f5273b0a099f1488"
     },
+    "gpu-screen-recorder": {
+      "url": "https://dec05eba.com/snapshot/gpu-screen-recorder.git.6.1.7.tar.gz",
+      "sha512": "3faf4e4899ce9c12b074b02452fd0a195e35249afa05a8e99374e18e9121390212b83d1a4ba5e2b8a4c3de798f6136a2b306ac01a546633ef3040a2d01cbfddb"
+    },
     "labwc-themes": {
       "url": "https://codeload.github.com/labwc/labwc-themes/tar.gz/6a2e3634eef03e7f124359ad28ed5da2d931f96d",
       "sha512": "ff78da5b5709a69cebbc11586d3a31d65229b6545d8d600c28fc93fc4b08332a8a9d9c21594e3680ee17f03a8e3fe5fc9b2cb8b3223e5d687aa680a2355b9747"
@@ -104,6 +108,20 @@
     "version": "0.2.0",
     "patches": {
       "fixed-session.patch": "be7418c7c810f9100f27ed9a05b244cb705f21d5d501066540a56ea5aa4c0307acc05dccb6ec5ec28f6870a0e3760b8b2039574d3d30421a46df5f91b93978d0"
+    }
+  },
+  "gpu-screen-recorder": {
+    "version": "6.1.7",
+    "patches": {
+      "0001-Add-V4L2-mem2mem-codec-capability-probe.patch": "cfd8ff62ee893873448fedc453f8f458185d80f89ad062fd03b54796b7ca7f565f81d056bbd5456c80a5f3c49f65a0b93bfe98aacc37d03f1aa3f855ccdee027",
+      "0002-Add-V4L2-mem2mem-video-encoder-backend.patch": "eee923907165cbd01a0e431d87f33a92b5f4272b4bb9a931066ee1f42d1f8b516c9a2516c34719f39e8ad4825e373d8bc561613f3cb1a572bcb87e2ce90fa359",
+      "0003-Build-add-v4l2_encoder-option-and-ffmpeg-v4l2m2m-sup.patch": "1d0eb5fde8162725e5bf29a9d834c49fbc347d98fc25ea740b6e217e263f38155d1a870d1c8a52d916fc9c2d4d18c8d279aa6db196b849478b52b870687bb1f5",
+      "0004-Add-v4l2-video-codec-encoder-and-v4l2-device-option.patch": "a759db4f58516f57f12297dd57e28781a9ab3b07db697f3de473b7b79dfc9e826e47613b4d5585327164c83c1e1b345d971b9a21e7a31e7f988f644ce5ff7934",
+      "0005-Wire-v4l2-mem2mem-encoder-into-codec-selection.patch": "c564aa212f934c1fc3b80fb6592d9446f93532c54f830c34fedf19356fecfd2ce496d4122717b29ef437f07814abcff6623ee9709aeaee992d0f29d936c47840",
+      "0006-Wire-v4l2-mem2mem-encoder-into-the-codec-open-path.patch": "aae35e46e2a625cfa4b9789ad02802455965d88a28c94f9e9cd9dc88fe80cc84f4e2625dc25972a79a4f8f67a68919fe1fc5989986066f025205702c355bc105",
+      "0007-info-report-v4l2-mem2mem-encoders.patch": "d91976e4f2c1876f3c786f62addbafdf5e0b7e67c5db7fa5d04e858a747a3ca5dcb8ed0e3c2114a1fad6af8f0ccd62b32235c55c6d91b5addaf91171dd70db72",
+      "0008-Add-webp-screenshot-support.patch": "bce60884c450802c1e34cc740342fc156090068c6afb59991da1164733a862377ae6b5085c5f45c31208eac392527e99c2af87d0b2cb163be3ab2029841b60ee",
+      "0009-Docs-document-v4l2-encoder-and-webp-screenshots.patch": "61a9ec74fcc76e7d5ab2b942904b7b668c269739d46a2784ad94b439a4ebf0ee90ddea2f3d7eea454c4de3adddb91cd9f24a6ca3a188655da901132d154bf80f"
     }
   }
 }

@@ -53,6 +53,7 @@ pub const PAGES: &[(&str, &str)] = &[
     ("default-apps", "Default Applications"),
     ("datetime", "Date & Time"),
     ("appearance", "Appearance"),
+    ("screen-capture", "Screen Capture"),
     ("about", "About"),
 ];
 pub fn run() {

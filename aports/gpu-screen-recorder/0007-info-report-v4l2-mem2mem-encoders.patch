@@ -1,0 +1,72 @@
+From 5e0ac758ec0276dc7f6175dfe0cbf6266c5576f8 Mon Sep 17 00:00:00 2001
+From: panmourovaty <panmourovaty@centrum.cz>
+Date: Thu, 12 Nov 2026 09:48:58 +0100
+Subject: [PATCH 7/9] --info: report v4l2 mem2mem encoders
+
+Probe /dev/video* for v4l2 m2m encoders and list h264_v4l2 / hevc_v4l2
+in the video_codecs and video_yuv444 sections when the v4l2 encoder
+backend is enabled at build time.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+---
+ src/cli/commands.c | 23 ++++++++++++++++++++++-
+ 1 file changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/src/cli/commands.c b/src/cli/commands.c
+index e7f9210..0b70780 100644
+--- a/src/cli/commands.c
++++ b/src/cli/commands.c
+@@ -7,6 +7,9 @@
+ #include "../../include/sound.h"
+ #include "../../include/utils.h"
+ #include "../../include/log.h"
++#ifdef GSR_V4L2_ENCODER
++#include "../../include/codec_query/v4l2_m2m.h"
++#endif
+ #ifdef GSR_APP_AUDIO
+ #include "../../include/pipewire_audio.h"
+ #endif
+@@ -16,6 +19,7 @@
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <string.h>
+ #include <unistd.h>
+ #include <sys/wait.h>
+ 
+@@ -89,7 +93,20 @@ static void list_supported_video_codecs(gsr_egl *egl) {
+     gsr_supported_video_codecs supported_video_codecs_software;
+     get_supported_video_codecs(egl, GSR_VIDEO_CODEC_H264, true, false, &supported_video_codecs_software);
+ 
+-    set_supported_video_codecs_ffmpeg(&supported_video_codecs, &supported_video_codecs_vulkan, NULL, egl->gpu_info.vendor);
++#ifdef GSR_V4L2_ENCODER
++    // Dont clean it up on purpose to increase shutdown speed
++    gsr_supported_video_codecs supported_video_codecs_v4l2;
++    memset(&supported_video_codecs_v4l2, 0, sizeof(supported_video_codecs_v4l2));
++    gsr_get_supported_video_codecs_v4l2_m2m(&supported_video_codecs_v4l2, NULL, false);
++#endif
++
++    set_supported_video_codecs_ffmpeg(&supported_video_codecs, &supported_video_codecs_vulkan,
++#ifdef GSR_V4L2_ENCODER
++        &supported_video_codecs_v4l2,
++#else
++        NULL,
++#endif
++        egl->gpu_info.vendor);
+ 
+     const gsr_named_video_codec video_codecs[] = {
+         { "h264",              &supported_video_codecs.h264 },
+@@ -109,6 +126,10 @@ static void list_supported_video_codecs(gsr_egl *egl) {
+         { "av1_vulkan",        &supported_video_codecs_vulkan.av1 },
+         { "av1_hdr_vulkan",    &supported_video_codecs_vulkan.av1_hdr },
+         { "av1_10bit_vulkan",  &supported_video_codecs_vulkan.av1_10bit },
++#ifdef GSR_V4L2_ENCODER
++        { "h264_v4l2",         &supported_video_codecs_v4l2.h264 },
++        { "hevc_v4l2",         &supported_video_codecs_v4l2.hevc },
++#endif
+     };
+     const int num_video_codecs = sizeof(video_codecs) / sizeof(video_codecs[0]);
+ 
+-- 
+2.56.0
+

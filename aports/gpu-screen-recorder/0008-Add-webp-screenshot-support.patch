@@ -1,0 +1,180 @@
+From e76e3f7ff444226b1a3d1545a799e075cbc79b42 Mon Sep 17 00:00:00 2001
+From: panmourovaty <panmourovaty@centrum.cz>
+Date: Thu, 12 Nov 2026 09:50:09 +0100
+Subject: [PATCH 8/9] Add webp screenshot support
+
+Screenshots (-screenshot filename.webp) are encoded with libwebp, which
+is loaded at runtime (libwebp.so.7 / .so.6 / .so), following the same
+pattern as libturbojpeg for jpeg. There is no stb fallback for webp -
+an error is logged when libwebp is missing.
+
+- new GSR_IMAGE_FORMAT_WEBP image format
+- .webp recognized by get_image_format_from_filename
+- webp listed in the image_formats section of --info
+- gated by the webp_screenshots build option (GSR_WEBP)
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+---
+ include/image_writer.h    |  6 ++++-
+ src/cli/commands.c        |  3 +++
+ src/image_writer.c        | 53 +++++++++++++++++++++++++++++++++++++++
+ src/recorder/screenshot.c |  6 +++++
+ 4 files changed, 67 insertions(+), 1 deletion(-)
+
+diff --git a/include/image_writer.h b/include/image_writer.h
+index 15e478c..0456997 100644
+--- a/include/image_writer.h
++++ b/include/image_writer.h
+@@ -10,7 +10,8 @@ typedef struct gsr_egl gsr_egl;
+ 
+ typedef enum {
+     GSR_IMAGE_FORMAT_JPEG,
+-    GSR_IMAGE_FORMAT_PNG
++    GSR_IMAGE_FORMAT_PNG,
++    GSR_IMAGE_FORMAT_WEBP
+ } gsr_image_format;
+ 
+ typedef struct {
+@@ -24,6 +25,9 @@ typedef struct {
+     void *tjCompress2_func;
+     void *tjFree_func;
+     void *tjDestroy_func;
++
++    void *webp_lib;
++    void *WebPEncodeRGBA_func;
+ } gsr_image_writer;
+ 
+ bool gsr_image_writer_init_opengl(gsr_image_writer *self, gsr_egl *egl, int width, int height);
+diff --git a/src/cli/commands.c b/src/cli/commands.c
+index 0b70780..a243d1b 100644
+--- a/src/cli/commands.c
++++ b/src/cli/commands.c
+@@ -294,6 +294,9 @@ int info_command(void *userdata) {
+     puts("section=image_formats");
+     puts("jpeg");
+     puts("png");
++#ifdef GSR_WEBP
++    puts("webp");
++#endif
+     puts("section=containers");
+     puts("mp4");
+     puts("mkv");
+diff --git a/src/image_writer.c b/src/image_writer.c
+index 117c8b8..9e72921 100644
+--- a/src/image_writer.c
++++ b/src/image_writer.c
+@@ -24,6 +24,10 @@ typedef int (*FUNC_tjCompress2)(tjhandle handle, const unsigned char *srcBuf,
+ typedef int (*FUNC_tjDestroy)(tjhandle handle);
+ typedef void (*FUNC_tjFree)(unsigned char *buffer);
+ 
++typedef int (*FUNC_WebPEncodeRGBA)(const uint8_t *rgba, int width, int height, int stride,
++                                   float quality_factor, uint8_t **output);
++typedef void (*FUNC_WebPFree)(uint8_t *data);
++
+ static bool write_buffer_to_file(const char *filepath, const unsigned char *data, unsigned long size) {
+     FILE *file = fopen(filepath, "wb");
+     if(!file)
+@@ -56,6 +60,43 @@ static void gsr_image_writer_init_libturbojpeg(gsr_image_writer *self) {
+     }
+ }
+ 
++static void gsr_image_writer_init_libwebp(gsr_image_writer *self) {
++#ifdef GSR_WEBP
++    self->webp_lib = dlopen("libwebp.so.7", RTLD_LAZY);
++    if(!self->webp_lib)
++        self->webp_lib = dlopen("libwebp.so.6", RTLD_LAZY);
++    if(!self->webp_lib)
++        self->webp_lib = dlopen("libwebp.so", RTLD_LAZY);
++    if(!self->webp_lib)
++        return;
++
++    self->WebPEncodeRGBA_func = dlsym(self->webp_lib, "WebPEncodeRGBA");
++    if(!self->WebPEncodeRGBA_func || !dlsym(self->webp_lib, "WebPFree")) {
++        dlclose(self->webp_lib);
++        self->webp_lib = NULL;
++    }
++#else
++    (void)self;
++#endif
++}
++
++static bool write_webp_with_libwebp(gsr_image_writer *self, const char *filepath, const void *data, int quality) {
++    if(!self->webp_lib || !self->WebPEncodeRGBA_func)
++        return false;
++
++    const FUNC_WebPEncodeRGBA WebPEncodeRGBA_func = (FUNC_WebPEncodeRGBA)self->WebPEncodeRGBA_func;
++    const FUNC_WebPFree WebPFree_func = (FUNC_WebPFree)dlsym(self->webp_lib, "WebPFree");
++
++    bool success = false;
++    uint8_t *webp_data = NULL;
++    const int size = WebPEncodeRGBA_func(data, self->width, self->height, self->width * 4, (float)quality, &webp_data);
++    if(size > 0 && webp_data) {
++        success = write_buffer_to_file(filepath, webp_data, (unsigned long)size);
++        WebPFree_func(webp_data);
++    }
++    return success;
++}
++
+ static bool write_jpeg_with_libturbojpeg(gsr_image_writer *self, const char *filepath, const void *data, int quality) {
+     if(!self->turbojpeg_compressor)
+         return false;
+@@ -88,6 +129,7 @@ bool gsr_image_writer_init_opengl(gsr_image_writer *self, gsr_egl *egl, int widt
+     }
+ 
+     gsr_image_writer_init_libturbojpeg(self);
++    gsr_image_writer_init_libwebp(self);
+     return true;
+ }
+ 
+@@ -103,6 +145,12 @@ void gsr_image_writer_deinit(gsr_image_writer *self) {
+         self->turbojpeg_lib = NULL;
+     }
+ 
++    if(self->webp_lib) {
++        dlclose(self->webp_lib);
++        self->webp_lib = NULL;
++        self->WebPEncodeRGBA_func = NULL;
++    }
++
+     if(self->texture) {
+         self->egl->glDeleteTextures(1, &self->texture);
+         self->texture = 0;
+@@ -125,6 +173,11 @@ static bool gsr_image_writer_write_memory_to_file(gsr_image_writer *self, const
+         case GSR_IMAGE_FORMAT_PNG:
+             success = stbi_write_png(filepath, self->width, self->height, 4, data, 0);
+             break;
++        case GSR_IMAGE_FORMAT_WEBP:
++            success = write_webp_with_libwebp(self, filepath, data, quality);
++            if(!success)
++                gsr_log(GSR_LOG_LEVEL_ERROR, "webp encoding requires libwebp (libwebp.so.7), which is not installed");
++            break;
+     }
+ 
+     if(!success)
+diff --git a/src/recorder/screenshot.c b/src/recorder/screenshot.c
+index 09c0279..0304377 100644
+--- a/src/recorder/screenshot.c
++++ b/src/recorder/screenshot.c
+@@ -16,6 +16,7 @@ gsr_color_range image_format_to_color_range(gsr_image_format image_format, int i
+     switch(image_format) {
+         case GSR_IMAGE_FORMAT_JPEG: return image_quality >= JPEG_YUV444_QUALITY_THRESHOLD ? GSR_COLOR_RANGE_FULL : GSR_COLOR_RANGE_LIMITED;
+         case GSR_IMAGE_FORMAT_PNG:  return GSR_COLOR_RANGE_FULL;
++        case GSR_IMAGE_FORMAT_WEBP: return GSR_COLOR_RANGE_FULL;
+     }
+     assert(false);
+     return GSR_COLOR_RANGE_FULL;
+@@ -214,6 +215,11 @@ bool get_image_format_from_filename(const char *filename, gsr_image_format *imag
+     } else if(gsr_string_ends_with(filename, ".png")) {
+         *image_format = GSR_IMAGE_FORMAT_PNG;
+         return true;
++#ifdef GSR_WEBP
++    } else if(gsr_string_ends_with(filename, ".webp")) {
++        *image_format = GSR_IMAGE_FORMAT_WEBP;
++        return true;
++#endif
+     } else {
+         return false;
+     }
+-- 
+2.56.0
+

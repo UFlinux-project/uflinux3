@@ -1,0 +1,173 @@
+From b00797089c524101e6fadf425614f1a364b98111 Mon Sep 17 00:00:00 2001
+From: panmourovaty <panmourovaty@centrum.cz>
+Date: Thu, 12 Nov 2026 09:45:04 +0100
+Subject: [PATCH 4/9] Add v4l2 video codec, encoder and -v4l2-device option
+
+Adds GSR_VIDEO_CODEC_H264_V4L2/HEVC_V4L2, GSR_VIDEO_ENCODER_HW_V4L2, a
+video_codec_is_vulkan-style video_codec_is_v4l2 helper, the 'v4l2' value
+for -encoder, the -v4l2-device option and settings field.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+---
+ gpu-screen-recorder.1       | 13 ++++++++++++-
+ include/args_parser.h       |  2 +-
+ include/defs.h              |  4 ++++
+ include/recorder/settings.h |  1 +
+ src/args_parser.c           | 10 +++++++---
+ src/defs.c                  | 12 ++++++++++++
+ 6 files changed, 37 insertions(+), 5 deletions(-)
+
+diff --git a/gpu-screen-recorder.1 b/gpu-screen-recorder.1
+index 7cf0d66..8bb4949 100644
+--- a/gpu-screen-recorder.1
++++ b/gpu-screen-recorder.1
+@@ -373,8 +373,19 @@ Encoding tune (default: performance). Currently NVIDIA only.
+ .BI \-keyint " seconds"
+ Keyframe interval in seconds (default: 2.0). Affects seeking precision.
+ .TP
+-.BI \-encoder " gpu|cpu"
++.BI \-encoder " gpu|cpu|v4l2"
+ Encoding device (default: gpu). CPU encoding only for H264.
++.br
++v4l2 uses a hardware encoder behind a V4L2 mem2mem device (h264_v4l2m2m/hevc_v4l2m2m), which is
++.br
++the only hardware encoder on some single board computers (Raspberry Pi, Radxa, Rockchip). Only
++.br
++h264 and hevc are supported. If no device is specified, the first suitable /dev/videoN node is used.
++.TP
++.BI \-v4l2\-device " device_path"
++V4L2 mem2mem encoder node to use with
++.BR "-encoder v4l2" ,
++e.g. /dev/video11 (default: auto-select the first node that supports H264 or HEVC encoding).
+ .TP
+ .BI \-fallback\-cpu\-encoding " yes|no"
+ Fallback to CPU if GPU encoding unavailable (default: no).
+diff --git a/include/args_parser.h b/include/args_parser.h
+index 0299d3b..c60314b 100644
+--- a/include/args_parser.h
++++ b/include/args_parser.h
+@@ -9,7 +9,7 @@
+ 
+ typedef struct gsr_egl gsr_egl;
+ 
+-#define NUM_ARGS 40
++#define NUM_ARGS 41
+ 
+ typedef enum {
+     GSR_CAPTURE_SOURCE_TYPE_WINDOW,
+diff --git a/include/defs.h b/include/defs.h
+index 9623f18..92c5e3c 100644
+--- a/include/defs.h
++++ b/include/defs.h
+@@ -72,6 +72,8 @@ typedef enum {
+     GSR_VIDEO_CODEC_AV1_VULKAN,
+     GSR_VIDEO_CODEC_AV1_HDR_VULKAN,
+     GSR_VIDEO_CODEC_AV1_10BIT_VULKAN,
++    GSR_VIDEO_CODEC_H264_V4L2,
++    GSR_VIDEO_CODEC_HEVC_V4L2,
+ } gsr_video_codec;
+ 
+ typedef enum {
+@@ -106,6 +108,7 @@ typedef enum {
+ typedef enum {
+     GSR_VIDEO_ENCODER_HW_GPU,
+     GSR_VIDEO_ENCODER_HW_CPU,
++    GSR_VIDEO_ENCODER_HW_V4L2, /* hardware encoder behind a V4L2 mem2mem device (single board computers) */
+ } gsr_video_encoder_hardware;
+ 
+ typedef enum {
+@@ -129,6 +132,7 @@ gsr_color_depth video_codec_to_bit_depth(gsr_video_codec video_codec);
+ const char* video_codec_to_string(gsr_video_codec video_codec);
+ bool video_codec_is_av1(gsr_video_codec video_codec);
+ bool video_codec_is_vulkan(gsr_video_codec video_codec);
++bool video_codec_is_v4l2(gsr_video_codec video_codec);
+ const char* audio_codec_get_name(gsr_audio_codec audio_codec);
+ 
+ #endif /* GSR_DEFS_H */
+diff --git a/include/recorder/settings.h b/include/recorder/settings.h
+index 01a162f..1cd35d4 100644
+--- a/include/recorder/settings.h
++++ b/include/recorder/settings.h
+@@ -28,6 +28,7 @@ typedef struct {
+     const char *ffmpeg_video_opts;
+     const char *ffmpeg_audio_opts;
+     const char *auth;
++    const char *v4l2_device; /* V4L2 mem2mem encoder node (e.g. /dev/video11), NULL to auto-select */
+     bool audio_codec_specified;
+     bool verbose;
+     bool gl_debug;
+diff --git a/src/args_parser.c b/src/args_parser.c
+index ff1c973..f2e3798 100644
+--- a/src/args_parser.c
++++ b/src/args_parser.c
+@@ -46,8 +46,9 @@ static const ArgEnum audio_codec_enums[] = {
+ };
+ 
+ static const ArgEnum video_encoder_enums[] = {
+-    { .name = "gpu", .value = GSR_VIDEO_ENCODER_HW_GPU },
+-    { .name = "cpu", .value = GSR_VIDEO_ENCODER_HW_CPU },
++    { .name = "gpu",   .value = GSR_VIDEO_ENCODER_HW_GPU },
++    { .name = "cpu",   .value = GSR_VIDEO_ENCODER_HW_CPU },
++    { .name = "v4l2",  .value = GSR_VIDEO_ENCODER_HW_V4L2 },
+ };
+ 
+ static const ArgEnum pixel_format_enums[] = {
+@@ -204,7 +205,8 @@ static void usage_header(void) {
+            "[-q <quality>] [-r <replay_buffer_size_sec>] [-replay-storage ram|disk] [-restart-replay-on-save yes|no] "
+            "[-k h264|hevc|av1|vp8|vp9|hevc_hdr|av1_hdr|hevc_10bit|av1_10bit] [-ac aac|opus|flac|mp3] [-ab <bitrate>] [-fm cfr|vfr|content] "
+            "[-bm auto|qp|vbr|cbr] [-cr limited|full] [-pixfmt yuv420|yuv444] [-tune performance|quality] [-df yes|no] [-sc <script_path>] [-p <plugin_path>] "
+-           "[-cursor yes|no] [-keyint <value>] [-restore-portal-session yes|no] [-portal-session-token-filepath filepath] [-encoder gpu|cpu] "
++           "[-cursor yes|no] [-keyint <value>] [-restore-portal-session yes|no] [-portal-session-token-filepath filepath] [-encoder gpu|cpu|v4l2] "
++           "[-v4l2-device <device_path>] "
+            "[-fallback-cpu-encoding yes|no] [-o <output_file>] [-ro <output_directory>] [-ffmpeg-opts <options>] [-ffmpeg-video-opts <options>] [-ffmpeg-audio-opts <options>] "
+            " [-auth <token>] [--list-capture-options [card_path]] "
+            "[--list-monitors] [--list-audio-devices] [--list-application-audio] [--list-v4l2-devices] [-write-first-frame-ts yes|no] [-low-power yes|no] "
+@@ -299,6 +301,7 @@ static bool args_parser_set_values(args_parser *self) {
+     self->settings.restart_replay_on_save = args_get_boolean_by_key(self->args, NUM_ARGS, "-restart-replay-on-save", false);
+     const bool overclock = args_get_boolean_by_key(self->args, NUM_ARGS, "-oc", false);
+     self->settings.fallback_cpu_encoding = args_get_boolean_by_key(self->args, NUM_ARGS, "-fallback-cpu-encoding", false);
++    self->settings.v4l2_device = args_get_value_by_key(self->args, NUM_ARGS, "-v4l2-device");
+     self->settings.write_first_frame_ts = args_get_boolean_by_key(self->args, NUM_ARGS, "-write-first-frame-ts", false);
+     self->settings.low_power = args_get_boolean_by_key(self->args, NUM_ARGS, "-low-power", false);
+     self->settings.exclude_metadata = args_get_boolean_by_key(self->args, NUM_ARGS, "-exclude-metadata", false);
+@@ -598,6 +601,7 @@ args_parse_result args_parser_parse(args_parser *self, int argc, char **argv, co
+     self->args[arg_index++] = (Arg){ .key = "-restore-portal-session",        .optional = true,  .list = false, .type = ARG_TYPE_BOOLEAN };
+     self->args[arg_index++] = (Arg){ .key = "-portal-session-token-filepath", .optional = true,  .list = false, .type = ARG_TYPE_STRING  };
+     self->args[arg_index++] = (Arg){ .key = "-encoder",                       .optional = true,  .list = false, .type = ARG_TYPE_ENUM, .enum_values = video_encoder_enums, .num_enum_values = sizeof(video_encoder_enums)/sizeof(ArgEnum) };
++    self->args[arg_index++] = (Arg){ .key = "-v4l2-device",                   .optional = true,  .list = false, .type = ARG_TYPE_STRING  };
+     self->args[arg_index++] = (Arg){ .key = "-fallback-cpu-encoding",         .optional = true,  .list = false, .type = ARG_TYPE_BOOLEAN };
+     self->args[arg_index++] = (Arg){ .key = "-replay-storage",                .optional = true,  .list = false, .type = ARG_TYPE_ENUM, .enum_values = replay_storage_enums, .num_enum_values = sizeof(replay_storage_enums)/sizeof(ArgEnum) };
+     self->args[arg_index++] = (Arg){ .key = "-p",                             .optional = true,  .list = true,  .type = ARG_TYPE_STRING };
+diff --git a/src/defs.c b/src/defs.c
+index 43d8199..1bf4100 100644
+--- a/src/defs.c
++++ b/src/defs.c
+@@ -62,6 +62,8 @@ const char* video_codec_to_string(gsr_video_codec video_codec) {
+         case GSR_VIDEO_CODEC_AV1_VULKAN:        return "av1_vulkan";
+         case GSR_VIDEO_CODEC_AV1_HDR_VULKAN:    return "av1_hdr_vulkan";
+         case GSR_VIDEO_CODEC_AV1_10BIT_VULKAN:  return "av1_10bit_vulkan";
++        case GSR_VIDEO_CODEC_H264_V4L2:         return "h264_v4l2";
++        case GSR_VIDEO_CODEC_HEVC_V4L2:         return "hevc_v4l2";
+     }
+     return "";
+ }
+@@ -109,6 +111,16 @@ bool video_codec_is_vulkan(gsr_video_codec video_codec) {
+     }
+ }
+ 
++bool video_codec_is_v4l2(gsr_video_codec video_codec) {
++    switch(video_codec) {
++        case GSR_VIDEO_CODEC_H264_V4L2:
++        case GSR_VIDEO_CODEC_HEVC_V4L2:
++            return true;
++        default:
++            return false;
++    }
++}
++
+ const char* audio_codec_get_name(gsr_audio_codec audio_codec) {
+     switch(audio_codec) {
+         case GSR_AUDIO_CODEC_AAC:  return "aac";
+-- 
+2.56.0
+
