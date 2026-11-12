@@ -7,6 +7,13 @@ import subprocess
 import time
 import pyatspi
 from gi.repository import Gio,GLib
+try:
+    # Gio.DesktopAppInfo moved to GioUnix and is deprecated in newer GI
+    # introspection data; fall back on older glib where GioUnix is absent.
+    from gi.repository import GioUnix
+    DesktopAppInfo = GioUnix.DesktopAppInfo
+except ImportError:
+    DesktopAppInfo = Gio.DesktopAppInfo
 
 def command(*args):
     subprocess.run(args,check=True,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,timeout=15)
@@ -17,7 +24,7 @@ def wait(predicate,description):
         try:
             value=predicate()
             if value:return value
-        except (RuntimeError,LookupError,AttributeError):pass
+        except (RuntimeError,LookupError,AttributeError,GLib.GError):pass
         time.sleep(.05)
     raise AssertionError(description)
 def tree():
@@ -25,7 +32,15 @@ def tree():
     queue=[a for a in root if a.name=='uflinux-settings']
     result=[]
     while queue:
-        a=queue.pop();result.append(a)
+        a=queue.pop()
+        # A resident client can destroy an accessible between reading a child
+        # list and querying it; treat atspi_error "Object does not exist" as a
+        # node that is simply gone.
+        try:
+            a.getRoleName()
+        except GLib.GError:
+            continue
+        result.append(a)
         try:queue.extend([c for c in a if c])
         except Exception:pass
         assert len(result)<2000,'Unbounded accessible tree'
@@ -73,7 +88,7 @@ applications=Path(os.environ['XDG_DATA_HOME'])/'applications';applications.mkdir
 for name in ('A','B'):
     (applications/('uflinux-test-'+name+'.desktop')).write_text('[Desktop Entry]\nType=Application\nName=UFLinux Test '+name+'\nExec=/bin/true %U\nMimeType=x-scheme-handler/http;x-scheme-handler/https;application/x-uflinux-unrelated;\n')
 command('update-desktop-database',str(applications))
-a=Gio.DesktopAppInfo.new('uflinux-test-A.desktop')
+a=DesktopAppInfo.new('uflinux-test-A.desktop')
 assert a and a.set_as_default_for_type('x-scheme-handler/http')
 assert a.set_as_default_for_type('application/x-uflinux-unrelated')
 page('default-apps')

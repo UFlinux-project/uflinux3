@@ -41,22 +41,40 @@ def wait(predicate, description):
         try:
             result = predicate()
             if result: return result
-        except (RuntimeError, LookupError, AttributeError): pass
+        except (RuntimeError, LookupError, AttributeError, GLib.GError): pass
         time.sleep(.05)
     raise AssertionError(description)
+# Accessibles live inside the client processes. A resident app (e.g. Settings)
+# can destroy a widget between reading a child list and querying the object, so
+# every property read must tolerate atspi_error "Object does not exist" and
+# treat the node as simply gone.
+def role_of(item):
+    try: return item.getRoleName()
+    except GLib.GError: return None
+def showing(item):
+    try: return item.getState().contains(pyatspi.STATE_SHOWING)
+    except GLib.GError: return False
+def name_of(item):
+    try: return item.name
+    except GLib.GError: return None
 def tree(root=None):
-    queue = list(root) if root is not None else [a for a in pyatspi.Registry.getDesktop(0) if a.name in ('uflinux-settings', 'uflinux-desktop')]
+    queue = list(root) if root is not None else [a for a in pyatspi.Registry.getDesktop(0) if name_of(a) in ('uflinux-settings', 'uflinux-desktop')]
     found = []
     while queue:
         item = queue.pop(0)
-        if item.getRoleName() == 'frame' and not item.getState().contains(pyatspi.STATE_SHOWING): continue
+        item_role = role_of(item)
+        if item_role is None: continue
+        if item_role == 'frame' and not showing(item): continue
         found.append(item)
         try: queue.extend([child for child in item if child])
         except Exception: pass
         assert len(found) < 6000, 'Unbounded launcher widget tree'
     return found
 def find(name, role=None):
-    return next((a for a in tree() if a.name == name and (role is None or a.getRoleName() == role)), None)
+    for a in tree():
+        if name_of(a) != name: continue
+        if role is None or role_of(a) == role: return a
+    return None
 def menu(): return find('Start menu', 'frame')
 def click(item):
     action = item.queryAction(); assert action.nActions, item.name
@@ -64,7 +82,7 @@ def click(item):
 def diagnostics(kind, error, traceback):
     try:
         command('grim', str(results / 'start-menu-failure.png'))
-        (results / 'start-menu-tree.json').write_text(json.dumps([(a.name, a.getRoleName()) for a in tree()], ensure_ascii=False, indent=2))
+        (results / 'start-menu-tree.json').write_text(json.dumps([(name_of(a), role_of(a)) for a in tree()], ensure_ascii=False, indent=2))
     except Exception: pass
     # A missing menu is usually because the resident desktop is gone: a client
     # then starts its own foreground shell and fails as a timeout instead.
@@ -155,7 +173,7 @@ try:
     search('UFLinux Fixture Broken')
     wait(lambda: find('UFLinux Fixture Broken'), 'Broken launcher fixture is not listed')
     command('wtype', '-k', 'Return')
-    wait(lambda: any('Could not launch application' in (a.name or '') for a in tree()), 'Launch error was not shown inline')
+    wait(lambda: any('Could not launch application' in (name_of(a) or '') for a in tree()), 'Launch error was not shown inline')
     assert menu(), 'Failed launch dismissed the menu'
     command('wtype', '-k', 'Escape')
     wait(lambda: find('Favorites'), 'Escape did not clear search')
@@ -202,9 +220,9 @@ try:
     open_menu()
     restart = wait(lambda: find('Restart', 'button') or find('Restart', 'push button'), 'Restart control missing')
     click(restart)
-    confirms = wait(lambda: [a for a in tree() if a.name=='Restart' and a.getRoleName() in ('button','push button') and a!=restart], 'Restart confirmation missing')
+    confirms = wait(lambda: [a for a in tree() if name_of(a)=='Restart' and role_of(a) in ('button','push button') and a!=restart], 'Restart confirmation missing')
     click(confirms[-1])
-    wait(lambda: any('Fixture denied power operation' in (a.name or '') for a in tree()), 'Authorization denial was not shown inline')
+    wait(lambda: any('Fixture denied power operation' in (name_of(a) or '') for a in tree()), 'Authorization denial was not shown inline')
     assert menu(), 'Denial dismissed Start'
     calls = [json.loads(line) for line in Path('/tmp/uflinux-login1-actions.log').read_text().splitlines()]
     assert calls == [{'method':'Reboot','interactive':True}], calls
@@ -218,7 +236,7 @@ try:
     time.sleep(.3); assert not menu(), 'Super+I incorrectly triggered the modifier-only menu'
     open_menu()
     settings_shortcut = wait(lambda: next((item for item in tree(menu())
-        if item.name == 'Settings' and item.getRoleName() in ('button', 'push button')), None),
+        if name_of(item) == 'Settings' and role_of(item) in ('button', 'push button')), None),
         'Settings shortcut is missing from Start')
     click(settings_shortcut)
     wait(lambda: not menu(), 'Settings shortcut did not dismiss Start')
@@ -237,7 +255,7 @@ try:
         wait(lambda: find(control), title + ' control missing')
         snapshot = json.loads(subprocess.check_output(['uflinux-settingsctl', 'status'], text=True))
         def shown(name):
-            return any(a.name == name and a.getState().contains(pyatspi.STATE_SHOWING) for a in tree(frame))
+            return any(name_of(a) == name and showing(a) for a in tree(frame))
         if panel == 'network':
             wifi = any(t['kind'] == 'wifi' for t in snapshot['network']['technologies']) or snapshot['network']['wifi_hardware_blocked'] or snapshot['network']['wifi_software_blocked']
             wait(lambda: shown('Wi-Fi') == wifi, 'Wi-Fi visibility did not match the hardware')
