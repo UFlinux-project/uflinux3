@@ -6,6 +6,11 @@ on:
     branches: [main]
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      full_matrix:
+        description: 'Build and test all architectures instead of the x86_64 smoke set'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -43,6 +48,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           REF: ${{ github.ref }}
+          FULL: ${{ inputs.full_matrix }}
         run: python3 scripts/ci-matrix.py
 
   compile:

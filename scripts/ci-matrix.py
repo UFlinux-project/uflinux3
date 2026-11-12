@@ -9,15 +9,14 @@ import subprocess
 root = Path(__file__).resolve().parents[1]
 arches = json.loads((root / "config/architectures.json").read_text())
 lock = json.loads((root / "config/sources.lock.json").read_text())
-def configuration(event, ref):
+def configuration(event, ref, full=False):
     release = event == "push" and ref.startswith("refs/tags/v")
     version = ref.removeprefix("refs/tags/v") if release else lock["distribution"]["version"]
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:_(?:alpha|beta|rc)[0-9]+)?", version):
         raise ValueError("Tag must be v followed by an Alpine-compatible version")
-    # Ordinary commits build images and boot them in QEMU on every architecture
-    # with a reachable emulator on the x86 runner; the ARM targets stay on
-    # releases and manual dispatches.
-    selected = list(arches) if release or event == "workflow_dispatch" else ["x86_64", "ppc64le", "riscv64", "s390x"]
+    # Ordinary commits smoke-test x86_64 only; releases and a full-matrix manual
+    # dispatch cover every architecture.
+    selected = list(arches) if release or full else ["x86_64"]
     matrix = {"include": [{"arch": arch, "runner": arches[arch]["runner"]} for arch in selected]}
     packages = {"include": [{"arch": arch, "runner": arches[arch]["runner"], "package": package}
                              for arch in selected for package in ("connman", "gpu-screen-recorder", "uflinux-regreet", "uflinux-settings", "uflinux")]}
@@ -33,7 +32,8 @@ def main():
     for name in ("settings/Cargo.lock", "settings/Cargo.toml", "aports/connman/APKBUILD", "aports/gpu-screen-recorder/APKBUILD", "aports/uflinux-regreet/APKBUILD", "aports/uflinux-settings/APKBUILD"):
         dependencies.update((root / name).read_bytes().split(b'sha512sums=')[0])
     with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-        for key, value in {**configuration(os.environ.get("EVENT", ""),os.environ.get("REF", "")),
+        for key, value in {**configuration(os.environ.get("EVENT", ""),os.environ.get("REF", ""),
+                           os.environ.get("FULL", "").lower() in ("true", "1")),
                            "epoch": epoch, "cache": dependencies.hexdigest()}.items():
             output.write(f"{key}={json.dumps(value) if isinstance(value,dict) else value}\n")
 
