@@ -20,6 +20,18 @@
     ],
     "git_blob_sha1": "d2ec6551aac7e710e5f4e20321e1dc338f30ea53"
   },
+  "logotype": {
+    "repository": "https://github.com/UFlinux-project/main",
+    "commit": "067f3069b20f78995920d30795d48d36c96fcdf7",
+    "path": "config/bootloaders/grub-pc/splash.png",
+    "url": "https://raw.githubusercontent.com/UFlinux-project/main/067f3069b20f78995920d30795d48d36c96fcdf7/config/bootloaders/grub-pc/splash.png",
+    "sha512": "720a0666802e417ddf82281dd1cbbe9031c7635c4b72af744467662d6eebbb4b47972a9212dd5b58c025ad5262be255f08142ce9eadaeb99ee8dff2c363323ae",
+    "git_blob_sha1": "87710ba26c07a454fee8e91d679b4c70ba843aef",
+    "license": "GPL-3.0-only",
+    "copies": [
+      "aports/uflinux/uflinux-splash-original.png"
+    ]
+  },
   "wallpapers": {
     "source": "gnome-backgrounds",
     "version": "3.38.0",
@@ -42,8 +54,8 @@
     "original_theme_repository": "https://github.com/UFlinux-project/ufplymouththeme",
     "original_theme_commit": "f56aa102eb205c174fe28a64064a134c5e813e52",
     "original_theme_assets_available": false,
-    "logo_source": "logo",
-    "animation": "UFLinux spinner, GPL-3.0-only",
-    "implementation": "Alpine Plymouth, OpenRC lifecycle"
+    "logo_source": "logotype",
+    "animation": "UFLinux spinner throbber, GPL-3.0-only",
+    "implementation": "Alpine Plymouth two-step with BGRT firmware background, OpenRC lifecycle"
   }
 }

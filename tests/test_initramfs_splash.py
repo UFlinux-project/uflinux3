@@ -28,6 +28,7 @@ class InitramfsWrapperTest(unittest.TestCase):
         script = '''exit 0
 # shared memory area (later system will need it)
 # read the kernel options.
+# workaround for vmware
 if [ "$SINGLEMODE" = "yes" ]; then
  :
 fi
@@ -39,7 +40,7 @@ cat "$ROOT"/proc/mounts 2>/dev/null | while read -r _dev DIR _type _opts ; do :;
 '''
         patched = self.run_wrapper(script)
         self.assertEqual(patched.count('uflinux-initramfs-splash prepare'), 1)
-        self.assertEqual(patched.count('uflinux-initramfs-splash start'), 2)
+        self.assertEqual(patched.count('uflinux-initramfs-splash start'), 3)
         self.assertEqual(patched.count('uflinux-initramfs-splash handoff'), 2)
         self.assertLess(patched.index('uflinux-initramfs-splash prepare'),
                         patched.index('uflinux-initramfs-splash start'))

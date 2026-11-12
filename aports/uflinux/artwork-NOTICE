@@ -14,6 +14,16 @@ https://github.com/UFlinux-project/uf-calamares-settings/blob/53217a0b7edc494658
 That repository distributes it under GPL-3.0. A copy is in GPL-3.0 alongside this
 notice. The same unchanged logo is used for the Settings application icon.
 
+The boot logotype is the original UFLinux bootloader splash, copied without
+alteration from:
+https://github.com/UFlinux-project/main/blob/067f3069b20f78995920d30795d48d36c96fcdf7/config/bootloaders/grub-pc/splash.png
+That repository distributes it under GPL-3.0. Packaging keeps this file
+unaltered as uflinux-splash-original.png and derives the Plymouth images from it
+at build time: uflinux-boot-assets.py copies the leaf box into bgrt-fallback.png
+and the logotype box into watermark.png, turning the black background into
+transparency without resampling. The spinner, padlock, passphrase entry and
+bullet images are original UFLinux artwork under GPL-3.0-only.
+
 Wallpaper images are copied without alteration from gnome-backgrounds 3.38.0:
 https://download.gnome.org/sources/gnome-backgrounds/3.38/gnome-backgrounds-3.38.0.tar.xz
 Dark_Ivy.jpg: Copyright 2012 Garrett LeSage, CC BY-SA 3.0.

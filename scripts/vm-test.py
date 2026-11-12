@@ -179,7 +179,7 @@ def splash_smoke(child, state, out):
         blue = sum(b > 120 and g > 50 and r < 80 for r, g, b in zip(pixels[::3], pixels[1::3], pixels[2::3]))
         white = sum(min(r, g, b) > 200 for r, g, b in zip(pixels[::3], pixels[1::3], pixels[2::3]))
         if blue < 20 or white < 300:
-            raise RuntimeError("Splash screenshot lacks the blue spinner or original white leaf")
+            raise RuntimeError("Splash screenshot lacks the blue spinner or original white artwork")
     finally:
         guest(child, "/usr/libexec/uflinux-bootsplash stop; ! pgrep -x plymouthd; rc-service greetd start")
     return {"animated_frames": True, "original_logo_visible": True, "handoff_without_daemon": True,

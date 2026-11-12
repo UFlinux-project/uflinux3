@@ -112,6 +112,11 @@ pub fn run() -> Result<()> {
     if std::env::args().any(|a| a == "--restore-routes") && !routes::configured() {
         return Ok(());
     }
+    // A headless verification session keeps this service resident so a
+    // privileged operation never has to reach D-Bus activation, which under
+    // qemu-user cannot elevate through the target setuid helper. Production
+    // activation is unchanged and still idles out below.
+    let resident = std::env::args().any(|a| a == "--resident");
     let context = glib::MainContext::default();
     let (_connection, mainloop) = context.block_on(async {
         let connection = gio::bus_get_future(gio::BusType::System)
@@ -214,7 +219,8 @@ pub fn run() -> Result<()> {
         });
         let quit = mainloop.clone();
         glib::timeout_add_local(Duration::from_secs(10), move || {
-            if active.get() == 0
+            if !resident
+                && active.get() == 0
                 && last.get().elapsed() > Duration::from_secs(45)
                 && !routes::configured()
             {

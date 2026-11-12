@@ -257,11 +257,11 @@ def install_systemd_boot(target, plan):
     fallback = boot / "EFI/BOOT" / f"BOOT{suffix.upper()}.EFI"
     fallback.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(binary, fallback)
-    write(boot, "loader/loader.conf", "default uflinux.conf\ntimeout 1\n")
+    write(boot, "loader/loader.conf", "default uflinux.conf\ntimeout 0\n")
     serial = {"aarch64": "ttyAMA0", "armv7": "ttyAMA0"}.get(plan["arch"], "ttyS0")
     write(boot, "loader/entries/uflinux.conf", "title UFLinux\nlinux /vmlinuz-lts\n"
           "initrd /initramfs-lts\n"
-          f"options root=UUID={plan['root']['uuid']} rootfstype=xfs rw console=tty0 console={serial},115200\n")
+          f"options root=UUID={plan['root']['uuid']} rootfstype=xfs rw quiet console=tty0 console={serial},115200\n")
     target_disk = plan["efi_target"]
     variables = Path("/sys/firmware/efi/efivars")
     if not variables.is_dir():

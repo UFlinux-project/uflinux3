@@ -770,9 +770,15 @@ class Builder:
         logs = []
         try:
             (self.root / "run/dbus").mkdir(parents=True, exist_ok=True)
+            # The system settings service owns a bus name that a privileged
+            # operation activates on demand. Under qemu-user that activation
+            # cannot elevate through the target setuid helper, so run it as a
+            # managed resident process here, exactly like the D-Bus fixtures,
+            # instead of letting the bus daemon start it.
             for name, command in (("system-bus", ["dbus-daemon", "--system", "--nofork", "--nopidfile"]),
                                   ("connman-fixture", ["python3", "/project/tests/mock-connman.py"]),
-                                  ("login1-fixture", ["python3", "/project/tests/mock-login1.py"])):
+                                  ("login1-fixture", ["python3", "/project/tests/mock-login1.py"]),
+                                  ("settings-system", ["/usr/libexec/uflinux-settings-system", "--resident"])):
                 log = (report / (name + ".log")).open("w")
                 logs.append(log)
                 process = subprocess.Popen(["chroot", str(self.root), "/usr/bin/env", "-i",

@@ -1,8 +1,64 @@
 [Plymouth Theme]
 Name=UFLinux
-Description=Original UFLinux leaf with a lightweight loading spinner
-ModuleName=script
+Description=UFLinux spinner and logotype below the firmware boot logo
+ModuleName=two-step
 
-[script]
+# The firmware (ACPI BGRT) logo keeps the centre slot, exactly where the
+# firmware drew it. The spinner sits below it and the logotype below that.
+# Without BGRT, bgrt-fallback.png takes the same slot, so the layout is stable.
+[two-step]
 ImageDir=/usr/share/plymouth/themes/uflinux
-ScriptFile=/usr/share/plymouth/themes/uflinux/uflinux.script
+DialogHorizontalAlignment=.5
+DialogVerticalAlignment=.382
+TitleHorizontalAlignment=.5
+TitleVerticalAlignment=.382
+HorizontalAlignment=.5
+VerticalAlignment=.60
+WatermarkHorizontalAlignment=.5
+WatermarkVerticalAlignment=.78
+Transition=none
+TransitionDuration=0.0
+BackgroundStartColor=0x000000
+BackgroundEndColor=0x000000
+DialogClearsFirmwareBackground=true
+MessageBelowAnimation=true
+
+[boot-up]
+UseEndAnimation=false
+UseFirmwareBackground=true
+
+[shutdown]
+UseEndAnimation=false
+UseFirmwareBackground=true
+
+[reboot]
+UseEndAnimation=false
+UseFirmwareBackground=true
+
+[updates]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Installing Updates...
+SubTitle=Do not turn off your computer
+
+[system-upgrade]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Upgrading System...
+SubTitle=Do not turn off your computer
+
+[firmware-upgrade]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Upgrading Firmware...
+SubTitle=Do not turn off your computer
+
+[system-reset]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Resetting System...
+SubTitle=Do not turn off your computer

@@ -5,10 +5,12 @@ patched=/tmp/uflinux-init
 /bin/busybox mkdir -p /tmp
 # If Alpine changes its init, retain a working boot and let OpenRC show the splash.
 if [ "$(/bin/busybox grep -c '^# shared memory area (later system will need it)' "$original")" = 1 ] &&
+   [ "$(/bin/busybox grep -c '^# workaround for vmware' "$original")" = 1 ] &&
    [ "$(/bin/busybox grep -c '^[[:space:]]*if \[ "\$SINGLEMODE" = "yes" \]; then' "$original")" = 2 ] &&
    [ "$(/bin/busybox grep -c 'cat "\$ROOT"/proc/mounts 2>/dev/null | while read -r _dev DIR _type _opts' "$original")" = 2 ]; then
 	/bin/busybox sed \
 		-e '/^# read the kernel options\./i /usr/libexec/uflinux-initramfs-splash prepare' \
+		-e '/^# workaround for vmware/i /usr/libexec/uflinux-initramfs-splash start' \
 		-e '/^[[:space:]]*if \[ "\$SINGLEMODE" = "yes" \]; then/i /usr/libexec/uflinux-initramfs-splash start' \
 		-e '/cat "\$ROOT"\/proc\/mounts 2>\/dev\/null | while read -r _dev DIR _type _opts/i /usr/libexec/uflinux-initramfs-splash handoff "$sysroot"' \
 		"$original" > "$patched" && exec /bin/busybox sh "$patched"

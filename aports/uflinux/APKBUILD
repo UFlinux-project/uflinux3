@@ -12,9 +12,10 @@ subpackages="uflinux-release:release uflinux-defaults:defaults uflinux-desktop-m
 	uflinux-bootsplash-openrc:bootsplash_openrc uflinux-initramfs:initramfs"
 # Configuration and installer checks are run by scripts/check.py and verify.
 options="!check"
-makedepends="rsvg-convert"
+makedepends="rsvg-convert python3"
 builddir="$srcdir"
-source="uflinux-openrc.conf uflinux.plymouth uflinux.script uflinux-spinner.svg plymouthd.conf
+source="uflinux-openrc.conf uflinux.plymouth uflinux-spinner.svg uflinux-lock.svg uflinux-entry.svg uflinux-bullet.svg
+	uflinux-boot-assets.py uflinux-splash-original.png plymouthd.conf
 	uflinux-bootsplash uflinux-initramfs-init uflinux-initramfs-splash uflinux-plymouth.files uflinux-splash.initd uflinux-splash-stop.initd LICENSE uflinux-session uflinux-compositor uflinux-autostart uflinux-theme-sync uflinux-install uflinux-install-gui-backend
 	uflinux-live.initd uflinux.desktop uflinux-logo.svg artwork-NOTICE labwc-rc.xml labwc-menu.xml
 	labwc-autostart labwc-environment mako.conf
@@ -24,16 +25,27 @@ source="uflinux-openrc.conf uflinux.plymouth uflinux.script uflinux-spinner.svg 
 	labwc-themes-6a2e3634.tar.gz::https://codeload.github.com/labwc/labwc-themes/tar.gz/6a2e3634eef03e7f124359ad28ed5da2d931f96d"
 
 build() {
-	rsvg-convert --width 144 --height 144 "$srcdir/uflinux-logo.svg" > "$srcdir/logo.png"
-	rsvg-convert --width 48 --height 48 "$srcdir/uflinux-spinner.svg" > "$srcdir/spinner.png"
+	# The two-step theme needs one image per throbber frame at a fixed 15-degree step.
+	local frame degree
+	mkdir -p "$srcdir/theme"
+	python3 "$srcdir/uflinux-boot-assets.py" "$srcdir/uflinux-splash-original.png" --outdir "$srcdir/theme"
+	frame=1
+	while [ "$frame" -le 24 ]; do
+		degree=$(( (frame - 1) * 15 ))
+		/bin/sed "s/@DEG@/$degree/" "$srcdir/uflinux-spinner.svg" > "$srcdir/frame-$frame.svg"
+		rsvg-convert -o "$srcdir/theme/throbber-$(printf '%04d' "$frame").png" "$srcdir/frame-$frame.svg"
+		frame=$((frame + 1))
+	done
+	for asset in lock entry bullet; do
+		rsvg-convert -o "$srcdir/theme/$asset.png" "$srcdir/uflinux-$asset.svg"
+	done
 }
 
 package() {
 	install -Dm644 "$srcdir/uflinux-openrc.conf" "$pkgdir/etc/rc.conf.d/uflinux.conf"
-	install -Dm644 "$srcdir/uflinux.plymouth" "$pkgdir/usr/share/plymouth/themes/uflinux/uflinux.plymouth"
-	install -Dm644 "$srcdir/uflinux.script" "$pkgdir/usr/share/plymouth/themes/uflinux/uflinux.script"
-	install -Dm644 "$srcdir/logo.png" "$pkgdir/usr/share/plymouth/themes/uflinux/logo.png"
-	install -Dm644 "$srcdir/spinner.png" "$pkgdir/usr/share/plymouth/themes/uflinux/spinner.png"
+	install -d "$pkgdir/usr/share/plymouth/themes/uflinux"
+	install -m644 "$srcdir/uflinux.plymouth" "$srcdir"/theme/*.png \
+		"$pkgdir/usr/share/plymouth/themes/uflinux/"
 	install -Dm644 "$srcdir/plymouthd.conf" "$pkgdir/etc/plymouth/plymouthd.conf"
 	install -Dm755 "$srcdir/uflinux-initramfs-init" "$pkgdir/usr/libexec/uflinux-initramfs-init"
 	install -Dm755 "$srcdir/uflinux-initramfs-splash" "$pkgdir/usr/libexec/uflinux-initramfs-splash"
@@ -171,14 +183,18 @@ installer() {
 
 sha512sums="
 e609def5a7fde0e7a128b5eb705e0d96cbddf8530614b9663d4f47a7e7b872fa8555170c093e4571d5937b60ddd46b074eaa7e5272fd2447bf0fe3e6151addcb  uflinux-openrc.conf
-e3ffc081eb7a911331da30a9a40df164248d859b6f1872205b15a64fbce53d6f717f61a1e9db23d1f7ed4a955d3017f4ce169c144954158ce7b3f50db0d232af  uflinux.plymouth
-fe0731a7ce022b0c57029e6eed375cf7264ce92805ad8483be0d7c4a16603d9b18e5df075551400a2a2496ab91b85f8c58530eb85863c33abe2064a4d68d3ccf  uflinux.script
-cea1e1131fab86599f8d817c5b2359767403f0d29d1b8bf9dc2256ea820a323a377e227c1e7281aa49bf58879d00b57a46068806f82e144cc314bd87273c7d4c  uflinux-spinner.svg
+10521c4f6117171e6a6ce28419b241cea95237462acc5d89119962a7340862260aecd32a69f3012a235e5f6a85afad5700c0e9771cf3049f28d85be4644c3ea4  uflinux.plymouth
+2656a127ebcff1432a2101d0e84183c09865e709e754ce20b80e4ec4cb70e6f83724ae7bcc262ce66d05f46e0bc07761a4a003a2165b574aea6ca539063b84c1  uflinux-spinner.svg
+4351138b8469a9135d686e779e6a4623af5b9f59eec7c7b97bce7a0afdba336784492e56eba2ed66401ac5126850e2b5802a3dbef1262c9b49c7aa550e858f09  uflinux-lock.svg
+296f5d36a9e9459a8f511f1f4f67b8ec94c5b6e70e7373732cbba99b654b626d087b9c5a441111d08820827fc73c7de9dc480e10da7346ce852f9e61a5411b13  uflinux-entry.svg
+9f3f1f9d96247a68f62419c959e5cee2052e0f9d5a0cab439d20a2f205d2837ab36908b494182aa5665e2ca8d996fffbc5df95428e27bbd13820659d21a15464  uflinux-bullet.svg
+e2777ad12e55379b57591d29b9917f4dfbc1cb497c5b2cb1d33d0a72ac7b1e8163f4639283b970362efe5949ee34bbe98b4f0c9b3ca6ae8afb8c3e0942879f41  uflinux-boot-assets.py
+720a0666802e417ddf82281dd1cbbe9031c7635c4b72af744467662d6eebbb4b47972a9212dd5b58c025ad5262be255f08142ce9eadaeb99ee8dff2c363323ae  uflinux-splash-original.png
 f84c9a47c270e9985d8dbe84fc4e39f63ef6ca41be69d459b676781258783c665b9e989c3dfb671133fd5a557ccad094a3057ef9b7b47033ba4099e3583b6cf2  plymouthd.conf
 2f118c48d9b91386ff00b0f427e4384b4c16d08ae06d0ba03442d3a1f75f017a01e7dd1f0b676244e86a17b6fbd71cc68a28d0b345815b077b4848c9fd2b21e9  uflinux-bootsplash
-bca7c4ad389440091c54e86213aae47a2f3c5e43399930d694deb3ff38f91563cbb98d8bdc8793d3a0a6fbba4c6e7885effa801bd9ca2c62ab7e832ead0e04da  uflinux-initramfs-init
+4efa268b4072ea0dfb9984c9d9fba97eb8f4f5626bc9f54920b46d6d0fb09718a786a76a1df59dd34d469140a23f31fa528b0ed9ce47b24c171c1fd9e14a9708  uflinux-initramfs-init
 f1c3efa7e12ec821d099c4bd0c3406ec6eade14d9da67082c24c89c55de3db624bff2b71c9a4f538714c8b993279218bf83f2f144ec783c732c15cb29f7d5bc8  uflinux-initramfs-splash
-5d746ff66e54f5cbb1c47e6b7b06d63968dbc6a1472b1249548d6dd3020f541748f75f6f130643291b72088788d11a418405b1aabdc2c00c24c8baa34fd9692a  uflinux-plymouth.files
+4bbefaa0a9b58aa89a6c869b5b55392a8d140007cb68c99cbb0ad89eb6da992f9484b5b421f7281674cab230be173b915edc10b0efd94daa4cd5e4916c2472d2  uflinux-plymouth.files
 e92feea7df43f10d1191032283fd882e81a63046158d362fcfb018d89dd31ba2664b6f58aa1546acc749928b31b72d67c45c985ef7595a2c651be0cf7be4b124  uflinux-splash.initd
 a4df2659edcc5ad83752f9b61ef9331885ab422c66e273ab2c8da35fa606b69d33ce20769ba9a12090535d6a4e0ed994c767c54971f1774f24e43ea08620c116  uflinux-splash-stop.initd
 d361e5e8201481c6346ee6a886592c51265112be550d5224f1a7a6e116255c2f1ab8788df579d9b8372ed7bfd19bac4b6e70e00b472642966ab5b319b99a2686  LICENSE
@@ -186,12 +202,12 @@ e7547d393b9489bfaf96ea7f1f580099e8d01487e7a59cc897001032e0f0f424b68d77d21e92ac38
 1e5eedf741904d0ebbab6f34aa3424683a87724d92d3e9dfbd2edc5e99645bd207185890807b6374ca02390cbe8dba64f32b609ac445e8f71a29edfef8939eec  uflinux-compositor
 1d974b858af0c586108515062a832ad31baed68761931396d295b7709b7c70670a99ae58b22a146a72b3323d4199d2f9b531f268a78c7a12213b292ad34a0ae4  uflinux-autostart
 0c37806c49629bb84275ed096c735d37d879483bdf4e1320fdc7ab0a0755bf376544c023227ed1d2321997c27a26128139e1865d6caac291aaf09a145a62c367  uflinux-theme-sync
-0f9e0cd6a24a262bdb79135319c405121fe27551062c973e57728bf235060c16928c33e85c11c785675dc45efd498d52cad8414df5ccad9f47c9c4d6a6019164  uflinux-install
+34da57a896516e9c19e12954b35a373c3d7847bc31dd98125ee6eb5e01960f0c4cf7f2e67dec800d3d5c75c1306a420a65b707681117b6465ac84bf31d0aa9aa  uflinux-install
 44df7b48d307198bc768a0224ef6f2422ca285ae5edc21c33b074fd1d3527ead4eddd1439602ceb3b54b4d0d9b8c988467771ef333bb37e9f9641681ede907a1  uflinux-install-gui-backend
 153f498b540da75c6398e7eb271d360ee2ced012d2cd5c77d11d8833c48bcd12fc51f2e46169f7351b38a8e8e7faa24c790776fe5d6537d78b6dafa497eec49f  uflinux-live.initd
 e6df4f4a610b45f3426de64299f2fcc0e53691cf4f62a571cc9a3a0c168628042f31ea328e202bcec79d0aa62204e370265b38ea131772c8c548a5b1a19a9d11  uflinux.desktop
 f1c52e9fb8613e71ef77817ffcfad4638be5fba1c606218562955ad6a0d75a087bce62ed514d8687af9fa25940d64513ba0b535f1de370c51a1db9b2ed399256  uflinux-logo.svg
-43cb7fdcd84cc66fbe908d23b34e4aae6098a6360e1d822ed2c2920eac0d583a7f374ee633c47f9f3ec4bd69a1d319b5243fdf04f2a40120bdb02bf388162e88  artwork-NOTICE
+17da1c30e1f7b8441f113b0d38bea115439e6238ffb063d71638b28d2e994b1bc06e04a421bc5bfedcf05c48825eeaae47a172a0f047f381af12551401123224  artwork-NOTICE
 aa7246e56d2805550b325932cce4b4e7a6ea8e3bb754ac6bf92c2e28e25e5da0e3e697166a397674b8fc087d78507af7181520fb18c3391bef623f0c3a05a7c8  labwc-rc.xml
 0e3bb10cffaf6d2279fc225e5908119dadfe4dda0125041844f265c26dc488486b8c30274e784a7a85ad77afb5bc96bdb2b038d371f59261e63fec1b5e9dc324  labwc-menu.xml
 f25b2a1b852ea3519078d149f2ab86eedaddb811a2f4c6437a4e572072ddf7b758fa8b2570c9ba6f266ed2ac585a5e3f11e056a8e6e77df3de89c8814f9acb7e  labwc-autostart

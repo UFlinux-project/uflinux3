@@ -1,25 +1,47 @@
 # Startup animation
 
-UFLinux displays the original UFLinux leaf above a small rotating blue ring on
-a dark background. The leaf is rasterized from the pinned original SVG during
-packaging; the spinner and Plymouth script are UFLinux code under GPL-3.0-only.
-The old `UFlinux-project/ufplymouththeme` repository, at commit
-`f56aa102eb205c174fe28a64064a134c5e813e52`, contains only a README and license.
-It does not supply an animation that can be imported. Provenance is recorded in
-`config/artwork.lock.json` and the existing artwork notices.
+UFLinux shows the same composition on every machine: the firmware's own boot
+logo keeps the centre of the screen, the UFLinux spinner rotates below it, and
+the original UFLinux logotype sits below the spinner. The layout follows what
+UEFI machines report through the ACPI BGRT table, so the vendor logo is never
+moved, scaled or overpainted.
 
-The implementation uses Alpine's prebuilt `plymouth` and `plymouth-drm` packages,
-without X11 rendering or a custom resident daemon. `rsvg-convert` is a build-only
-dependency. The theme lives in `/usr/share/plymouth/themes/uflinux`; its packaged
+The theme uses Plymouth's `two-step` module with `UseFirmwareBackground=true`,
+which is the only Plymouth plugin that reads
+`/sys/firmware/acpi/bgrt/{status,xoffset,yoffset,image}`. On machines without
+BGRT — BIOS firmware, most ARM boards, virtual machines — `bgrt-fallback.png`
+occupies exactly the same slot, so the original white leaf appears where the
+firmware logo would have been and nothing shifts. The firmware logo, the leaf
+and the logotype are all derived from pinned upstream artwork; provenance is in
+`config/artwork.lock.json` and `artwork-NOTICE`.
+
+Packaging keeps the upstream bootloader splash unaltered as
+`uflinux-splash-original.png`. `uflinux-boot-assets.py` (standard library only)
+copies its leaf box to `bgrt-fallback.png` and its logotype box to
+`watermark.png`, converting the black background into alpha without resampling,
+so both images also compose correctly over a vendor logo. The spinner is
+rasterized into 24 `throbber-NNNN.png` frames at a 15-degree step, which the
+`two-step` module animates itself; `lock.png`, `entry.png` and `bullet.png`
+cover the passphrase and filesystem-check dialogs. `rsvg-convert` is build-only.
+The theme lives in `/usr/share/plymouth/themes/uflinux`; its packaged
 configuration is `/etc/plymouth/plymouthd.conf`.
 
 ## Boot lifecycle and fallback
 
-`uflinux-splash` starts in OpenRC's sysinit runlevel after udev/hardware discovery.
-`uflinux-splash-stop` releases the display before greetd starts. Both live and
-installed overlays enable these services. This covers the OpenRC startup phase;
-it does not replace bootloader output, kernel/initramfs diagnostics, or the live
-image's initial APK unpacking. The existing Zstandard boot artifacts are retained.
+`uflinux-initramfs-init` runs Alpine's own init with three injected hooks: it
+prepares `/run` before the kernel options are read, starts the splash as soon as
+the boot-driver module probes finish (right after `simpledrm`, so the animation
+is up before root probing or the live image's APK unpacking), repeats that start
+at both single-user checkpoints for slow device nodes, and calls
+`plymouth update-root-fs` at each root handoff so the daemon survives
+`switch_root`. If Alpine's init no longer has the expected structure, the
+wrapper boots it unmodified and the OpenRC services take over.
+
+`uflinux-splash` starts in OpenRC's sysinit runlevel after udev/hardware
+discovery and `uflinux-splash-stop` releases the display before greetd starts.
+Both live and installed overlays enable these services, which also cover the
+case where the initramfs hooks were skipped. The existing Zstandard boot
+artifacts are retained.
 
 The renderer uses the local VT and DRM/framebuffer device. Serial output remains
 available. Machines without a local VT or graphics device skip the splash. Add

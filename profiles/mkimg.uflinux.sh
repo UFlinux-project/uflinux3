@@ -20,6 +20,10 @@ profile_uflinux() {
 	initfs_features="$initfs_features kms xfs uflinux-plymouth"
 	# The diskless live root includes Alpine's full firmware collection.
 	initfs_cmdline="$initfs_cmdline rootflags=mode=0755,size=75%"
+	# Boot straight past the loader menu with minimal console chatter; warnings
+	# and errors still reach the serial log. Hold a key before the loader
+	# initializes to bring the systemd-boot menu up on demand.
+	kernel_cmdline="$kernel_cmdline quiet"
 	modloop_addons="$modloop_addons uflinux-initramfs"
 	apks="$apks uflinux uflinux-live uflinux-installer uflinux-installer-ui musl-locales musl-locales-lang glib-lang gtk4.0-lang labwc-lang linux-lts linux-firmware
 		systemd-boot xfsprogs e2fsprogs dosfstools util-linux vulkan-loader mesa-vulkan-ati"
@@ -92,7 +96,7 @@ create_image_iso() {
 	fi
 	if [ -d "$DESTDIR/efi/boot" ]; then
 		mkdir -p "$WORKDIR/systemd-loader/loader/entries" "$DESTDIR/boot"
-		printf 'default uflinux-%s.conf\ntimeout 1\n' "${flavors%% *}" > "$WORKDIR/systemd-loader/loader/loader.conf"
+		printf 'default uflinux-%s.conf\ntimeout 0\n' "${flavors%% *}" > "$WORKDIR/systemd-loader/loader/loader.conf"
 		for _f in $flavors; do
 			{
 				printf 'title UFLinux %s\nlinux /boot/vmlinuz-%s\n' "$_f" "$_f"

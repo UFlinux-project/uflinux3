@@ -56,9 +56,10 @@ with temporary_tree(prefix="signing-smoke-", dir=PROJECT / ".cache") as temporar
     # signature stream after its digest rather than its algorithm.
     published = scratch / "repository" / (SIGNING_KEY + ".pub")
     described = subprocess.run(["openssl", "pkey", "-pubin", "-in", str(published),
-                                "-text", "-noout"], text=True, capture_output=True)
-    if described.returncode or "EC" not in described.stdout or "prime256v1" not in described.stdout:
-        raise RuntimeError("The published signing key is not an EC P-256 public key: " + described.stderr)
+                                "-text_pub", "-noout"], text=True, capture_output=True)
+    if described.returncode or "ASN1 OID: prime256v1" not in described.stdout \
+            or "NIST CURVE: P-256" not in described.stdout:
+        raise RuntimeError("The published signing key is not an EC P-256 public key: " + described.stdout)
     stream = ".SIGN." + SIGN_STREAM + "." + SIGNING_KEY + ".pub"
     for package in sorted((scratch / "repository" / args.arch).glob("*.apk")):
         if signature_names(package) != [stream]:
