@@ -9,6 +9,10 @@
 !/settings/daemon/src/
 /settings/daemon/src/*
 !/settings/daemon/src/renderer_ids.h
+!/settings/daemon/src/capture.rs
+!/settings/ui/
+!/settings/screencapture/
+!/settings/install-core/
 !/settings/core/
 /settings/core/*
 !/settings/core/src/
@@ -19,6 +23,7 @@
 !/settings/data/
 /settings/data/*
 !/settings/data/org.uflinux.Installer.desktop
+!/settings/data/org.uflinux.ScreenCapture.desktop
 !/settings/shared/
 __pycache__/
 *.pyc

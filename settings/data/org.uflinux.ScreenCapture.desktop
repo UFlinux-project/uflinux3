@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Screen Capture
+Comment=Take a screenshot or record the screen
+Exec=uflinux-screencapture
+Icon=camera-photo
+Type=Application
+Terminal=false
+NoDisplay=true
+Categories=Graphics;
