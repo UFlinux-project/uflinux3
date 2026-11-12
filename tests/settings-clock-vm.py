@@ -108,7 +108,9 @@ def serve():
     while not stop.is_set():
         try: packet,address=server.recvfrom(512)
         except socket.timeout: continue
-        if len(packet)<48 or packet[0]>>3 not in (3,4): continue
+        # ConnMan sets LI=3 (its own clock is unsynced), so the first byte is 0xe3:
+        # mask to the version field (bits 3-5) and require client mode (bits 0-2).
+        if len(packet)<48 or (packet[0]>>3)&7 not in (3,4) or packet[0]&7 != 3: continue
         reply=bytearray(48);reply[0:4]=bytes([0x24,1,4,236]);reply[12:16]=b'LOCL'
         reply[16:24]=timestamp();reply[24:32]=packet[40:48]
         reply[32:40]=timestamp();reply[40:48]=timestamp()
