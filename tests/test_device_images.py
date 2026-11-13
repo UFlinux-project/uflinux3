@@ -90,7 +90,9 @@ class DeviceRootfsTests(unittest.TestCase):
             self.assertIn(required, packages)
         self.assertNotIn("uflinux-live", packages)
         self.assertEqual(packages.count("efibootmgr"), 1)
-        self.assertIn("dtbloader", device_packages(DEVICES["qcs6490"], "aarch64"))
+        # dtbloader reaches the image through UFLINUX_NURA_PACKAGES (fetched and
+        # unpacked by the profile), never through the installed package set.
+        self.assertNotIn("dtbloader", device_packages(DEVICES["qcs6490"], "aarch64"))
         self.assertNotIn("efibootmgr", device_packages(DEVICES["spacemit-k1"], "riscv64"))
 
     def test_only_f2fs_devices_pull_in_the_f2fs_tools(self):

@@ -36,7 +36,10 @@ firmware-provided device tree. The image therefore carries the Nura `dtbloader`
 EFI driver in `EFI/systemd/drivers`, which installs a board device tree before
 `systemd-boot` runs. Nura (postmarketOS) is used **only** as an extra aarch64
 package source pinned to a specific branch and index hash, and only for that one
-driver; kernels, bootloaders and drivers always come from Alpine, and no Nura
+driver. That driver is *fetched and unpacked* rather than installed: Nura ships
+its own `mkinitfs` replacement which conflicts with the Alpine one the image
+needs, so apk must never solve across both repositories at once (see "Package
+sources"). Kernels, bootloaders and drivers always come from Alpine, and no Nura
 `device-*` package is ever installed.
 
 ## Building one locally
@@ -115,6 +118,15 @@ been published. That copy is a build artefact and is excluded from the image; th
 shipped `/etc/apk/repositories` lists the published UFLinux repository and Alpine,
 so `apk update` on the board works as soon as the release is public. apk appends
 the architecture to every entry itself, so the Nura line ends at the branch name.
+
+Installed packages come only from Alpine and the signed UFLinux repository. Nura
+packages are fetched with `apk fetch --stdout` (which resolves the file from the
+pinned index without consulting the solver) and unpacked with `tar` at their
+package paths. Installing them instead would let apk see Nura's
+`postmarketos-mkinitfs` and Alpine's `mkinitfs` — mutually conflicting providers
+of `cmd:mkinitfs` — and refuse to select any package set that pulls in a kernel.
+The unpacked files are ordinary rootfs content, so they land in the image without
+a Nura entry in the installed database.
 
 ## First boot
 

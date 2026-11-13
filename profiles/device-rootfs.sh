@@ -48,11 +48,16 @@ write_mkinitfs_conf
 apk add --no-progress $UFLINUX_PACKAGES
 
 # Optional extras that only exist in the pinned Nura repository. They are
-# installed after the main set so that a missing index is a clear failure
-# rather than a partially configured rootfs.
+# unpacked rather than installed: Nura carries its own mkinitfs replacement
+# (postmarketos-mkinitfs) which conflicts with the Alpine one that
+# uflinux-initramfs requires, so any solver run that sees both repositories
+# refuses to select packages. apk fetch resolves the file directly from the
+# pinned index and tar lays it down at the package's own paths.
 if [ -n "${UFLINUX_NURA_PACKAGES:-}" ]; then
 	# shellcheck disable=SC2086
-	apk add --no-progress $UFLINUX_NURA_PACKAGES
+	for package in $UFLINUX_NURA_PACKAGES; do
+		apk fetch --quiet --stdout "$package" | tar -C / -xz
+	done
 fi
 
 # mkinitfs owns /etc/mkinitfs/mkinitfs.conf and ships no protect entry for it,

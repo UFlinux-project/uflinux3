@@ -116,8 +116,9 @@ def device_packages(device, arch):
     # resize.f2fs ships in f2fs-tools and does the first-boot grow of an f2fs root.
     if device.get("rootfs", "ext4") == "f2fs":
         packages.append("f2fs-tools")
-    if device["nura"]:
-        packages += list(device["nura_packages"])
+    # Nura packages are not installed: the profile fetches and unpacks them, so
+    # they stay out of the solver (Nura's postmarketos-mkinitfs conflicts with
+    # Alpine's mkinitfs, which uflinux-initramfs requires).
     if arch in ("x86_64", "aarch64") and "efibootmgr" not in packages:
         packages.append("efibootmgr")
     return sorted(set(packages))
