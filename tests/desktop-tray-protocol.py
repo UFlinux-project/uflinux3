@@ -2,6 +2,7 @@
 """Exercise a real StatusNotifier item against an experimental desktop session."""
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -9,6 +10,7 @@ import time
 from gi.repository import Gio, GLib
 
 NAME = 'UFLinux Tray Fixture'
+CHEVRON = re.compile(r'^Show \d+ hidden icons?$')
 PATH = '/StatusNotifierItem'
 WATCHER = 'org.kde.StatusNotifierWatcher'
 WATCHER_PATH = '/StatusNotifierWatcher'
@@ -112,9 +114,59 @@ def registered(bus):
     return value.unpack()[0]
 
 
+def pump():
+    while GLib.MainContext.default().pending():
+        GLib.MainContext.default().iteration(False)
+
+
+def nodes():
+    """Every node in the desktop shell's accessibility tree, breadth first."""
+    import pyatspi
+    queue = [a for a in pyatspi.Registry.getDesktop(0) if a.name == 'uflinux-desktop']
+    while queue:
+        node = queue.pop(0)
+        yield node
+        try:
+            queue.extend(child for child in node if child)
+        except Exception:
+            pass
+
+
+def find(match, roles=('button', 'push button', 'menu item')):
+    """First mapped node the shell exposes, so a closed flyout never counts."""
+    import pyatspi
+    pump()
+    for node in nodes():
+        if not match(node) or node.getRoleName() not in roles:
+            continue
+        try:
+            if node.getState().contains(pyatspi.STATE_SHOWING):
+                return node
+        except Exception:
+            continue
+    return None
+
+
+def chevron():
+    return find(lambda node: CHEVRON.match(node.name))
+
+
+def panel_popup():
+    binary = os.environ.get('UFLINUX_DESKTOP_BIN')
+    if not binary:
+        return None
+    status = subprocess.run([binary, '--status'], capture_output=True, text=True, timeout=10)
+    import json
+    return json.loads(status.stdout).get('popup')
+
+
 def run(marker):
     import pyatspi
     bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    # Tray icons live inside the overflow flyout, so with no item registered the
+    # chevron itself is gone and there is nothing to open.
+    if not registered(bus):
+        assert chevron() is None, 'Tray overflow shown without any item'
     stalled = None
     if os.environ.get('UFLINUX_TEST_STALLED_TRAY') == '1':
         stalled = subprocess.Popen([sys.executable, __file__, '--stalled-item', str(marker)])
@@ -128,20 +180,22 @@ def run(marker):
     try:
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
-            while GLib.MainContext.default().pending(): GLib.MainContext.default().iteration(False)
-            queue = [a for a in pyatspi.Registry.getDesktop(0) if a.name == 'uflinux-desktop']
-            while queue:
-                node = queue.pop(0)
-                if node.name == NAME and node.getRoleName() in ('button', 'push button'):
-                    assert node.queryAction().doAction(0)
-                    break
-                try: queue.extend([child for child in node if child])
-                except Exception: pass
-            else:
-                if child.poll() is not None: raise AssertionError('Tray fixture exited')
-                time.sleep(.05)
-                continue
-            break
+            button = chevron()
+            if button is not None:
+                assert button.queryAction().doAction(0)
+                break
+            if child.poll() is not None: raise AssertionError('Tray fixture exited')
+            time.sleep(.05)
+        else: raise AssertionError('Tray overflow did not appear')
+        assert CHEVRON.match(button.name), button.name
+        assert panel_popup() in (None, 'tray'), 'Overflow did not report itself as the open popup'
+        while time.monotonic() < deadline:
+            node = find(lambda n: n.name == NAME)
+            if node is not None:
+                assert node.queryAction().doAction(0)
+                break
+            if child.poll() is not None: raise AssertionError('Tray fixture exited')
+            time.sleep(.05)
         else: raise AssertionError('Tray item did not appear')
         items = registered(bus)
         added = set(items) - previous
@@ -149,19 +203,11 @@ def run(marker):
         service = added.pop().split('/')[0]
         bus.call_sync(service, '/Menu', 'com.canonical.dbusmenu', 'TriggerUpdate', None, None, Gio.DBusCallFlags.NONE, 5000, None)
         while time.monotonic() < deadline:
-            while GLib.MainContext.default().pending(): GLib.MainContext.default().iteration(False)
-            queue = [a for a in pyatspi.Registry.getDesktop(0) if a.name == 'uflinux-desktop']
-            while queue:
-                node = queue.pop(0)
-                if node.name == 'Updated action' and node.getRoleName() in ('button', 'push button', 'menu item'):
-                    assert node.queryAction().doAction(0)
-                    break
-                try: queue.extend([child for child in node if child])
-                except Exception: pass
-            else:
-                time.sleep(.05)
-                continue
-            break
+            node = find(lambda n: n.name == 'Updated action')
+            if node is not None:
+                assert node.queryAction().doAction(0)
+                break
+            time.sleep(.05)
         else: raise AssertionError('DBusMenu action did not appear')
         while not marker.exists() and time.monotonic() < deadline: time.sleep(.05)
         assert marker.read_text() == '42', 'DBusMenu action was not delivered'
@@ -175,6 +221,7 @@ def run(marker):
     deadline = time.monotonic() + 5
     while registered(bus) and time.monotonic() < deadline: time.sleep(.05)
     assert not registered(bus), 'Tray item survived its service disappearing'
+    assert chevron() is None, 'Tray overflow outlived its last item'
     print('StatusNotifier registration, live DBusMenu update, activation, and disconnect passed')
 
 

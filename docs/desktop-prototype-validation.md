@@ -11,7 +11,10 @@ The isolated smoke test runs a headless labwc session with a private D-Bus bus:
 UFLINUX_DESKTOP_BIN=/path/to/uflinux-desktop sh tests/desktop-prototype-smoke.sh
 ```
 
-Set `UFLINUX_TEST_TRAY=1` to exercise a StatusNotifier item and DBusMenu. Add
+Set `UFLINUX_TEST_TRAY=1` to exercise a StatusNotifier item and DBusMenu. The
+fixture icon is behind the taskbar overflow chevron, so the check opens the
+flyout through its accessible name first and also asserts the chevron is absent
+before the first registration and again after the last item disconnects. Add
 `UFLINUX_TEST_EXTERNAL_TRAY=1` to exercise an existing external watcher, or
 `UFLINUX_TEST_STALLED_TRAY=1` to include an unresponsive tray client. Set
 `UFLINUX_TEST_SETTINGS=1` and `UFLINUX_SETTINGS_SNAPSHOT_BIN` to the built

@@ -14,6 +14,16 @@ use uflinux_desktop::{
 
 /// Panel logo size in device-independent pixels.
 const LOGO_PIXELS: i32 = 28;
+/// Layout cell one tray icon occupies in the overflow flyout, so the grid can be
+/// sized from the output width instead of overflowing a small monitor.
+const TRAY_CELL: i32 = 44;
+/// The flyout keeps a usable shape on a tiny output and stops widening at eight
+/// columns on a large one, trading a little width for a shorter popup.
+const TRAY_MIN_COLUMNS: i32 = 4;
+const TRAY_MAX_COLUMNS: i32 = 8;
+/// Beyond this many icons deep the flyout scrolls rather than growing upwards
+/// past the panel and off the screen.
+const TRAY_FLYOUT_MAX_HEIGHT: i32 = 240;
 
 struct TaskButton {
     button: gtk::Button,
@@ -32,9 +42,16 @@ struct TrayButton {
     popover: gtk::Popover,
     content: gtk::Box,
     revision: u64,
+    /// Grid cell the icon currently occupies, so a render only re-attaches a
+    /// button whose position actually moved.
+    cell: (i32, i32),
 }
 struct Surface {
-    tray: gtk::Box,
+    overflow: gtk::Button,
+    overflow_popover: gtk::Popover,
+    overflow_scroll: gtk::ScrolledWindow,
+    overflow_grid: gtk::Grid,
+    overflow_columns: i32,
     tray_buttons: HashMap<String, TrayButton>,
     monitor: gtk::gdk::Monitor,
     window: gtk::ApplicationWindow,
@@ -205,10 +222,18 @@ impl Panel {
             .surfaces
             .borrow()
             .iter()
-            .flat_map(|s| s.tray_buttons.values().map(|item| item.popover.clone()))
+            .flat_map(|s| {
+                std::iter::once(s.overflow_popover.clone())
+                    .chain(s.tray_buttons.values().map(|item| item.popover.clone()))
+            })
             .collect();
         for popover in popovers {
-            if except != Some(&popover) {
+            // An item menu lives inside the flyout, so the flyout is an
+            // ancestor of it and has to stay open while that menu is up;
+            // popping it would take the menu down with it.
+            let keep =
+                except.is_some_and(|except| except == &popover || except.is_ancestor(&popover));
+            if !keep {
                 popover.popdown();
             }
         }
@@ -226,6 +251,14 @@ impl Panel {
             }
         }
     }
+    /// Column count the flyout grid should use for an output of this width. The
+    /// popup is clamped to the monitor so a handful of icons never stretch a
+    /// small display's flyout past its edge.
+    fn flyout_columns(monitor: &gtk::gdk::Monitor) -> i32 {
+        let width = monitor.geometry().width();
+        let available = (width / TRAY_CELL).min(TRAY_MAX_COLUMNS);
+        available.max(TRAY_MIN_COLUMNS)
+    }
     fn render_tray(self: &Rc<Self>) {
         let items = self
             .tray
@@ -240,12 +273,40 @@ impl Panel {
                     true
                 } else {
                     item.popover.unparent();
-                    surface.tray.remove(&item.button);
+                    surface.overflow_grid.remove(&item.button);
                     false
                 }
             });
-            let mut previous: Option<gtk::Button> = None;
-            for item in &items {
+            // Nothing to hide means no chevron at all, which keeps the panel at
+            // the width it had before any tray app started.
+            surface.overflow.set_visible(!items.is_empty());
+            if items.is_empty() {
+                surface.overflow_popover.popdown();
+            }
+            let label = match items.len() {
+                1 => "Show 1 hidden icon".to_string(),
+                count => format!("Show {count} hidden icons"),
+            };
+            surface.overflow.set_tooltip_text(Some(&label));
+            surface
+                .overflow
+                .update_property(&[gtk::accessible::Property::Label(&label)]);
+            let columns = Self::flyout_columns(&surface.monitor);
+            if columns != surface.overflow_columns {
+                surface.overflow_columns = columns;
+            }
+            let columns = surface.overflow_columns;
+            // A popover sizes to its content's natural width, which a
+            // homogeneous grid reports as only a few columns. Pin the grid to
+            // the width its icons actually need so a flyout of several icons is
+            // never squeezed into a single clipped column.
+            let used = (items.len() as i32).clamp(1, columns);
+            surface.overflow_grid.set_size_request(used * TRAY_CELL, -1);
+            surface
+                .overflow_scroll
+                .set_max_content_width(columns * TRAY_CELL);
+            for (index, item) in items.iter().enumerate() {
+                let cell = ((index as i32) % columns, (index as i32) / columns);
                 let button = surface
                     .tray_buttons
                     .entry(item.key.clone())
@@ -254,6 +315,7 @@ impl Panel {
                         let image = gtk::Image::new();
                         image.set_pixel_size(18);
                         button.set_child(Some(&image));
+                        button.add_css_class("uflinux-tray-icon");
                         let popover = gtk::Popover::new();
                         let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
                         popover.set_child(Some(&content));
@@ -333,13 +395,13 @@ impl Panel {
                             glib::Propagation::Stop
                         });
                         button.add_controller(scroll);
-                        surface.tray.append(&button);
                         TrayButton {
                             button,
                             image,
                             popover,
                             content,
                             revision: item.menu_revision,
+                            cell,
                         }
                     });
                 if button.revision != item.menu_revision {
@@ -359,10 +421,15 @@ impl Panel {
                 } else {
                     button.image.set_icon_name(Some(&item.icon));
                 }
-                surface
-                    .tray
-                    .reorder_child_after(&button.button, previous.as_ref());
-                previous = Some(button.button.clone());
+                // Attaching a button that is already in the grid moves it, so a
+                // registration or an output change re-lays the icons out without
+                // rebuilding their menus or losing an open one.
+                if button.cell != cell || button.button.parent().is_none() {
+                    surface
+                        .overflow_grid
+                        .attach(&button.button, cell.0, cell.1, 1, 1);
+                    button.cell = cell;
+                }
             }
         }
     }
@@ -553,6 +620,7 @@ impl Panel {
                 for item in surface.tray_buttons.values() {
                     item.popover.unparent();
                 }
+                surface.overflow_popover.unparent();
                 surface.window.close();
             }
             keep
@@ -626,8 +694,73 @@ impl Panel {
         let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
         spacer.set_hexpand(true);
         root.append(&spacer);
-        let tray = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-        root.append(&tray);
+        // StatusNotifier icons live behind a single chevron, as on Windows, so a
+        // dozen background apps do not push the clock off a small panel. The
+        // chevron stays hidden until an item registers.
+        let grid = gtk::Grid::new();
+        grid.set_column_homogeneous(true);
+        grid.set_row_homogeneous(true);
+        grid.set_column_spacing(2);
+        grid.set_row_spacing(2);
+        grid.add_css_class("uflinux-tray-flyout");
+        let scroll = gtk::ScrolledWindow::builder()
+            .child(&grid)
+            // The grid is at most TRAY_MAX_COLUMNS wide, so it always fits
+            // horizontally and only ever needs to scroll vertically. An
+            // External/Always policy here would clip the last column instead.
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .vscrollbar_policy(gtk::PolicyType::Automatic)
+            .propagate_natural_width(true)
+            .propagate_natural_height(true)
+            .max_content_height(TRAY_FLYOUT_MAX_HEIGHT)
+            .build();
+        scroll.add_css_class("uflinux-tray-scroll");
+        let overflow_popover = gtk::Popover::builder()
+            .child(&scroll)
+            .position(gtk::PositionType::Top)
+            .has_arrow(false)
+            .build();
+        overflow_popover.add_css_class("uflinux-tray-popover");
+        // A plain button rather than a MenuButton: GTK exposes a MenuButton as
+        // a combo box with no accessibility action, which would leave the
+        // chevron unreachable to assistive tech and to the a11y test harness.
+        let overflow = gtk::Button::from_icon_name("pan-up-symbolic");
+        overflow.add_css_class("uflinux-tray-chevron");
+        overflow.set_tooltip_text(Some("Hidden icons"));
+        overflow_popover.set_parent(&overflow);
+        overflow.set_visible(false);
+        let weak = self.app.clone();
+        let output = monitor
+            .connector()
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let target = overflow_popover.downgrade();
+        overflow_popover.connect_show(move |_| {
+            if let (Some(app), Some(popover)) = (weak.upgrade(), target.upgrade()) {
+                app.show_tray(&popover, &output);
+            }
+        });
+        let weak = self.app.clone();
+        overflow_popover.connect_hide(move |_| {
+            if let Some(app) = weak.upgrade() {
+                app.tray_closed();
+            }
+        });
+        let open = overflow.clone();
+        overflow_popover.connect_show(move |_| open.add_css_class("open"));
+        let closed = overflow.clone();
+        overflow_popover.connect_hide(move |_| closed.remove_css_class("open"));
+        let toggle = overflow_popover.clone();
+        overflow.connect_clicked(move |_| {
+            if toggle.is_visible() {
+                toggle.popdown();
+            } else {
+                toggle.popup();
+            }
+        });
+        root.append(&overflow);
+        let overflow_columns = Self::flyout_columns(monitor);
+        scroll.set_max_content_width(overflow_columns * TRAY_CELL);
         for (index, name, fallback) in [
             (0, "network", "network-offline-symbolic"),
             (1, "sound", "audio-volume-muted-symbolic"),
@@ -712,7 +845,11 @@ impl Panel {
         window.set_child(Some(&root));
         window.present();
         Some(Surface {
-            tray,
+            overflow,
+            overflow_popover,
+            overflow_scroll: scroll,
+            overflow_grid: grid,
+            overflow_columns,
             tray_buttons: HashMap::new(),
             monitor: monitor.clone(),
             window,

@@ -57,3 +57,13 @@ brightness and power profiles. The corresponding Settings page provides advanced
 controls. Open a panel directly with `uflinux-desktop --panel network|sound|power
 --output NAME`. The settings service reads system batteries and updates the panel
 after device changes. Desktop systems use a bolt icon.
+
+StatusNotifier icons sit behind a single chevron at the right end of the taskbar,
+like the hidden-icons flyout on Windows, so background apps never push the clock
+off a narrow panel. The chevron is hidden while no item is registered and its
+tooltip and accessible name report how many icons are behind it. The flyout is a
+grid of square icons above the panel, four to eight columns wide depending on the
+output, and scrolls once it grows taller than the flyout allows. Left click activates
+an item, or opens its menu when it declares `ItemIsMenu`; right click always opens
+its menu; scrolling over an icon sends its `Scroll` event. Only one tray menu is
+open at a time, and the flyout stays open while one of its menus is up.
