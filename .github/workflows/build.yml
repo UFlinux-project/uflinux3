@@ -251,9 +251,9 @@ jobs:
         run: |
           release_args=()
           if [ "$RELEASE" = true ]; then release_args+=(--release); fi
-          for stage in sign device; do
-            sudo --preserve-env=SOURCE_DATE_EPOCH,APK_REPOSITORY_URL,GITHUB_REPOSITORY,GITHUB_SHA,APK_SIGNING_PRIVATE_KEY,APK_SIGNING_PUBLIC_KEY bash scripts/build.sh --arch '${{ matrix.arch }}' --version '${{ needs.checks.outputs.version }}' --device '${{ matrix.device }}' --stage "$stage" "${release_args[@]}"
-          done
+          build_args=(--arch '${{ matrix.arch }}' --version '${{ needs.checks.outputs.version }}')
+          sudo --preserve-env=SOURCE_DATE_EPOCH,APK_REPOSITORY_URL,GITHUB_REPOSITORY,GITHUB_SHA,APK_SIGNING_PRIVATE_KEY,APK_SIGNING_PUBLIC_KEY bash scripts/build.sh "${build_args[@]}" --stage sign "${release_args[@]}"
+          sudo --preserve-env=SOURCE_DATE_EPOCH,APK_REPOSITORY_URL,GITHUB_REPOSITORY,GITHUB_SHA,APK_SIGNING_PRIVATE_KEY,APK_SIGNING_PUBLIC_KEY bash scripts/build.sh "${build_args[@]}" --device '${{ matrix.device }}' --stage device "${release_args[@]}"
       - name: Upload build diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

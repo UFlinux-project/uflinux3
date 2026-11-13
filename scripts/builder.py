@@ -45,6 +45,8 @@ EFI_SUFFIX = {"aarch64": "aa64", "x86_64": "x64"}
 # A device image is several gigabytes of already-compressed packages, so the
 # highest level would cost hours of CPU for a few percent of size.
 DEVICE_IMAGE_ZSTD_LEVEL = 12
+# Stage names as they appear on the command line, mapped to Builder methods.
+STAGE_METHODS = {"packages": "package", "device": "device_image"}
 
 
 def device_target(devices, name, arch):
@@ -932,7 +934,6 @@ class Builder:
         # The device rootfs pulls kernels and firmware that no other stage uses;
         # keeping them out of the shared cache keeps the ISO inputs unchanged.
         args.cache = str(Path(self.args.cache).resolve() / "device" / name)
-        args.device = None
         root = Builder(args)
         root.device_bootstrap(device)
         with root.mounted():
@@ -1119,7 +1120,8 @@ class Builder:
         name = stage
         if stage == "device" and getattr(self.args, "device", None):
             name = stage + "-" + self.args.device
-        self.chroot("apk", "info", "-v", stdout=(directory / (name + "-packages.txt")).open("w"))
+        with (directory / (name + "-packages.txt")).open("w") as record:
+            self.chroot("apk", "info", "-v", stdout=record)
         files = {}
         for base in (self.packages_dir, self.out / "repository" / self.args.arch, self.out / "apk-cache" / self.args.arch):
             if base.exists():
@@ -1135,7 +1137,7 @@ class Builder:
         if stage == "device":
             metadata.update(getattr(self, "device_info", {}))
             metadata["image_format"] = "raw-gpt"
-        (directory / (stage + ".json")).write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
+        (directory / (name + ".json")).write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
 
 
 def main(argv=None):
@@ -1144,7 +1146,7 @@ def main(argv=None):
     parser.add_argument("--version", default=LOCK["distribution"]["version"])
     parser.add_argument("--outdir", default=str(PROJECT / "out"))
     parser.add_argument("--package", choices=PACKAGE_NAMES, help="Compile one independent package origin (packages/bootstrap stages only)")
-    parser.add_argument("--device", choices=sorted(DEVICES), help="Build one device disk image (the device stage only)")
+    parser.add_argument("--device", choices=sorted(DEVICES), help="Build a device disk image instead of an ISO (--stage device, or --stage all)")
     parser.add_argument("--workdir")
     parser.add_argument("--cache")
     parser.add_argument("--repository-url", default=os.environ.get("APK_REPOSITORY_URL"))
@@ -1153,8 +1155,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.package and (args.stage not in {"bootstrap", "packages"} or args.release):
         parser.error("--package requires --stage packages or bootstrap, without --release")
-    if (args.device is not None) != (args.stage == "device"):
-        parser.error("--device is required by --stage device and allowed by no other stage")
+    if args.stage == "device" and args.device is None:
+        parser.error("--stage device requires --device")
+    if args.device is not None and args.stage not in {"device", "all"}:
+        parser.error("--device is used by --stage device and by --stage all only")
     if args.device:
         try:
             device_target(DEVICES, args.device, args.arch)
@@ -1170,10 +1174,15 @@ def main(argv=None):
     try:
         builder.bootstrap()
         with builder.mounted():
-            for stage in (["packages", "sign", "image", "verify"] if args.stage == "all" else [args.stage]):
+            stages = ["packages", "sign", "image", "verify"]
+            if args.device is not None:
+                # A device build replaces the ISO: verify_installed() exercises the
+                # live media and the installer, neither of which is on a board image.
+                stages = ["packages", "sign", "device"]
+            for stage in (stages if args.stage == "all" else [args.stage]):
                 if stage != "bootstrap":
                     try:
-                        getattr(builder, "package" if stage == "packages" else stage)()
+                        getattr(builder, STAGE_METHODS.get(stage, stage))()
                     finally:
                         if args.release and stage in {"sign", "image", "device"}:
                             (builder.root / "var/lib/uflinux/keys" / SIGNING_KEY).unlink(missing_ok=True)

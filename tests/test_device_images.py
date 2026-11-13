@@ -205,8 +205,21 @@ class DeviceStageCliTests(unittest.TestCase):
         self.assertIn("--device", self.rejected("--arch", "aarch64", "--stage", "image",
                                                 "--device", "rpi"))
 
+    def test_device_is_rejected_by_the_sign_stage(self):
+        # The device job runs sign separately, without a board, so that the shared
+        # repository is identical to the one the ISO job publishes.
+        self.assertIn("--device", self.rejected("--arch", "aarch64", "--stage", "sign",
+                                                "--device", "rpi"))
+
     def test_device_stage_requires_a_device(self):
         self.assertIn("--device", self.rejected("--arch", "aarch64", "--stage", "device"))
+
+    def test_every_stage_reaches_a_builder_method(self):
+        # The dispatcher looks stages up in STAGE_METHODS, so a stage without a
+        # target only fails once CI runs it.
+        for stage in ("bootstrap", "packages", "sign", "image", "device", "verify"):
+            method = getattr(builder.Builder, builder.STAGE_METHODS.get(stage, stage), None)
+            self.assertTrue(callable(method), stage)
 
     def test_device_must_support_the_architecture(self):
         self.assertIn("does not support x86_64",
@@ -219,6 +232,11 @@ class DeviceStageCliTests(unittest.TestCase):
     def test_device_is_a_known_stage(self):
         # Past argument validation the builder insists on a root build host.
         stderr = self.rejected("--arch", "aarch64", "--stage", "device", "--device", "rpi")
+        self.assertIn("build host", stderr)
+
+    @unittest.skipIf(os.geteuid() == 0, "a root host would start a real build")
+    def test_device_is_accepted_by_the_all_stage(self):
+        stderr = self.rejected("--arch", "aarch64", "--stage", "all", "--device", "rpi")
         self.assertIn("build host", stderr)
 
 
