@@ -420,11 +420,27 @@ impl Client {
             }
             _ => return Err("Not an audio operation".into()),
         }
-        if !receive
-            .recv()
-            .await
-            .map_err(|_| "Audio operation canceled")?
-        {
+        // Under heavy emulation the server can silently drop an operation's
+        // completion callback. Bound the wait (and fail fast when the context
+        // dies) so every Execute gets a reply before the caller's D-Bus
+        // timeout instead of wedging on it.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        let success = loop {
+            match receive.try_recv() {
+                Ok(success) => break Some(success),
+                Err(async_channel::TryRecvError::Closed) => break None,
+                _ => {
+                    if !self.ready() {
+                        return Err("PipeWire audio is unavailable".into());
+                    }
+                    if std::time::Instant::now() >= deadline {
+                        return Err("The audio server did not acknowledge this change".into());
+                    }
+                    glib::timeout_future(std::time::Duration::from_millis(50)).await;
+                }
+            }
+        };
+        if !success.ok_or("Audio operation canceled")? {
             return Err("The audio server rejected this change".into());
         }
         self.schedule();

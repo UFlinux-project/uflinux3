@@ -12,8 +12,17 @@ from gi.repository import Gio, GLib
 bus=Gio.bus_get_sync(Gio.BusType.SESSION)
 def call(method, action=None):
     args=GLib.Variant('(s)',(json.dumps(action),)) if action else None
-    reply=bus.call_sync('org.uflinux.Settings1','/org/uflinux/Settings',
-        'org.uflinux.Settings1',method,args,None,0,10000,None)
+    # Every method here is idempotent, so retry while the audio server has a
+    # transient stall (common under s390x emulation) instead of failing the run.
+    for _ in range(3):
+        try:
+            reply=bus.call_sync('org.uflinux.Settings1','/org/uflinux/Settings',
+                'org.uflinux.Settings1',method,args,None,0,30000,None)
+            break
+        except GLib.Error:
+            time.sleep(1)
+    else:
+        raise AssertionError('Settings daemon stopped answering D-Bus calls')
     return json.loads(reply.unpack()[0])
 def execute(action): return call('Execute', action)
 def state(): return call('GetState')['audio']
@@ -113,4 +122,11 @@ try:
 finally:
     for child in children:
         child.terminate();child.wait(timeout=5)
-    if not unloaded: subprocess.run(['pactl','unload-module',module],check=True)
+    # A killed stream can linger on an emulated runner, keeping the module
+    # busy for a moment after its client is gone.
+    if not unloaded:
+        for _ in range(60):
+            if subprocess.run(['pactl','unload-module',module]).returncode == 0: break
+            time.sleep(0.5)
+        else:
+            raise subprocess.CalledProcessError(1,['pactl','unload-module',module])
