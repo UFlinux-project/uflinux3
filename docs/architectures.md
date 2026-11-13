@@ -10,7 +10,20 @@
 | s390x | qemu-s390x | s390-ccw-virtio | native IPL / zipl |
 | riscv64 | qemu-riscv64 | virt | OpenSBI and UEFI |
 
-This table describes the configured build/test matrix, not completed physical
+## Device image targets
+
+| Board id | Package build | Boot firmware | Status |
+| --- | --- | --- | --- |
+| `qcs6490` | native ARM64 runner | board UEFI plus `systemd-boot` | experimental |
+| `rpi` | native ARM64 runner | VideoCore firmware with `config.txt` | supported |
+| `spacemit-k1` | qemu-riscv64 | U-Boot distro boot with `extlinux` | experimental |
+| `vm` | native x86_64 and ARM64 runners | UEFI with `systemd-boot` | supported |
+
+Device images are supplementary: they are built on tags and attached to the
+release, but they are not part of the publication gate and none of them has a
+configured boot test yet. See [device images](device-images.md).
+
+This table describes the configured ISO build/test matrix, not completed physical
 hardware certification. Publication requires green test reports for all rows.
 The firmware search paths are explicit in `scripts/vm-test.py`; missing firmware
 is a test failure, not a skipped architecture.

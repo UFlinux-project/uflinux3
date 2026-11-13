@@ -6,6 +6,9 @@ The initial source baseline is Alpine **3.24.4** and Ironbar **0.19.1**.
 The repository builds real Alpine packages and ISO images for `x86`, `x86_64`,
 `aarch64`, `armv7`, `ppc64le`, `s390x`, and `riscv64`.
 `armhf` is excluded because Alpine does not provide a standard ISO profile for it.
+On release tags it additionally builds installed disk images for four device
+targets: Dragon Q6A-class QCOM boards, Raspberry Pi 3–5, SpacemiT K1 boards such
+as the Orange Pi RV2, and virtual machines.
 The [startup animation](docs/bootsplash.md) reuses the original UFLinux leaf logo.
 
 ```sh
@@ -16,12 +19,15 @@ sudo env APK_REPOSITORY_URL=https://OWNER.github.io/REPO/apk/v3.24/uflinux \
 
 Run privileged builds on a disposable Linux host. Other architectures require
 QEMU binfmt registration. Local builds use development signing keys unless
-`--release` and the release signing secrets are supplied.
+`--release` and the release signing secrets are supplied. Add
+`--device rpi --stage all` (or `qcs6490`, `spacemit-k1`, `vm`) to build an
+installed board image instead of an ISO.
 
 GitHub Actions compiles packages without release secrets, signs and assembles
 images in separate jobs, checks the desktop, boots the ISO in QEMU, installs onto
 preformatted XFS, and reboots from the installed disk. Tagged releases publish
-only after the full matrix passes. A configured test is not evidence of a
+only after the full matrix passes. Device disk images are built on tags as a
+supplementary artifact and cannot block a release. A configured test is not evidence of a
 successful run: use the workflow results and attached build records to determine
 which architectures have actually passed.
 
@@ -44,12 +50,15 @@ not copy the live account or its autologin settings.
 
 Installation uses an existing **XFS `/`** and a separate `/boot`: a **FAT32 ESP**
 for UEFI, or **ext4** for native BIOS and other non-UEFI boot. The installer does not partition
-or format disks. Architecture boot requirements still apply.
+or format disks. Architecture boot requirements still apply. Board images skip the
+installer entirely: they are written to the whole SD card or eMMC and carry their
+own bootloader, kernel and root partition.
 
 - [GitHub setup and publishing](docs/github.md)
 - [This repository’s signing and Pages setup](docs/github-setup.md)
 - [Build stages, outputs, and source verification](docs/building.md)
 - [Installation and updates](docs/installing.md)
+- [Device disk images for boards and virtual machines](docs/device-images.md)
 - [Architecture coverage and validation](docs/architectures.md)
 - [Initial local validation results](docs/validation.md)
 - [Settings architecture, controls and resource targets](docs/settings.md)

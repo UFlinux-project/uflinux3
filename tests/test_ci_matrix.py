@@ -39,6 +39,30 @@ class MatrixTests(unittest.TestCase):
         for arch in ('ppc64le', 's390x'):
             self.assertEqual({job['mode'] for job in jobs if job['arch'] == arch}, {'native'})
 
+    def test_device_images_are_supplementary_outside_releases(self):
+        for event,ref,full,devices in [('push','refs/heads/main',False,False),
+                                      ('pull_request','refs/heads/main',False,True),
+                                      ('workflow_dispatch','refs/heads/main',True,False)]:
+            result=ci.configuration(event,ref,full,devices)
+            self.assertEqual(result['devices']['include'],[])
+            self.assertEqual(result['devices_enabled'],'false')
+    def test_manual_full_run_can_build_device_images_without_releasing(self):
+        result=ci.configuration('workflow_dispatch','refs/heads/main',True,True)
+        self.assertEqual(result['release'],'false')
+        self.assertEqual(result['devices_enabled'],'true')
+        self.assertEqual(len(result['devices']['include']),5)
+    def test_release_tags_build_every_device_and_label_experimental_targets(self):
+        result=ci.configuration('push','refs/tags/v0.1.0')
+        self.assertEqual(result['devices_enabled'],'true')
+        jobs=result['devices']['include']
+        self.assertEqual(sorted((job['device'],job['arch']) for job in jobs),
+                         [('qcs6490','aarch64'),('rpi','aarch64'),('spacemit-k1','riscv64'),
+                          ('vm','aarch64'),('vm','x86_64')])
+        self.assertEqual({job['device'] for job in jobs if job['experimental']=='true'},
+                         {'qcs6490','spacemit-k1'})
+        for job in jobs:
+            self.assertEqual(job['runner'],ci.arches[job['arch']]['runner'])
+
     def test_each_architecture_has_four_independent_jobs(self):
         for event,ref,full,count in [('pull_request','refs/heads/main',False,5),
                                      ('workflow_dispatch','refs/heads/main',True,35)]:

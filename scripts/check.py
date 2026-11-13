@@ -16,10 +16,39 @@ arches = json.loads((ROOT / "config/architectures.json").read_text())
 lock = json.loads((ROOT / "config/sources.lock.json").read_text())
 assert set(arches) == set(lock["rootfs"])
 assert set(arches) == {"x86", "x86_64", "aarch64", "armv7", "ppc64le", "s390x", "riscv64"}
+devices = json.loads((ROOT / "config/devices.json").read_text())
+device_lock = json.loads((ROOT / "config/devices.lock.json").read_text())
+assert device_lock["schema"] == 1
+for device_id, device in devices.items():
+    assert re.fullmatch(r"[a-z0-9][a-z0-9-]*", device_id), f"Device id must be a lowercase slug: {device_id}"
+    assert device["label"], f"{device_id} needs a label"
+    assert device["arches"] and set(device["arches"]) <= set(arches), f"{device_id} lists an unknown architecture"
+    assert device["kernel"] in {"lts", "rpi", "virt"}, f"{device_id} must use a known kernel flavour"
+    assert device["boot"] in {"efi", "rpi", "extlinux"}, f"{device_id} must use a known boot mode"
+    if device["boot"] == "extlinux":
+        assert re.fullmatch(r"[a-z0-9][a-z0-9._/-]*\.dtb", device.get("dtb", "")), \
+            f"{device_id} boots with extlinux and needs the dtb path it loads"
+    assert device["status"] in {"supported", "experimental"}, f"{device_id} must declare a release status"
+    assert device["packages"] and all(re.fullmatch(r"[a-z0-9][a-z0-9+.-]*", p) for p in device["packages"]), \
+        f"{device_id} needs a list of Alpine package names"
+    assert isinstance(device["img_size_mib"], int) and device["img_size_mib"] > 512, f"{device_id} needs a usable image size"
+    assert re.fullmatch(r"tty[A-Z]*[0-9]+", device["serial"]), f"{device_id} needs a serial console device"
+    assert isinstance(device["nura"], bool), f"{device_id} must state whether the Nura repository is used"
+    assert device["nura_packages"] == [] or device["nura"], f"{device_id} lists Nura packages without enabling the repository"
+nura = device_lock["nura"]
+assert re.fullmatch(r"v[0-9]{2}\.[0-9]{2}|main", nura["branch"]), "Nura must be pinned to a release branch"
+assert nura["mirror"].startswith("https://") and not nura["mirror"].endswith("/")
+assert re.fullmatch(r"[0-9a-f]{64}", nura["repository_key_sha256"])
+assert set(nura["arches"]) <= set(arches) and set(nura["index_sha256"]) == set(nura["arches"])
+for digest in nura["index_sha256"].values():
+    assert re.fullmatch(r"[0-9a-f]{64}", digest), "Nura repository indexes must be pinned by sha256"
+for device_id, device in devices.items():
+    if device["nura"]:
+        assert set(device["arches"]) <= set(nura["arches"]), f"{device_id} uses Nura on an unpinned architecture"
 for path in [*ROOT.glob("scripts/*.py"), *ROOT.glob("tests/*.py"), ROOT / "aports/uflinux/uflinux-install", ROOT / "aports/uflinux/uflinux-install-gui-backend", ROOT / "aports/uflinux/uflinux-boot-assets.py"]:
     ast.parse(path.read_text(), filename=str(path))
 for path in [*ROOT.glob("scripts/*.sh"), *ROOT.glob("tests/*.sh"), *ROOT.glob("profiles/*.sh"), *ROOT.glob("aports/*/APKBUILD"),
-             *[ROOT / "aports/uflinux" / n for n in ("uflinux-session", "uflinux-autostart", "uflinux-live.initd", "uflinux-compositor", "uflinux-network-init", "uflinux-bootsplash", "uflinux-splash.initd", "uflinux-splash-stop.initd")], *ROOT.glob("settings/data/*.initd"), ROOT / "settings/data/uflinux-power-button"]:
+             *[ROOT / "aports/uflinux" / n for n in ("uflinux-session", "uflinux-autostart", "uflinux-live.initd", "uflinux-compositor", "uflinux-network-init", "uflinux-bootsplash", "uflinux-splash.initd", "uflinux-splash-stop.initd", "uflinux-device.initd")], *ROOT.glob("settings/data/*.initd"), ROOT / "settings/data/uflinux-power-button"]:
     subprocess.run(["sh", "-n", str(path)], check=True)
 for path in (ROOT / "aports/uflinux").glob("*.xml"):
     ET.parse(path)

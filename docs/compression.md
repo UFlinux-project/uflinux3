@@ -1,6 +1,8 @@
 # Boot-image compression
 
 UFLinux ISO initramfs and signed modloop images use Zstandard level 19.
+Device disk images use Zstandard level 12 for the whole raw GPT image; see
+[device images](device-images.md).
 SquashFS retains 128 KiB blocks, keeping per-block decompression memory bounded.
 XZ-specific BCJ filters are removed. The image builder installs the Zstandard
 compressor in its build root, without adding it as a desktop dependency.

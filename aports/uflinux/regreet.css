@@ -1,0 +1,12 @@
+/* UFLinux ReGreet styling; regreet loads this automatically from /etc/greetd/regreet.css. */
+
+/* The login box and the clock sit in overlay frames, and the error InfoBar
+ * above the Reboot/Power Off buttons sits in a third frame whose border
+ * shows as a bare line while no message is revealed. Drop all frame
+ * borders and shadows; the panels keep their background fill. */
+frame,
+frame > border {
+	border-style: none;
+	border-width: 0;
+	box-shadow: none;
+}

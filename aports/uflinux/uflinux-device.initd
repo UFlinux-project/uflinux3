@@ -1,0 +1,94 @@
+#!/sbin/openrc-run
+# shellcheck shell=sh disable=SC2034
+
+name="uflinux-device"
+description="Grow the UFLinux device image root filesystem to the size of the storage medium"
+
+device_marker="/etc/uflinux/device"
+state_dir="/var/lib/uflinux"
+state_file="$state_dir/device-resized"
+
+depend() {
+	need localmount
+	after root
+	before modules
+}
+
+# Split a root block device such as /dev/mmcblk0p2 or /dev/sda2 into the disk
+# and the partition index. Sets grow_disk, grow_part and grow_sep.
+split_root_device() {
+	local tail last digits
+	grow_disk=""
+	grow_part=""
+	grow_sep=""
+	tail="$1"
+	digits=""
+	while [ -n "$tail" ]; do
+		last="${tail#"${tail%?}"}"
+		tail="${tail%?}"
+		case $last in
+			[0-9]) digits="$last$digits" ;;
+			p)
+				[ -n "$digits" ] || return 1
+				grow_disk="$tail"
+				grow_part="$digits"
+				grow_sep="p"
+				return 0
+				;;
+			*)
+				[ -n "$digits" ] || return 1
+				grow_disk="$tail$last"
+				grow_part="$digits"
+				grow_sep=""
+				return 0
+				;;
+		esac
+	done
+	return 1
+}
+
+start() {
+	[ -e "$device_marker" ] || return 0
+	[ -e "$state_file" ] && return 0
+
+	ebegin "Preparing UFLinux device storage"
+	# The initramfs hands the root filesystem over read-only by default.
+	mount -o remount,rw / 2>/dev/null
+
+	source="$(findmnt -no SOURCE /)" || source=""
+	if [ -z "$source" ] || ! split_root_device "$source"; then
+		ewarn "cannot determine the root disk of $source, skipping the resize"
+		touch "$state_file"
+		eend 0
+		return 0
+	fi
+
+	disk="$grow_disk"
+	part="$grow_part"
+	root_part="$disk$grow_sep$part"
+	if [ ! -b "$disk" ] || [ ! -b "$root_part" ]; then
+		ewarn "$disk or $root_part is not a block device, skipping the resize"
+		touch "$state_file"
+		eend 0
+		return 0
+	fi
+
+	# Only grow a GPT disk that still has unallocated space at the end.
+	if growpart --dry-run "$disk" "$part" >/dev/null 2>&1; then
+		if ! growpart "$disk" "$part"; then
+			ewarn "growpart failed for $disk$grow_sep$part"
+			eend 1
+			return 1
+		fi
+	fi
+
+	if ! resize2fs "$root_part"; then
+		ewarn "resize2fs failed for $root_part"
+		eend 1
+		return 1
+	fi
+
+	mkdir -p "$state_dir"
+	printf 'disk=%s\npartition=%s\n' "$disk" "$part" >"$state_file"
+	eend 0
+}

@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """Check declared desktop/installer dependencies against every target repository."""
 import concurrent.futures
+import hashlib
 import io
 import json
 from pathlib import Path
 import re
 import shlex
+import sys
 import tarfile
 import urllib.request
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from builder import device_packages
 
 root = Path(__file__).resolve().parents[1]
 lock = json.loads((root / "config/sources.lock.json").read_text())
@@ -37,19 +42,28 @@ for recipe in (root / "aports").glob("*/APKBUILD"):
 required -= local
 
 
-def check(arch):
+def index_entries(url):
+    with urllib.request.urlopen(url, timeout=60) as response:
+        data = response.read()
+    with tarfile.open(fileobj=io.BytesIO(data)) as archive:
+        return archive.extractfile("APKINDEX").read().decode()
+
+
+def alpine_index(arch):
     found = set()
     versions = {}
     for repository in ("main", "community"):
         url = f"{lock['alpine']['mirror']}/{lock['alpine']['branch']}/{repository}/{arch}/APKINDEX.tar.gz"
-        with urllib.request.urlopen(url, timeout=60) as response:
-            data = response.read()
-        with tarfile.open(fileobj=io.BytesIO(data)) as archive:
-            index = archive.extractfile("APKINDEX").read().decode()
+        index = index_entries(url)
         found.update(re.findall(r"^P:(.+)$", index, re.M))
         for entry in index.split("\n\n"):
             fields=dict(line.split(":",1) for line in entry.splitlines() if ":" in line)
             if "P" in fields and "V" in fields: versions[fields["P"]]=fields["V"]
+    return found, versions
+
+
+def check(arch):
+    found, versions = alpine_index(arch)
     boots = {"grub-ieee1275"} if arch == "ppc64le" else {"s390-tools"} if arch == "s390x" else {"systemd-boot"}
     if arch in {"x86", "x86_64", "aarch64", "armv7", "riscv64"}:
         boots.add("efibootmgr")
@@ -72,3 +86,42 @@ def check(arch):
 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
     for result in pool.map(check, lock["rootfs"]):
         print(result)
+
+
+devices = json.loads((root / "config/devices.json").read_text())
+device_lock = json.loads((root / "config/devices.lock.json").read_text())["nura"]
+
+
+def check_device(device_id):
+    device = devices[device_id]
+    messages = []
+    for arch in device["arches"]:
+        found, _ = alpine_index(arch)
+        # The UFLinux subpackages are built from this repository's own aports tree,
+        # and the Nura extras are validated against the pinned Nura index below.
+        installed = [name for name in device_packages(device, arch)
+                     if not name.startswith("uflinux") and name not in device["nura_packages"]]
+        missing = set(installed) - found - local
+        if missing:
+            raise RuntimeError(f"{device_id} ({arch}): unavailable device packages: {', '.join(sorted(missing))}")
+        messages.append(f"{device_id} ({arch}): {len(installed)} device packages available")
+    if device["nura"]:
+        arch = device["arches"][0]
+        url = f"{device_lock['mirror']}/{device_lock['branch']}/{arch}/APKINDEX.tar.gz"
+        with urllib.request.urlopen(url, timeout=60) as response:
+            data = response.read()
+        digest = hashlib.sha256(data).hexdigest()
+        if digest != device_lock["index_sha256"][arch]:
+            raise RuntimeError(f"{device_id}: Nura {arch} index differs from its pin ({digest})")
+        found = set(re.findall(r"^P:(.+)$", index_entries(url), re.M))
+        missing = set(device["nura_packages"]) - found
+        if missing:
+            raise RuntimeError(f"{device_id}: unavailable Nura packages: {', '.join(sorted(missing))}")
+        messages.append(f"{device_id}: pinned Nura index provides {len(device['nura_packages'])} extra packages")
+    return messages
+
+
+with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+    for result in pool.map(check_device, sorted(devices)):
+        for line in result:
+            print(line)

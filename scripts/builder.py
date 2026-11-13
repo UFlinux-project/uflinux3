@@ -25,6 +25,187 @@ import zlib
 PROJECT = Path(__file__).resolve().parents[1]
 LOCK = json.loads((PROJECT / "config/sources.lock.json").read_text())
 ARCHES = json.loads((PROJECT / "config/architectures.json").read_text())
+DEVICES = json.loads((PROJECT / "config/devices.json").read_text())
+DEVICE_LOCK = json.loads((PROJECT / "config/devices.lock.json").read_text())
+ESP_START = 2048
+ESP_SECTORS = 1048576
+SECTOR = 512
+GPT_ESP_TYPE = "C12A7328-F81F-11D2-BA4B-00A0C93EC9B0"
+GPT_LINUX_TYPE = "0FC63DAF-8483-477B-8E3F-43138715FD6D"
+# The device rootfs is assembled from a throwaway chroot whose transient mounts
+# and build inputs must not become part of the installed filesystem.
+DEVICE_ROOT_EXCLUDES = ("proc", "sys", "dev", "cache", "repo", "nura", "project",
+                        "device-esp", "device-image", ".uflinux-bootstrap", "etc/apk/cache")
+DEVICE_ESP = "/device-esp"
+DEVICE_PROJECT_DIRS = ("aports", "profiles", "config", "scripts", "patches")
+PROJECT_DIRS = ("aports", "profiles", "config", "scripts", "tests", "patches", "settings")
+# Mirrors the table in profiles/device-rootfs.sh: systemd-boot ships one bare
+# EFI binary per architecture and the ESP has to carry it under that name.
+EFI_SUFFIX = {"aarch64": "aa64", "x86_64": "x64"}
+# A device image is several gigabytes of already-compressed packages, so the
+# highest level would cost hours of CPU for a few percent of size.
+DEVICE_IMAGE_ZSTD_LEVEL = 12
+
+
+def device_target(devices, name, arch):
+    device = devices[name]
+    if arch not in device["arches"]:
+        raise ValueError(f"device {name} does not support {arch}")
+    return device
+
+
+def device_image_name(version, name, arch):
+    return f"uflinux-{version}-{name}-{arch}.img.zst"
+
+
+def device_uuids(seed):
+    """Deterministic disk, partition and filesystem identifiers for one build."""
+    def uuid(role):
+        digest = hashlib.sha256(f"{seed}:{role}".encode()).hexdigest()[:32]
+        return f"{digest[0:8]}-{digest[8:12]}-{digest[12:16]}-{digest[16:20]}-{digest[20:32]}".upper()
+    serial = hashlib.sha256(f"{seed}:serial".encode()).hexdigest()[0:8].lower()
+    return {"disk": uuid("disk"), "esp": uuid("esp"), "root": uuid("root"), "serial": serial}
+
+
+def device_partitions(size_mib):
+    """ESP and root partition geometry in 512 byte sectors."""
+    total = size_mib * (1024 * 1024 // SECTOR)
+    if size_mib * 1024 * 1024 % SECTOR or total < ESP_SECTORS + 4096:
+        raise ValueError(f"invalid image size {size_mib} MiB")
+    root_start = ESP_START + ESP_SECTORS
+    return {"esp_start": ESP_START, "esp_size": ESP_SECTORS, "root_start": root_start,
+            "root_size": total - root_start - ESP_START, "total": total}
+
+
+def device_partition_script(layout, uuids):
+    return (
+        "label: gpt\n"
+        f"label-id: {uuids['disk']}\n"
+        f"start={layout['esp_start']}, size={layout['esp_size']}, type={GPT_ESP_TYPE}, "
+        f"uuid={uuids['esp']}, name=ESP, bootable\n"
+        f"start={layout['root_start']}, size={layout['root_size']}, type={GPT_LINUX_TYPE}, "
+        f"uuid={uuids['root']}, name=ROOT\n"
+    )
+
+
+def device_repositories(url, arch, nura=None):
+    """Package sources for a device rootfs: release repo, Alpine, then optional Nura."""
+    alpine = LOCK["alpine"]
+    lines = [url, f"{alpine['mirror']}/{alpine['branch']}/main",
+             f"{alpine['mirror']}/{alpine['branch']}/community"]
+    if nura:
+        lines.append(f"{nura['mirror']}/{nura['branch']}/{arch}")
+    return "\n".join(lines) + "\n"
+
+
+def device_packages(device, arch):
+    """Everything the device rootfs needs beyond the live system's package set."""
+    packages = ["uflinux-desktop-meta", "uflinux-device"] + list(device["packages"])
+    # The same desktop the live ISO installs, minus the live-only pieces.
+    packages += ["musl-locales", "musl-locales-lang", "glib-lang", "gtk4.0-lang",
+                 "labwc-lang", "firefox", "ublock-origin", "vulkan-loader", "xfsprogs"]
+    packages += ["alpine-base", "apk-tools", "zstd", "util-linux", "dosfstools", "mtools",
+                 "e2fsprogs", "e2fsprogs-extra", "cloud-utils-growpart", "linux-firmware"]
+    if device["nura"]:
+        packages += list(device["nura_packages"])
+    if arch in ("x86_64", "aarch64") and "efibootmgr" not in packages:
+        packages.append("efibootmgr")
+    return sorted(set(packages))
+
+
+def device_environment(name, device, arch, version, root_partuuid, esp):
+    """Contract consumed by profiles/device-rootfs.sh."""
+    env = {"UFLINUX_DEVICE": name, "UFLINUX_ARCH": arch,
+           "UFLINUX_BOOT": device["boot"], "UFLINUX_SERIAL": device["serial"],
+           "UFLINUX_CMDLINE": device["cmdline"], "UFLINUX_VERSION": version,
+           "UFLINUX_ROOT_PARTUUID": root_partuuid, "UFLINUX_ESP": esp,
+           "UFLINUX_PACKAGES": " ".join(device_packages(device, arch))}
+    if device["nura"]:
+        env["UFLINUX_NURA_PACKAGES"] = " ".join(device["nura_packages"])
+        # The Nura dtbloader EFI driver installs a board DTB that the Alpine kernel
+        # does not ship (the Dragon Q6A among them), so the ESP has to carry the tree.
+        env["UFLINUX_DTBLOADER"] = "/usr/share/dtbloader/dtbloader.efi"
+    if device["boot"] == "extlinux":
+        env["UFLINUX_DTB"] = device["dtb"]
+    return env
+
+
+def device_snapshot(source, destination):
+    """Copy an installed rootfs into an image staging tree, minus build artefacts."""
+    destination.mkdir(parents=True, exist_ok=True)
+    excludes = [f"--exclude=./{name}" for name in DEVICE_ROOT_EXCLUDES]
+    reader = subprocess.Popen(("tar", "-C", str(source), *excludes, "-p", "-f", "-", "-c", "."),
+                              stdout=subprocess.PIPE)
+    writer = subprocess.Popen(("tar", "-C", str(destination), "--numeric-owner",
+                               "-xpf", "-"), stdin=reader.stdout)
+    reader.stdout.close()
+    writer.communicate()
+    reader.wait()
+    if reader.returncode or writer.returncode:
+        raise RuntimeError(f"failed to snapshot {source}")
+    return destination
+
+
+def device_extract(image, destination, esp_start=ESP_START):
+    """Read the ESP of an assembled disk image without mounting anything."""
+    destination.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ, MTOOLS_SKIP_CHECK="1")
+    run(["mcopy", "-s", "-n", "-i", f"{image}@@{esp_start}s::", str(destination) + "/"], env=env)
+    return destination
+
+
+def device_layout(image):
+    """Return the GPT geometry of *image* as reported by sfdisk."""
+    result = run(["sfdisk", "--dump", "--json", str(image)], stdout=subprocess.PIPE, text=True)
+    table = json.loads(result.stdout).get("partitiontable", {})
+    if table.get("unit") != "sectors" or int(table.get("sectorsize", 0)) != SECTOR:
+        raise ValueError(f"{image} is not a {SECTOR}-byte sector disk")
+    partitions = table.get("partitions", [])
+    if len(partitions) != 2:
+        raise ValueError(f"{image} must have an ESP and a root partition")
+    esp, root = partitions
+    if esp.get("type", "").upper() != GPT_ESP_TYPE or root.get("type", "").upper() != GPT_LINUX_TYPE:
+        raise ValueError(f"{image} has the wrong partition types")
+    return {"disk": table.get("id", "").upper(), "esp": esp, "root": root}
+
+
+def device_verify_image(image, device, arch, uuids, layout):
+    """Check the assembled disk: geometry, boot files and a Zstd initramfs."""
+    actual = device_layout(image)
+    for name, expected in (("ESP", layout["esp_start"]), ("ROOT", layout["root_start"])):
+        found = (actual["esp"] if name == "ESP" else actual["root"])["start"]
+        if int(found) != expected:
+            raise ValueError(f"{image}: {name} starts at sector {found}, expected {expected}")
+    for key, role in (("esp", "ESP"), ("root", "ROOT")):
+        if actual[key].get("uuid", "").upper() != uuids[key]:
+            raise ValueError(f"{image}: {role} partition UUID changed")
+    if actual["disk"] != uuids["disk"]:
+        raise ValueError(f"{image}: disk GUID changed")
+    stage = image.parent / (image.name + "-esp")
+    device_extract(image, stage)
+    boot = {}
+    for name in ("boot/vmlinuz", "boot/initramfs"):
+        path = stage / name
+        if not path.is_file():
+            raise ValueError(f"{image}: the ESP has no {name}")
+        boot[name.split("/", 1)[1] + "_bytes"] = path.stat().st_size
+    with (stage / "boot/initramfs").open("rb") as handle:
+        magic = handle.read(4)
+    if magic != b"\x28\xb5\x2f\xfd":
+        raise ValueError(f"{image}: the initramfs is not a Zstandard frame")
+    bootloader = {"efi": "EFI/boot/boot" + EFI_SUFFIX[arch] + ".efi",
+                  "rpi": "cmdline.txt",
+                  "extlinux": "extlinux/extlinux.conf"}[device["boot"]]
+    if not (stage / bootloader).is_file():
+        raise ValueError(f"{image}: the ESP has no {bootloader}")
+    remove_tree(stage)
+    return {"device_image_format": "gpt-ext4", "initramfs_compression": "zstd",
+            "arch": arch, "boot": device["boot"], "disk_guid": actual["disk"],
+            "partitions": {"esp": {"start": layout["esp_start"], "size": layout["esp_size"],
+                                   "uuid": uuids["esp"]},
+                           "root": {"start": layout["root_start"], "size": layout["root_size"],
+                                    "uuid": uuids["root"]}},
+                   **boot}
 # apk v2 has no ECDSA signature: apk-tools 3.0.9 knows only the stream names
 # RSA512, RSA256, RSA and DSA, and resolves a trusted key by its filename from a
 # plain public-key PEM (an X.509 certificate is not accepted). UFLinux therefore
@@ -45,7 +226,7 @@ PACKAGE_NAMES = {
                          "uflinux-settings-doc", "uflinux-settings-system", "uflinux-settings-system-openrc", "uflinux-installer-ui", "uflinux-desktop", "uflinux-screencapture"},
     "uflinux": {"uflinux", "uflinux-defaults", "uflinux-desktop-meta", "uflinux-installer",
                 "uflinux-live", "uflinux-live-openrc", "uflinux-release", "uflinux-bootsplash-openrc",
-                "uflinux-initramfs"},
+                "uflinux-initramfs", "uflinux-device"},
 }
 
 
@@ -170,16 +351,21 @@ def archive_tree(source, destination, epoch, names=None):
 def download(spec, cache):
     algorithm = "sha512" if "sha512" in spec else "sha256"
     expected = spec[algorithm]
-    path = cache / (expected + ".tar.gz")
-    cache.mkdir(parents=True, exist_ok=True)
+    return download_pinned(spec["url"], expected, algorithm, cache / (expected + ".tar.gz"))
+
+
+def download_pinned(url, expected, algorithm, path):
+    """Fetch one file into *path*, accepting an already cached copy only if it verifies."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         temporary = path.with_suffix(".partial")
         for attempt in range(3):
             try:
-                with urllib.request.urlopen(spec["url"], timeout=120) as response, temporary.open("wb") as stream:
+                with urllib.request.urlopen(url, timeout=120) as response, temporary.open("wb") as stream:
                     shutil.copyfileobj(response, stream)
                 if sha(temporary, algorithm) != expected:
-                    raise RuntimeError("Checksum mismatch: " + spec["url"])
+                    raise RuntimeError("Checksum mismatch: " + url)
                 temporary.replace(path)
                 break
             except OSError:
@@ -343,7 +529,7 @@ class Builder:
         self.put("etc/apk/repositories", "\n".join(f"{LOCK['alpine']['mirror']}/{LOCK['alpine']['branch']}/{repo}" for repo in ("main", "community")) + "\n")
         # Executing apk is also a check of the kernel's binfmt registration.
         self.chroot("apk", "--print-arch")
-        for name in ("aports", "profiles", "config", "scripts", "tests", "patches", "settings"):
+        for name in PROJECT_DIRS:
             destination = self.root / "project" / name
             if destination.exists():
                 shutil.rmtree(destination)
@@ -679,6 +865,129 @@ class Builder:
         report.parent.mkdir(parents=True, exist_ok=True)
         report.write_text(json.dumps(compression, indent=2) + "\n")
 
+    def device_bootstrap(self, device):
+        """Prepare an installed rootfs for *device*: repos, keys and /project."""
+        arch = self.args.arch
+        root = self.root
+        fingerprint = hashlib.sha256(json.dumps([LOCK, DEVICE_LOCK, device],
+                                                sort_keys=True).encode()).hexdigest()
+        marker = root / ".uflinux-bootstrap"
+        if marker.exists() and marker.read_text() != fingerprint:
+            raise RuntimeError("Device build inputs changed: use a new --workdir")
+        root.mkdir(parents=True, exist_ok=True)
+        if not marker.exists():
+            if any(root.iterdir()):
+                raise RuntimeError("Incomplete device rootfs: remove only this device's "
+                                   "workdir and retry")
+            archive = download(LOCK["rootfs"][arch], self.cache / "downloads")
+            run(["tar", "--numeric-owner", "-xpf", archive, "-C", root])
+        marker.write_text(fingerprint)
+        resolv = root / "etc/resolv.conf"
+        resolv.unlink(missing_ok=True)
+        resolv.write_bytes(Path("/etc/resolv.conf").read_bytes())
+        # Executing apk is also a check of the kernel's binfmt registration.
+        self.chroot("apk", "--print-arch")
+        nura = DEVICE_LOCK["nura"] if device["nura"] else None
+        if nura and arch not in nura["arches"]:
+            raise ValueError(f"the Nura repository has no {arch} suite")
+        keys = root / "etc/apk/keys"
+        keys.mkdir(parents=True, exist_ok=True)
+        for source in Path("/usr/share/apk/keys").glob(arch + "/*"):
+            shutil.copy2(source, keys / source.name)
+        public = self.out / "repository" / (SIGNING_KEY + ".pub")
+        if not public.is_file():
+            raise RuntimeError("Missing signed repository; run the sign stage first")
+        self.put(TRUSTED_KEY, public.read_text())
+        if nura:
+            # The key file name is what apk records in the signature check.
+            name = urllib.parse.urlparse(nura["repository_key"]).path.rsplit("/", 1)[-1]
+            key = self.cache / "downloads" / ("nura-" + name)
+            download_pinned(nura["repository_key"], nura["repository_key_sha256"], "sha256", key)
+            (keys / name).write_bytes(key.read_bytes())
+            (keys / name).chmod(0o644)
+            index = nura["index_sha256"][arch]
+            download_pinned(f"{nura['mirror']}/{nura['branch']}/{arch}/APKINDEX.tar.gz", index,
+                            "sha256", self.cache / "downloads" / f"nura-APKINDEX-{arch}.tar.gz")
+        self.put("etc/apk/repositories", device_repositories(self.url, arch, nura))
+        for name in DEVICE_PROJECT_DIRS:
+            destination = root / "project" / name
+            shutil.rmtree(destination, ignore_errors=True)
+            shutil.copytree(PROJECT / name, destination,
+                            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        (root / "project/LICENSE").write_bytes((PROJECT / "LICENSE").read_bytes())
+        self.put("project/repository-url", self.url + "\n")
+        # No other stage refreshes the indexes: apk 3 needs them before the first add.
+        self.chroot("apk", "update")
+
+    def device_image(self):
+        """Assemble one installed GPT disk image for the selected device."""
+        name = self.args.device
+        device = device_target(DEVICES, name, self.args.arch)
+        arch = self.args.arch
+        self.tools("dosfstools", "mtools", "zstd", "util-linux")
+        uuids = device_uuids(f"{self.args.version}:{name}:{arch}")
+        layout = device_partitions(device["img_size_mib"])
+        args = argparse.Namespace(**vars(self.args))
+        args.workdir = str(Path(self.args.workdir).resolve() / "device" / name)
+        # The device rootfs pulls kernels and firmware that no other stage uses;
+        # keeping them out of the shared cache keeps the ISO inputs unchanged.
+        args.cache = str(Path(self.args.cache).resolve() / "device" / name)
+        args.device = None
+        root = Builder(args)
+        root.device_bootstrap(device)
+        with root.mounted():
+            root.chroot("mkdir", "-p", DEVICE_ESP)
+            root.chroot("sh", "/project/profiles/device-rootfs.sh", extra_env=dict(
+                device_environment(name, device, arch, self.args.version, uuids["root"],
+                                   DEVICE_ESP),
+                features_dir="/project/aports/uflinux /etc/mkinitfs/features.d",
+                complevel_zstd="-" + str(LOCK["image"]["initramfs_level"])))
+            root.device_info = {"device": name, "device_label": device["label"],
+                                "device_status": device["status"]}
+            root.manifest("device")
+            snapshot = self.root / "device-image" / name
+            remove_tree(snapshot)
+            staging = snapshot / "rootfs"
+            esp = snapshot / "esp"
+            device_snapshot(root.root, staging)
+            device_snapshot(root.root / DEVICE_ESP.lstrip("/"), esp)
+        disk = snapshot / "disk"
+        disk.parent.mkdir(parents=True, exist_ok=True)
+        disk.unlink(missing_ok=True)
+        run(["truncate", "-s", f"{device['img_size_mib']}M", disk])
+        run(["sfdisk", "--quiet", "--force", str(disk)],
+            input=device_partition_script(layout, uuids), text=True)
+        # The explicit block count bounds the FAT to its partition; mkfs.vfat
+        # notices the disk is larger and warns, which is what we want here.
+        run(["mkfs.vfat", "-n", "UFLINUX", "-i", uuids["serial"], "-F", "32", "-S", "512",
+             "--offset", str(layout["esp_start"]), str(disk), str(layout["esp_size"] // 2)],
+            stderr=subprocess.DEVNULL)
+        mcopy = ["mcopy", "-s", "-n", "-i", f"{disk}@@{layout['esp_start']}s::"]
+        mcopy += sorted(str(path) for path in esp.iterdir())
+        run(mcopy + ["::"], env=dict(os.environ, MTOOLS_SKIP_CHECK="1"))
+        run(["mke2fs", "-q", "-Fn", "-t", "ext4", "-d", staging, "-L", "UFLINUX_ROOT",
+             "-U", uuids["root"], "-E",
+             f"offset={layout['root_start'] * SECTOR},root_owner=0:0,lazy_itable_init=0",
+             str(disk), str(layout["root_size"] // 2)])
+        report = device_verify_image(disk, device, arch, uuids, layout)
+        target = self.out / "devices" / arch
+        target.mkdir(parents=True, exist_ok=True)
+        image = target / device_image_name(self.args.version, name, arch)
+        partial = image.with_name(image.name + ".partial")
+        with partial.open("wb") as handle:
+            run(["zstd", "-q", "-f", f"-{DEVICE_IMAGE_ZSTD_LEVEL}", "-T0", "-c", str(disk)],
+                stdout=handle)
+        partial.replace(image)
+        digest = sha(image)
+        (target / (image.name + ".sha256")).write_text(f"{digest}  {image.name}\n")
+        report.update({"device": name, "image": str(image.relative_to(self.out)),
+                       "sha256": digest, "bytes": image.stat().st_size,
+                       "uncompressed_bytes": layout["total"] * SECTOR})
+        checks = self.out / "checks" / arch / f"device-{name}.json"
+        checks.parent.mkdir(parents=True, exist_ok=True)
+        checks.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+        remove_tree(snapshot)
+
     def verify(self):
         (self.out / "checks" / self.args.arch / "verified.json").unlink(missing_ok=True)
         # Test the package closure without libraries or defaults from earlier builds.
@@ -805,7 +1114,12 @@ class Builder:
     def manifest(self, stage):
         directory = self.out / "metadata" / self.args.arch
         directory.mkdir(parents=True, exist_ok=True)
-        self.chroot("apk", "info", "-v", stdout=(directory / (stage + "-packages.txt")).open("w"))
+        # Several devices share an architecture, so their records must not overwrite
+        # each other when the release job merges the per-device artifacts.
+        name = stage
+        if stage == "device" and getattr(self.args, "device", None):
+            name = stage + "-" + self.args.device
+        self.chroot("apk", "info", "-v", stdout=(directory / (name + "-packages.txt")).open("w"))
         files = {}
         for base in (self.packages_dir, self.out / "repository" / self.args.arch, self.out / "apk-cache" / self.args.arch):
             if base.exists():
@@ -818,6 +1132,9 @@ class Builder:
         if stage == "image":
             iso = self.out / "images" / self.args.arch / f"uflinux-{self.args.version}-{self.args.arch}.iso"
             metadata["iso_sha256"] = sha(iso)
+        if stage == "device":
+            metadata.update(getattr(self, "device_info", {}))
+            metadata["image_format"] = "raw-gpt"
         (directory / (stage + ".json")).write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
 
 
@@ -827,14 +1144,22 @@ def main(argv=None):
     parser.add_argument("--version", default=LOCK["distribution"]["version"])
     parser.add_argument("--outdir", default=str(PROJECT / "out"))
     parser.add_argument("--package", choices=PACKAGE_NAMES, help="Compile one independent package origin (packages/bootstrap stages only)")
+    parser.add_argument("--device", choices=sorted(DEVICES), help="Build one device disk image (the device stage only)")
     parser.add_argument("--workdir")
     parser.add_argument("--cache")
     parser.add_argument("--repository-url", default=os.environ.get("APK_REPOSITORY_URL"))
-    parser.add_argument("--stage", choices=["bootstrap", "packages", "sign", "image", "verify", "all"], default="all")
+    parser.add_argument("--stage", choices=["bootstrap", "packages", "sign", "image", "device", "verify", "all"], default="all")
     parser.add_argument("--release", action="store_true")
     args = parser.parse_args(argv)
     if args.package and (args.stage not in {"bootstrap", "packages"} or args.release):
         parser.error("--package requires --stage packages or bootstrap, without --release")
+    if (args.device is not None) != (args.stage == "device"):
+        parser.error("--device is required by --stage device and allowed by no other stage")
+    if args.device:
+        try:
+            device_target(DEVICES, args.device, args.arch)
+        except ValueError as exc:
+            parser.error(str(exc))
     args.workdir = args.workdir or str(PROJECT / ".state" / args.package if args.package else PROJECT / ".state")
     args.cache = args.cache or str(PROJECT / ".cache/build" / args.package if args.package else PROJECT / ".cache/build")
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:_(?:alpha|beta|rc)[0-9]+)?", args.version):
@@ -850,7 +1175,7 @@ def main(argv=None):
                     try:
                         getattr(builder, "package" if stage == "packages" else stage)()
                     finally:
-                        if args.release and stage in {"sign", "image"}:
+                        if args.release and stage in {"sign", "image", "device"}:
                             (builder.root / "var/lib/uflinux/keys" / SIGNING_KEY).unlink(missing_ok=True)
     except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"uflinux-build: {exc}", file=sys.stderr)

@@ -11,6 +11,10 @@ on:
         description: 'Build and test all architectures instead of the x86_64 smoke set'
         type: boolean
         default: false
+      device_images:
+        description: 'Build device disk images (release tags always build them)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -26,6 +30,7 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       vm: ${{ steps.matrix.outputs.vm }}
       packages: ${{ steps.matrix.outputs.packages }}
+      devices: ${{ steps.matrix.outputs.devices }}
       version: ${{ steps.matrix.outputs.version }}
       epoch: ${{ steps.matrix.outputs.epoch }}
       cache: ${{ steps.matrix.outputs.cache }}
@@ -49,6 +54,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           REF: ${{ github.ref }}
           FULL: ${{ inputs.full_matrix }}
+          DEVICES: ${{ inputs.device_images }}
         run: python3 scripts/ci-matrix.py
 
   compile:
@@ -208,6 +214,66 @@ jobs:
           if-no-files-found: error
           overwrite: true
 
+  device-images:
+    needs: [checks, compile]
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.checks.outputs.devices) }}
+    runs-on: ${{ matrix.runner }}
+    # Experimental targets are not allowed to fail a release; their logs and any
+    # image they do produce are still published by the device-assets job.
+    continue-on-error: ${{ matrix.experimental == 'true' }}
+    timeout-minutes: 350
+    env:
+      SOURCE_DATE_EPOCH: ${{ needs.checks.outputs.epoch }}
+      APK_REPOSITORY_URL: ${{ vars.APK_REPOSITORY_URL }}
+      RELEASE: ${{ needs.checks.outputs.release }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: package-shard-${{ matrix.arch }}-*
+          merge-multiple: true
+          path: out/package-shards/${{ matrix.arch }}
+      - name: Validate complete package set and combine build records
+        run: python3 scripts/merge-packages.py --arch '${{ matrix.arch }}' --version '${{ needs.checks.outputs.version }}'
+      - run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y qemu-user-binfmt binfmt-support
+          python3 scripts/preflight.py --arch '${{ matrix.arch }}'
+      - name: Sign packages and assemble the device disk image
+        env:
+          APK_SIGNING_PRIVATE_KEY: ${{ needs.checks.outputs.release == 'true' && secrets.APK_SIGNING_PRIVATE_KEY || '' }}
+          APK_SIGNING_PUBLIC_KEY: ${{ needs.checks.outputs.release == 'true' && secrets.APK_SIGNING_PUBLIC_KEY || '' }}
+        run: |
+          release_args=()
+          if [ "$RELEASE" = true ]; then release_args+=(--release); fi
+          for stage in sign device; do
+            sudo --preserve-env=SOURCE_DATE_EPOCH,APK_REPOSITORY_URL,GITHUB_REPOSITORY,GITHUB_SHA,APK_SIGNING_PRIVATE_KEY,APK_SIGNING_PUBLIC_KEY bash scripts/build.sh --arch '${{ matrix.arch }}' --version '${{ needs.checks.outputs.version }}' --device '${{ matrix.device }}' --stage "$stage" "${release_args[@]}"
+          done
+      - name: Upload build diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: device-diagnostics-${{ matrix.device }}-${{ matrix.arch }}
+          path: out/checks/${{ matrix.arch }}
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: device-images-${{ matrix.device }}-${{ matrix.arch }}
+          retention-days: 7
+          path: |
+            out/devices
+            out/metadata
+            out/checks
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+
   draft:
     if: needs.checks.outputs.release == 'true'
     needs: [checks, images, vm]
@@ -339,3 +405,35 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
       - run: python3 scripts/release.py publish --version "$VERSION"
+
+  device-assets:
+    needs: [checks, publish, device-images]
+    if: always() && needs.publish.result == 'success'
+    # Device images are supplementary: they attach to the published release, but a
+    # missing or failed image never stops the ISOs and repository from being published.
+    continue-on-error: true
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.checks.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: device-images-*
+          merge-multiple: true
+          path: out
+      - name: Upload device images to the draft release
+        run: |
+          shopt -s nullglob
+          assets=(out/devices/*/*.img.zst out/devices/*/*.img.zst.sha256)
+          if [ ${#assets[@]} -eq 0 ]; then echo "No device images were built" >&2; exit 1; fi
+          gh release upload "v$VERSION" --clobber "${assets[@]}"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: out/devices/*/*.img.zst
+

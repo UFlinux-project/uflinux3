@@ -1,0 +1,55 @@
+{
+  "qcs6490": {
+    "label": "Arrow Dragon Q6A and similar QCS6490 boards",
+    "arches": ["aarch64"],
+    "kernel": "lts",
+    "boot": "efi",
+    "status": "experimental",
+    "serial": "ttyMSM0",
+    "cmdline": "quiet console=ttyMSM0,115200n8",
+    "img_size_mib": 6144,
+    "nura": true,
+    "packages": ["linux-lts", "linux-firmware-qcom", "mesa-vulkan-freedreno", "alsa-ucm-conf", "systemd-boot", "efibootmgr"],
+    "nura_packages": ["dtbloader"]
+  },
+  "rpi": {
+    "label": "Raspberry Pi 3, 4 and 5",
+    "arches": ["aarch64"],
+    "kernel": "rpi",
+    "boot": "rpi",
+    "status": "supported",
+    "serial": "ttyAMA0",
+    "cmdline": "quiet",
+    "img_size_mib": 6144,
+    "nura": false,
+    "nura_packages": [],
+    "packages": ["linux-rpi", "raspberrypi-bootloader", "raspberrypi-bootloader-common", "mesa-vulkan-broadcom", "mesa-vulkan-panfrost", "alsa-ucm-conf"]
+  },
+  "spacemit-k1": {
+    "label": "SpacemiT K1 boards (Orange Pi RV2, Orange Pi R2S, BananaPi-F3)",
+    "arches": ["riscv64"],
+    "kernel": "lts",
+    "boot": "extlinux",
+    "status": "experimental",
+    "serial": "ttyS0",
+    "cmdline": "quiet console=ttyS0,115200n8",
+    "img_size_mib": 6144,
+    "nura": false,
+    "nura_packages": [],
+    "dtb": "spacemit/k1-orangepi-rv2.dtb",
+    "packages": ["linux-lts", "mesa-vulkan-swrast", "xf86-video-fbdev"]
+  },
+  "vm": {
+    "label": "Virtual machines (QEMU, KVM, hypervisors)",
+    "arches": ["x86_64", "aarch64"],
+    "kernel": "virt",
+    "boot": "efi",
+    "status": "supported",
+    "serial": "ttyS0",
+    "cmdline": "quiet console=ttyS0,115200n8",
+    "img_size_mib": 5120,
+    "nura": false,
+    "nura_packages": [],
+    "packages": ["linux-virt", "qemu-guest-agent", "qemu-guest-agent-openrc", "systemd-boot", "efibootmgr", "mesa-vulkan-virtio"]
+  }
+}

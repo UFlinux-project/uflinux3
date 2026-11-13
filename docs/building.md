@@ -25,7 +25,9 @@ export APK_REPOSITORY_URL=https://OWNER.github.io/REPO/apk/v3.24/uflinux
 sudo --preserve-env=APK_REPOSITORY_URL bash scripts/build.sh --arch x86_64
 ```
 
-`--stage` accepts `bootstrap`, `packages`, `sign`, `image`, `verify`, or `all`.
+`--stage` accepts `bootstrap`, `packages`, `sign`, `image`, `device`, `verify`, or `all`.
+With `--device BOARD`, `device` (or `all`) assembles an installed board disk image
+instead of an ISO; see [device images](device-images.md).
 Stages share `--workdir` (default `.state`) and `--outdir` (default `out`). Download,
 APK, Cargo, and compiler caches use `--cache` (default `.cache/build`). A lockfile
 change requires a fresh work directory, but verified downloads can be reused.
@@ -91,6 +93,11 @@ upstream source and Alpine compatibility patches are retained with build inputs.
 - `verify`: installs the custom packages through apk, validates Ironbar's actual
   configuration, tests a headless desktop and toplevel controls, and exercises the
   installer safeguards. Firmware boot and disk installation are separate VM jobs.
+- `device` (with `--device`): installs the board's package set into a separate
+  chroot, configures an installed (non-live) system, regenerates the initramfs
+  without a modloop, and writes a raw GPT disk image without loop devices or
+  mounts. The assembled disk is re-read and checked for its geometry, identifiers,
+  boot files and initramfs compression before it is compressed.
 
 The chroot exposes proc and selected device nodes, but not host sysfs. It is a
 build environment, not a security boundary for hostile source code. GitHub uses
@@ -101,6 +108,7 @@ Outputs:
 | Directory | Contents |
 | --- | --- |
 | `out/images/ARCH` | ISO and SHA-256/SHA-512 sidecars |
+| `out/devices/ARCH` | Board disk images (`img.zst`) and their SHA-256 sidecars |
 | `out/package-shards/ARCH/ORIGIN` | Isolated compile outputs before collection |
 | `out/packages/ARCH` | Build-signed APKs and their public key |
 | `out/repository/ARCH` | Final signed APKs and APKINDEX |

@@ -29,6 +29,11 @@
 
 Pull requests and main pushes build x86_64; manual runs and version tags use all
 seven architectures.
+Device disk images are built for version tags and for manual runs where the
+**Build device images** option is enabled. They are supplementary: an experimental
+board target may fail without failing the release, and the images are uploaded to
+the release only after it has been published, so a device problem cannot leave a
+release half published. See [device images](device-images.md).
 Only push events for valid version tags can publish. Manual runs never become
 release builds by supplying a private key. Protect the default branch and release
 tags according to the maintainer access you intend to grant.
@@ -82,7 +87,11 @@ To verify downloads:
 sha256sum -c SHA256SUMS
 gh attestation verify uflinux-0.1.0-x86_64.iso --repo OWNER/REPO
 gh attestation verify uflinux-apk-repository.tar.gz --repo OWNER/REPO
+gh attestation verify uflinux-0.1.0-rpi-aarch64.img.zst --repo OWNER/REPO
 ```
+
+Device images are not listed in `SHA256SUMS`; each has its own `.img.zst.sha256`
+sidecar next to it.
 
 Download the assets named in SHA256SUMS before checking it. The repository snapshot
 contains `uflinux.ec.pub`; install it under the same name in `/etc/apk/keys` when

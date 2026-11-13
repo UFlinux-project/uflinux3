@@ -5,6 +5,13 @@ HDR/VRR activation, I2C reliability, laptop firmware behavior or physical resume
 Run this procedure from an installed UFLinux desktop on each reference device.
 Use a test installation and retain its normal monitor layout and power settings.
 
+The [device image targets](device-images.md) have no hardware evidence yet. When
+one is tested, record at least: that the board boots from the image as written
+(without re-partitioning), that the root partition grew to the media on first
+boot, the serial console and getty behaviour, the renderer reported by the
+desktop, and whether the display works at all. The SpacemiT K1 image is expected
+to have no display output with the current mainline device tree.
+
 - **Graphics:** check the renderer in Displays and About, the actual GPU/driver,
   launch/log out normally, and test supported Vulkan/OpenGL plus the software
   fallback. Record explicit overrides. A configured renderer is not evidence of
