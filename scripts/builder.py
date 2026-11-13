@@ -108,6 +108,9 @@ def device_packages(device, arch):
                  "labwc-lang", "firefox", "ublock-origin", "vulkan-loader", "xfsprogs"]
     packages += ["alpine-base", "apk-tools", "zstd", "util-linux", "dosfstools", "mtools",
                  "e2fsprogs", "e2fsprogs-extra", "cloud-utils-growpart", "linux-firmware"]
+    # resize.f2fs ships in f2fs-tools and does the first-boot grow of an f2fs root.
+    if device.get("rootfs", "ext4") == "f2fs":
+        packages.append("f2fs-tools")
     if device["nura"]:
         packages += list(device["nura_packages"])
     if arch in ("x86_64", "aarch64") and "efibootmgr" not in packages:
@@ -120,6 +123,7 @@ def device_environment(name, device, arch, version, root_partuuid, esp):
     env = {"UFLINUX_DEVICE": name, "UFLINUX_ARCH": arch,
            "UFLINUX_BOOT": device["boot"], "UFLINUX_SERIAL": device["serial"],
            "UFLINUX_CMDLINE": device["cmdline"], "UFLINUX_VERSION": version,
+           "UFLINUX_ROOTFS": device.get("rootfs", "ext4"),
            "UFLINUX_ROOT_PARTUUID": root_partuuid, "UFLINUX_ESP": esp,
            "UFLINUX_PACKAGES": " ".join(device_packages(device, arch))}
     if device["nura"]:
@@ -171,8 +175,62 @@ def device_layout(image):
     return {"disk": table.get("id", "").upper(), "esp": esp, "root": root}
 
 
+# Filesystem superblock signatures, as (offset, magic, description) triples
+# measured from the start of the root partition.
+ROOTFS_SIGNATURES = {
+    "ext4": (1080, b"\x53\xef", "the ext4 superblock signature"),
+    "f2fs": (1024, b"\x10\x20\xf5\xf2", "the F2FS superblock magic"),
+    "xfs": (0, b"XFSB", "the XFS superblock magic"),
+}
+
+
+def device_verify_rootfs(image, root_start, rootfs):
+    """Raise unless the root partition holds a *rootfs* superblock."""
+    signature = ROOTFS_SIGNATURES[rootfs]
+    with image.open("rb") as handle:
+        handle.seek(root_start * SECTOR + signature[0])
+        magic = handle.read(len(signature[1]))
+    if magic != signature[1]:
+        raise ValueError(f"{image}: the root partition is not {rootfs}: missing "
+                         + signature[2])
+
+
+def device_write_rootfs(rootfs, disk, snapshot, staging, layout, uuids, epoch):
+    """Format an f2fs or XFS root volume, fill it from *staging* and dd it onto *disk*.
+
+    Unlike ext4, neither mkfs can write the tree into the disk image at a
+    partition offset, so the volume is built as a standalone file first. The
+    file is exactly one partition long and the ESP offset is MiB-aligned, so a
+    single aligned dd places it at its final sector.
+    """
+    volume = snapshot / ("root." + rootfs)
+    run(["truncate", "-s", str(layout["root_size"] * SECTOR), volume])
+    if rootfs == "f2fs":
+        # The sectors argument is in device-sector units, and a regular file is
+        # taken to have 512-byte sectors, so it equals the partition size here.
+        run(["mkfs.f2fs", "-q", "-f", "-l", "UFLINUX_ROOT", "-U", uuids["root"].lower(),
+             "-R", "0:0", "-t", "0", "-T", epoch, str(volume), str(layout["root_size"])])
+        # sload prints one line per directory; the log only needs its failures.
+        run(["sload.f2fs", "-f", staging, "-t", "/", "-T", epoch, "-P", str(volume)],
+            stdout=subprocess.DEVNULL)
+    elif rootfs == "xfs":
+        # -p populates the root inode straight from the staging tree, keeping
+        # content, modes, ownership, timestamps and xattrs for every file type.
+        run(["mkfs.xfs", "-q", "-f", "-m", "uuid=" + uuids["root"].lower(),
+             "-L", "UFLINUX_ROOT", "-p", str(staging), str(volume)])
+    else:
+        raise ValueError(f"unsupported root filesystem {rootfs}")
+    run(["dd", f"if={volume}", f"of={disk}", "bs=1M",
+         f"seek={layout['root_start'] * SECTOR // (1024 * 1024)}",
+         "conv=notrunc", "status=none"])
+    volume.unlink()
+
+
 def device_verify_image(image, device, arch, uuids, layout):
     """Check the assembled disk: geometry, boot files and a Zstd initramfs."""
+    rootfs = device.get("rootfs", "ext4")
+    if rootfs not in ROOTFS_SIGNATURES:
+        raise ValueError(f"{image}: unknown root filesystem {rootfs}")
     actual = device_layout(image)
     for name, expected in (("ESP", layout["esp_start"]), ("ROOT", layout["root_start"])):
         found = (actual["esp"] if name == "ESP" else actual["root"])["start"]
@@ -183,6 +241,7 @@ def device_verify_image(image, device, arch, uuids, layout):
             raise ValueError(f"{image}: {role} partition UUID changed")
     if actual["disk"] != uuids["disk"]:
         raise ValueError(f"{image}: disk GUID changed")
+    device_verify_rootfs(image, layout["root_start"], rootfs)
     stage = image.parent / (image.name + "-esp")
     device_extract(image, stage)
     boot = {}
@@ -201,7 +260,7 @@ def device_verify_image(image, device, arch, uuids, layout):
     if not (stage / bootloader).is_file():
         raise ValueError(f"{image}: the ESP has no {bootloader}")
     remove_tree(stage)
-    return {"device_image_format": "gpt-ext4", "initramfs_compression": "zstd",
+    return {"device_image_format": "gpt-" + rootfs, "initramfs_compression": "zstd",
             "arch": arch, "boot": device["boot"], "disk_guid": actual["disk"],
             "partitions": {"esp": {"start": layout["esp_start"], "size": layout["esp_size"],
                                    "uuid": uuids["esp"]},
@@ -926,7 +985,8 @@ class Builder:
         name = self.args.device
         device = device_target(DEVICES, name, self.args.arch)
         arch = self.args.arch
-        self.tools("dosfstools", "mtools", "zstd", "util-linux")
+        self.tools("dosfstools", "mtools", "zstd", "util-linux", "e2fsprogs",
+                   "f2fs-tools", "xfsprogs")
         uuids = device_uuids(f"{self.args.version}:{name}:{arch}")
         layout = device_partitions(device["img_size_mib"])
         args = argparse.Namespace(**vars(self.args))
@@ -966,10 +1026,14 @@ class Builder:
         mcopy = ["mcopy", "-s", "-n", "-i", f"{disk}@@{layout['esp_start']}s::"]
         mcopy += sorted(str(path) for path in esp.iterdir())
         run(mcopy + ["::"], env=dict(os.environ, MTOOLS_SKIP_CHECK="1"))
-        run(["mke2fs", "-q", "-Fn", "-t", "ext4", "-d", staging, "-L", "UFLINUX_ROOT",
-             "-U", uuids["root"], "-E",
-             f"offset={layout['root_start'] * SECTOR},root_owner=0:0,lazy_itable_init=0",
-             str(disk), str(layout["root_size"] // 2)])
+        rootfs = device.get("rootfs", "ext4")
+        if rootfs == "ext4":
+            run(["mke2fs", "-q", "-Fn", "-t", "ext4", "-d", staging, "-L", "UFLINUX_ROOT",
+                 "-U", uuids["root"], "-E",
+                 f"offset={layout['root_start'] * SECTOR},root_owner=0:0,lazy_itable_init=0",
+                 str(disk), str(layout["root_size"] // 2)])
+        else:
+            device_write_rootfs(rootfs, disk, snapshot, staging, layout, uuids, self.epoch)
         report = device_verify_image(disk, device, arch, uuids, layout)
         target = self.out / "devices" / arch
         target.mkdir(parents=True, exist_ok=True)

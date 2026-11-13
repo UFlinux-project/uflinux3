@@ -87,6 +87,15 @@ class DeviceRootfsTests(unittest.TestCase):
         self.assertIn("dtbloader", device_packages(DEVICES["qcs6490"], "aarch64"))
         self.assertNotIn("efibootmgr", device_packages(DEVICES["spacemit-k1"], "riscv64"))
 
+    def test_only_f2fs_devices_pull_in_the_f2fs_tools(self):
+        # resize.f2fs is what grows an f2fs root on first boot; the XFS vm image
+        # already carries xfsprogs for the shared desktop set.
+        for name in ("qcs6490", "rpi", "spacemit-k1"):
+            arch = DEVICES[name]["arches"][0]
+            self.assertIn("f2fs-tools", device_packages(DEVICES[name], arch), name)
+        self.assertNotIn("f2fs-tools", device_packages(DEVICES["vm"], "x86_64"))
+        self.assertIn("xfsprogs", device_packages(DEVICES["vm"], "x86_64"))
+
     def test_environment_covers_the_profile_contract(self):
         env = device_environment("rpi", DEVICES["rpi"], "aarch64", "0.1.0",
                                  "01234567-89AB-4CDE-8F01-23456789ABCD", "/device-esp")
@@ -96,6 +105,7 @@ class DeviceRootfsTests(unittest.TestCase):
         self.assertEqual(env["UFLINUX_ROOT_PARTUUID"],
                          "01234567-89AB-4CDE-8F01-23456789ABCD")
         self.assertEqual(env["UFLINUX_ESP"], "/device-esp")
+        self.assertEqual(env["UFLINUX_ROOTFS"], "f2fs")
         self.assertNotIn("UFLINUX_DTB", env)
         self.assertNotIn("UFLINUX_NURA_PACKAGES", env)
         qcom = device_environment("qcs6490", DEVICES["qcs6490"], "aarch64", "0.1.0",
@@ -106,16 +116,23 @@ class DeviceRootfsTests(unittest.TestCase):
                                 "01234567-89AB-4CDE-8F01-23456789ABCD", "/device-esp")
         self.assertEqual(k1["UFLINUX_DTB"], DEVICES["spacemit-k1"]["dtb"])
         self.assertEqual(k1["UFLINUX_SERIAL"], "ttyS0")
+        vm = device_environment("vm", DEVICES["vm"], "x86_64", "0.1.0",
+                                "01234567-89AB-4CDE-8F01-23456789ABCD", "/device-esp")
+        self.assertEqual(vm["UFLINUX_ROOTFS"], "xfs")
 
 
 class DeviceImageCheckTests(unittest.TestCase):
-    def report(self, boot, esp_files, initramfs=b"\x28\xb5\x2f\xfd" + b"initramfs"):
+    def report(self, boot, esp_files, initramfs=b"\x28\xb5\x2f\xfd" + b"initramfs",
+               rootfs="f2fs"):
         """Run the checker against a synthetic disk whose ESP is faked."""
         uuids = device_uuids("0.1.0:check:" + boot)
         layout = device_partitions(1024)
         with tempfile.TemporaryDirectory() as temporary:
             image = Path(temporary) / "disk"
-            image.write_bytes(b"")
+            offset, magic, _ = builder.ROOTFS_SIGNATURES[rootfs]
+            image.write_bytes(b"\0" * (layout["root_start"] * builder.SECTOR + offset))
+            with image.open("ab") as handle:
+                handle.write(magic)
             stage = image.parent / (image.name + "-esp")
 
             def extract(source, destination, esp_start=builder.ESP_START):
@@ -135,7 +152,8 @@ class DeviceImageCheckTests(unittest.TestCase):
             saved_layout, saved_extract = builder.device_layout, builder.device_extract
             builder.device_layout, builder.device_extract = geometry, extract
             try:
-                report = device_verify_image(image, {"boot": boot}, "aarch64", uuids, layout)
+                report = device_verify_image(image, {"boot": boot, "rootfs": rootfs},
+                                             "aarch64", uuids, layout)
             finally:
                 builder.device_layout, builder.device_extract = saved_layout, saved_extract
             self.assertFalse(stage.exists(), "the ESP extraction must be cleaned up")
@@ -144,7 +162,7 @@ class DeviceImageCheckTests(unittest.TestCase):
     def test_report_records_geometry_and_boot_payload(self):
         report = self.report("efi", {"boot/vmlinuz": b"kernel", "boot/initramfs": b"\x28\xb5\x2f\xfd" + b"x",
                                      "EFI/boot/bootaa64.efi": b"MZ"})
-        self.assertEqual(report["device_image_format"], "gpt-ext4")
+        self.assertEqual(report["device_image_format"], "gpt-f2fs")
         self.assertEqual(report["initramfs_compression"], "zstd")
         self.assertEqual(report["boot"], "efi")
         self.assertEqual(report["partitions"]["root"]["uuid"],
@@ -155,6 +173,27 @@ class DeviceImageCheckTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Zstandard"):
             self.report("efi", {"boot/vmlinuz": b"kernel",
                                 "boot/initramfs": b"\x1f\x8b\x08\x00gzip"})
+
+    def test_report_accepts_the_root_filesystem_of_the_device(self):
+        esp = {"boot/vmlinuz": b"kernel", "boot/initramfs": b"\x28\xb5\x2f\xfd" + b"x",
+               "EFI/boot/bootaa64.efi": b"MZ"}
+        for rootfs in ("ext4", "f2fs", "xfs"):
+            with self.subTest(rootfs=rootfs):
+                report = self.report("efi", esp, rootfs=rootfs)
+                self.assertEqual(report["device_image_format"], "gpt-" + rootfs)
+
+    def test_a_root_partition_of_the_wrong_type_is_rejected(self):
+        layout = device_partitions(1024)
+        with tempfile.TemporaryDirectory() as temporary:
+            image = Path(temporary) / "disk"
+            image.write_bytes(b"\0" * (layout["root_start"] * builder.SECTOR + 4096))
+            with image.open("r+b") as handle:
+                handle.seek(layout["root_start"] * builder.SECTOR)
+                handle.write(b"XFSB")
+            # The image holds an XFS superblock, so an f2fs device must not pass.
+            with self.assertRaisesRegex(ValueError, "not f2fs"):
+                builder.device_verify_rootfs(image, layout["root_start"], "f2fs")
+            builder.device_verify_rootfs(image, layout["root_start"], "xfs")
 
     def test_missing_boot_files_are_reported(self):
         with self.assertRaisesRegex(ValueError, "initramfs"):

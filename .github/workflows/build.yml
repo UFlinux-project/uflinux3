@@ -242,7 +242,7 @@ jobs:
         run: python3 scripts/merge-packages.py --arch '${{ matrix.arch }}' --version '${{ needs.checks.outputs.version }}'
       - run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y qemu-user-binfmt binfmt-support
+          sudo apt-get install --no-install-recommends -y qemu-user-binfmt binfmt-support f2fs-tools xfsprogs
           python3 scripts/preflight.py --arch '${{ matrix.arch }}'
       - name: Sign packages and assemble the device disk image
         env:

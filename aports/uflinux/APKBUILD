@@ -197,10 +197,12 @@ live_openrc() {
 
 # Device images are installed on the board's storage rather than run from a
 # squashfs, so the first boot has to grow the copied root partition to the size
-# of the SD card or eMMC. resize2fs lives in e2fsprogs-extra, not e2fsprogs.
+# of the SD card or eMMC. resize2fs lives in e2fsprogs-extra, resize.f2fs in
+# f2fs-tools and xfs_growfs in xfsprogs; one package serves every device
+# image, so it has to be able to grow whichever of them the image uses.
 device() {
 	pkgdesc="First-boot storage growth for UFLinux device images"
-	depends="openrc cloud-utils-growpart e2fsprogs-extra util-linux"
+	depends="openrc cloud-utils-growpart e2fsprogs-extra f2fs-tools xfsprogs util-linux"
 	# The existence of the marker is what enables the first-boot resize, so that
 	# the service stays inert on installed systems that were not written from a
 	# device image. The image build rewrites the file with the board identifier.
@@ -246,7 +248,7 @@ e7547d393b9489bfaf96ea7f1f580099e8d01487e7a59cc897001032e0f0f424b68d77d21e92ac38
 34da57a896516e9c19e12954b35a373c3d7847bc31dd98125ee6eb5e01960f0c4cf7f2e67dec800d3d5c75c1306a420a65b707681117b6465ac84bf31d0aa9aa  uflinux-install
 44df7b48d307198bc768a0224ef6f2422ca285ae5edc21c33b074fd1d3527ead4eddd1439602ceb3b54b4d0d9b8c988467771ef333bb37e9f9641681ede907a1  uflinux-install-gui-backend
 153f498b540da75c6398e7eb271d360ee2ced012d2cd5c77d11d8833c48bcd12fc51f2e46169f7351b38a8e8e7faa24c790776fe5d6537d78b6dafa497eec49f  uflinux-live.initd
-239e56fe1deaa93b0ff21f6eec3303728d903ba31f185f30c24dcc78a59a1ea3c1daa73ccc03d67f09979398babcead863283b21f0b71aa167ada4f68cb9d626  uflinux-device.initd
+8607fa0d7de0314915f3150b55192b21e503026cec08a494e626fdfd3d8424026705df558366663df41d94582bbe7f54a21434756fa1ed4a9a4d2eb8c9f5dfa4  uflinux-device.initd
 e6df4f4a610b45f3426de64299f2fcc0e53691cf4f62a571cc9a3a0c168628042f31ea328e202bcec79d0aa62204e370265b38ea131772c8c548a5b1a19a9d11  uflinux.desktop
 f1c52e9fb8613e71ef77817ffcfad4638be5fba1c606218562955ad6a0d75a087bce62ed514d8687af9fa25940d64513ba0b535f1de370c51a1db9b2ed399256  uflinux-logo.svg
 17da1c30e1f7b8441f113b0d38bea115439e6238ffb063d71638b28d2e994b1bc06e04a421bc5bfedcf05c48825eeaae47a172a0f047f381af12551401123224  artwork-NOTICE

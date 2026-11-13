@@ -29,6 +29,7 @@ for device_id, device in devices.items():
         assert re.fullmatch(r"[a-z0-9][a-z0-9._/-]*\.dtb", device.get("dtb", "")), \
             f"{device_id} boots with extlinux and needs the dtb path it loads"
     assert device["status"] in {"supported", "experimental"}, f"{device_id} must declare a release status"
+    assert device["rootfs"] in {"f2fs", "xfs"}, f"{device_id} must use a root filesystem the device stage can build"
     assert device["packages"] and all(re.fullmatch(r"[a-z0-9][a-z0-9+.-]*", p) for p in device["packages"]), \
         f"{device_id} needs a list of Alpine package names"
     assert isinstance(device["img_size_mib"], int) and device["img_size_mib"] > 512, f"{device_id} needs a usable image size"

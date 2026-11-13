@@ -8,8 +8,8 @@
 #
 # Required environment: UFLINUX_DEVICE UFLINUX_ARCH UFLINUX_BOOT
 # UFLINUX_SERIAL UFLINUX_CMDLINE UFLINUX_ROOT_PARTUUID UFLINUX_PACKAGES
-# UFLINUX_ESP UFLINUX_VERSION. Optional: UFLINUX_NURA_PACKAGES, UFLINUX_DTB,
-# UFLINUX_DTBLOADER.
+# UFLINUX_ESP UFLINUX_VERSION UFLINUX_ROOTFS. Optional: UFLINUX_NURA_PACKAGES,
+# UFLINUX_DTB, UFLINUX_DTBLOADER.
 set -eu
 
 device="$UFLINUX_DEVICE"
@@ -20,12 +20,15 @@ cmdline="$UFLINUX_CMDLINE"
 root_partuuid="$UFLINUX_ROOT_PARTUUID"
 esp="$UFLINUX_ESP"
 version="$UFLINUX_VERSION"
+rootfs="$UFLINUX_ROOTFS"
 
 # Device images boot from an installed root, so the feature set of the ISO is
 # wrong here: cdrom and raid pull in drivers no supported board uses, and
 # uflinux-plymouth drags the splash into an initramfs that has nothing to show
-# while the root filesystem is still being located.
-features="base ext4 phy mmc usb scsi nvme ata virtio kms"
+# while the root filesystem is still being located. The root filesystem
+# feature matches the one scripts/builder.py formats, so the initramfs can
+# mount it without probing.
+features="base $rootfs phy mmc usb scsi nvme ata virtio kms"
 
 # The mkinitfs trigger fires on every /lib/modules change and would build an
 # initramfs from the ISO feature set (and abort the transaction if that
@@ -145,10 +148,12 @@ if [ -d /boot/overlays ]; then
 fi
 
 # The root is found by partition UUID rather than device name, and has to be
-# mounted read-write because nothing runs the live-session switch to rw. The
-# framebuffer console comes first so that boards with a display are usable
-# even when the serial console is not wired up.
-rootargs="root=PARTUUID=$root_partuuid rootwait rootflags=rw"
+# mounted read-write because nothing runs the live-session switch to rw. Its
+# type is stated explicitly so the kernel does not have to guess, which also
+# matches the single filesystem feature in the initramfs. The framebuffer
+# console comes first so that boards with a display are usable even when the
+# serial console is not wired up.
+rootargs="root=PARTUUID=$root_partuuid rootwait rootfstype=$rootfs rootflags=rw"
 case "$cmdline" in
 *console=*) consoleargs="" ;;
 *) consoleargs=" console=tty0 console=$serial,115200n8" ;;

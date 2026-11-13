@@ -51,6 +51,15 @@ class DevicesConfigTests(unittest.TestCase):
         for device_id, device in devices.items():
             self.assertGreaterEqual(device["img_size_mib"], 4096, device_id)
 
+    def test_boards_use_f2fs_and_virtual_machines_use_xfs(self):
+        # f2fs suits the wear-levelling of SD cards and eMMC; a virtual disk has
+        # no such constraint and matches the XFS of the installed ISO target.
+        for device_id, device in devices.items():
+            if device_id == "vm":
+                self.assertEqual(device["rootfs"], "xfs", device_id)
+            else:
+                self.assertEqual(device["rootfs"], "f2fs", device_id)
+
 
 if __name__ == "__main__":
     unittest.main()

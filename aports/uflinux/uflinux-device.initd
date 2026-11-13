@@ -52,10 +52,10 @@ start() {
 	[ -e "$state_file" ] && return 0
 
 	ebegin "Preparing UFLinux device storage"
-	# The initramfs hands the root filesystem over read-only by default.
-	mount -o remount,rw / 2>/dev/null
-
+	# Both the source and the type have to be read before the root is made
+	# writable: f2fs is grown while still mounted read-only.
 	source="$(findmnt -no SOURCE /)" || source=""
+	fstype="$(findmnt -no FSTYPE /)" || fstype=""
 	if [ -z "$source" ] || ! split_root_device "$source"; then
 		ewarn "cannot determine the root disk of $source, skipping the resize"
 		touch "$state_file"
@@ -82,13 +82,41 @@ start() {
 		fi
 	fi
 
-	if ! resize2fs "$root_part"; then
-		ewarn "resize2fs failed for $root_part"
-		eend 1
-		return 1
-	fi
+	# The initramfs hands the root filesystem over read-only by default.
+	# resize.f2fs can grow a mounted f2fs only through the kernel interface
+	# when the mount is read-only, so it runs before the remount; ext4 and
+	# XFS want a writable mount, so they get the remount first.
+	case "$fstype" in
+	f2fs)
+		if ! resize.f2fs -f "$root_part"; then
+			ewarn "resize.f2fs failed for $root_part"
+			eend 1
+			return 1
+		fi
+		mount -o remount,rw / 2>/dev/null
+		;;
+	xfs)
+		mount -o remount,rw / 2>/dev/null
+		if ! xfs_growfs /; then
+			ewarn "xfs_growfs failed for $root_part"
+			eend 1
+			return 1
+		fi
+		;;
+	ext4 | ext3 | ext2)
+		mount -o remount,rw / 2>/dev/null
+		if ! resize2fs "$root_part"; then
+			ewarn "resize2fs failed for $root_part"
+			eend 1
+			return 1
+		fi
+		;;
+	*)
+		ewarn "$root_part is $fstype, which cannot be grown here"
+		;;
+	esac
 
 	mkdir -p "$state_dir"
-	printf 'disk=%s\npartition=%s\n' "$disk" "$part" >"$state_file"
+	printf 'disk=%s\npartition=%s\nfilesystem=%s\n' "$disk" "$part" "$fstype" >"$state_file"
 	eend 0
 }
