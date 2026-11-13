@@ -64,17 +64,23 @@ class DeviceLayoutTests(unittest.TestCase):
 
 
 class DeviceRootfsTests(unittest.TestCase):
-    def test_release_repository_comes_first(self):
+    def test_build_uses_the_copied_signed_repository(self):
+        lines = device_repositories("/repo", "aarch64").split()
+        self.assertEqual(lines[0], "/repo")
+        self.assertEqual(len(lines), 3, lines)
+        self.assertTrue(all(line == "/repo" or line.startswith("https://") for line in lines),
+                        lines)
+
+    def test_shipped_image_points_at_the_published_repository(self):
         lines = device_repositories("https://example.invalid/uflinux/0.1.0", "aarch64").split()
         self.assertEqual(lines[0], "https://example.invalid/uflinux/0.1.0")
         self.assertTrue(all(line.startswith("https://") for line in lines), lines)
         self.assertEqual(len(lines), 3, lines)
 
-    def test_nura_suite_is_appended_for_its_architecture(self):
+    def test_nura_suite_carries_no_architecture(self):
         nura = {"mirror": "https://mirror.nura.eco/postmarketos", "branch": "v26.06"}
-        lines = device_repositories("https://example.invalid/uflinux/0.1.0", "aarch64",
-                                    nura).split()
-        self.assertEqual(lines[-1], "https://mirror.nura.eco/postmarketos/v26.06/aarch64")
+        lines = device_repositories("/repo", "aarch64", nura).split()
+        self.assertEqual(lines[-1], "https://mirror.nura.eco/postmarketos/v26.06")
 
     def test_shared_desktop_and_boot_tools_are_installed(self):
         packages = device_packages(DEVICES["vm"], "x86_64")

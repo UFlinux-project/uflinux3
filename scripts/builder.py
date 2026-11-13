@@ -90,13 +90,18 @@ def device_partition_script(layout, uuids):
     )
 
 
-def device_repositories(url, arch, nura=None):
-    """Package sources for a device rootfs: release repo, Alpine, then optional Nura."""
+def device_repositories(source, arch, nura=None):
+    """Package sources for a device rootfs: UFLinux repo, Alpine, then optional Nura.
+
+    *source* is the UFLinux repository line: the path of the copied signed
+    repository while building, or the published URL in a shipped image. apk
+    appends the architecture to every line itself, so the Nura suite has none.
+    """
     alpine = LOCK["alpine"]
-    lines = [url, f"{alpine['mirror']}/{alpine['branch']}/main",
+    lines = [source, f"{alpine['mirror']}/{alpine['branch']}/main",
              f"{alpine['mirror']}/{alpine['branch']}/community"]
     if nura:
-        lines.append(f"{nura['mirror']}/{nura['branch']}/{arch}")
+        lines.append(f"{nura['mirror']}/{nura['branch']}")
     return "\n".join(lines) + "\n"
 
 
@@ -969,7 +974,15 @@ class Builder:
             index = nura["index_sha256"][arch]
             download_pinned(f"{nura['mirror']}/{nura['branch']}/{arch}/APKINDEX.tar.gz", index,
                             "sha256", self.cache / "downloads" / f"nura-APKINDEX-{arch}.tar.gz")
-        self.put("etc/apk/repositories", device_repositories(self.url, arch, nura))
+        # The published repository only carries this architecture once a release
+        # has been published, so build against the signed repository we just made,
+        # copied in exactly as the ISO assembly stage does.
+        final = self.out / "repository" / arch
+        repo = root / "repo" / arch
+        if repo.exists():
+            shutil.rmtree(repo)
+        shutil.copytree(final, repo)
+        self.put("etc/apk/repositories", device_repositories("/repo", arch, nura))
         for name in DEVICE_PROJECT_DIRS:
             destination = root / "project" / name
             shutil.rmtree(destination, ignore_errors=True)
@@ -1006,6 +1019,10 @@ class Builder:
             root.device_info = {"device": name, "device_label": device["label"],
                                 "device_status": device["status"]}
             root.manifest("device")
+            # The build read packages from the copied signed repository, which is
+            # not part of the image; the shipped system points at the published
+            # release repository instead, as uflinux-release advertises.
+            root.put("etc/apk/repositories", device_repositories(self.url, arch))
             snapshot = self.root / "device-image" / name
             remove_tree(snapshot)
             staging = snapshot / "rootfs"
