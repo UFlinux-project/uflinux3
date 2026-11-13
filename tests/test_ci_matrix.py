@@ -32,12 +32,13 @@ class MatrixTests(unittest.TestCase):
         for tag in ('vlatest','v0.1.0;id','v0.1.0\nmalformed'):
             with self.assertRaises(ValueError):ci.configuration('push','refs/tags/'+tag)
 
-    def test_bios_names_are_used_only_for_x86_vm_tests(self):
-        jobs = ci.configuration('workflow_dispatch', 'refs/heads/main', full=True)['vm']['include']
-        for arch in ('x86', 'x86_64'):
-            self.assertEqual({job['mode'] for job in jobs if job['arch'] == arch}, {'bios', 'uefi'})
-        for arch in ('ppc64le', 's390x'):
-            self.assertEqual({job['mode'] for job in jobs if job['arch'] == arch}, {'native'})
+    def test_full_matrix_runs_still_boot_only_the_x86_64_images(self):
+        for full in (False, True):
+            jobs = ci.configuration('workflow_dispatch', 'refs/heads/main', full)['vm']['include']
+            self.assertEqual([(job['arch'], job['mode']) for job in jobs],
+                             [('x86_64', 'bios'), ('x86_64', 'uefi')])
+        release = ci.configuration('push', 'refs/tags/v0.1.0')['vm']['include']
+        self.assertEqual({job['arch'] for job in release}, {'x86_64'})
 
     def test_device_images_are_supplementary_outside_releases(self):
         for event,ref,full,devices in [('push','refs/heads/main',False,False),

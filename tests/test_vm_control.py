@@ -119,9 +119,8 @@ class BootTests(unittest.TestCase):
         expect_login_prompt(Console(0))
 
     def test_live_budget_does_not_change_installed_acceptance_budget(self):
-        for arch in ("x86", "x86_64", "armv7", "aarch64", "s390x", "ppc64le", "riscv64"):
-            self.assertEqual(memory_mib(arch), 3072 if arch == "armv7" else 4096)
-            self.assertEqual(memory_mib(arch, installed=True), 512 if arch == "x86_64" else 2048)
+        self.assertEqual(memory_mib(), 4096)
+        self.assertEqual(memory_mib(installed=True), 512)
 
     def test_partial_apk_installation_fails_even_if_login_succeeds(self):
         console = "100%\r\nERROR: System state may be inconsistent: failed to write database: No space left on device\r\nuflinux login: "

@@ -65,12 +65,9 @@ def expect_login_prompt(child):
         raise RuntimeError("UEFI ran out of resources loading the initramfs; inspect its size and VM memory")
 
 
-def memory_mib(arch, installed=False):
+def memory_mib(installed=False):
     """Diskless live roots need RAM for unpacked APKs as well as the desktop."""
-    if not installed:
-        # The armv7 virt machine disables highmem and has a 3 GiB RAM limit.
-        return 3072 if arch == "armv7" else 4096
-    return 512 if arch == "x86_64" else 2048
+    return 512 if installed else 4096
 
 
 def check_boot_errors(console):

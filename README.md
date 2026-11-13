@@ -24,9 +24,10 @@ QEMU binfmt registration. Local builds use development signing keys unless
 installed board image instead of an ISO.
 
 GitHub Actions compiles packages without release secrets, signs and assembles
-images in separate jobs, checks the desktop, boots the ISO in QEMU, installs onto
-preformatted XFS, and reboots from the installed disk. Tagged releases publish
-only after the full matrix passes. Device disk images are built on tags as a
+images in separate jobs, checks the desktop, boots the x86_64 ISO in QEMU in both
+BIOS and UEFI mode, installs onto preformatted XFS, and reboots from the installed
+disk. Tagged releases publish only after the full package matrix and both x86_64
+boot tests pass. Device disk images are built on tags as a
 supplementary artifact and cannot block a release. A configured test is not evidence of a
 successful run: use the workflow results and attached build records to determine
 which architectures have actually passed.

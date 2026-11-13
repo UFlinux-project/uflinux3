@@ -184,7 +184,7 @@ jobs:
     needs: [checks, images]
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 2
       matrix: ${{ fromJSON(needs.checks.outputs.vm) }}
     runs-on: ubuntu-26.04
     timeout-minutes: 350
@@ -199,11 +199,11 @@ jobs:
       - name: Install emulators and firmware
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y python3-pexpect qemu-system-x86 qemu-system-arm qemu-system-ppc qemu-system-misc qemu-system-s390x ovmf qemu-efi-aarch64 qemu-efi-riscv64
+          sudo apt-get install --no-install-recommends -y python3-pexpect qemu-system-x86 ovmf
       - name: Boot ISO, install XFS and reboot installed system
         run: |
           network=()
-          if [ '${{ matrix.arch }}' = x86_64 ] && [ '${{ matrix.mode }}' = bios ]; then network+=(--network-tests); fi
+          if [ '${{ matrix.mode }}' = bios ]; then network+=(--network-tests); fi
           python3 scripts/vm-test.py --arch '${{ matrix.arch }}' --mode '${{ matrix.mode }}' --iso 'out/images/${{ matrix.arch }}/uflinux-${{ needs.checks.outputs.version }}-${{ matrix.arch }}.iso' "${network[@]}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()

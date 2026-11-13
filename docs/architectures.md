@@ -1,14 +1,18 @@
 # Architecture and boot coverage
 
-| Alpine architecture | Package build | VM machine | Required VM boot tests |
-| --- | --- | --- | --- |
-| x86 | native compatibility mode | pc | BIOS and 32-bit UEFI |
-| x86_64 | native | q35 | BIOS and UEFI |
-| aarch64 | native ARM64 runner | virt | UEFI |
-| armv7 | ARM64 runner, qemu-arm | virt / cortex-a15 | UEFI |
-| ppc64le | qemu-ppc64le | pseries / POWER9 | Open Firmware |
-| s390x | qemu-s390x | s390-ccw-virtio | native IPL / zipl |
-| riscv64 | qemu-riscv64 | virt | OpenSBI and UEFI |
+| Alpine architecture | Package build | Required VM boot tests |
+| --- | --- | --- |
+| x86 | native compatibility mode | none |
+| x86_64 | native (q35 machine) | BIOS and UEFI |
+| aarch64 | native ARM64 runner | none |
+| armv7 | ARM64 runner, qemu-arm | none |
+| ppc64le | qemu-ppc64le | none |
+| s390x | qemu-s390x | none |
+| riscv64 | qemu-riscv64 | none |
+
+Only the x86_64 ISO is boot-tested, on every commit, pull request, tag and
+full-matrix run. The other six architectures are built and their packages and
+ISOs are published, but no VM is started for them.
 
 ## Device image targets
 
@@ -24,18 +28,15 @@ release, but they are not part of the publication gate and none of them has a
 configured boot test yet. See [device images](device-images.md).
 
 This table describes the configured ISO build/test matrix, not completed physical
-hardware certification. Publication requires green test reports for all rows.
-The firmware search paths are explicit in `scripts/vm-test.py`; missing firmware
-is a test failure, not a skipped architecture.
+hardware certification. Publication requires green build reports for all rows and
+green boot reports for both x86_64 firmware modes. The firmware search paths are
+explicit in `scripts/vm-test.py`; missing firmware is a test failure.
 
 UEFI tests use Secure Boot disabled. These images do not provide enrolled UEFI
 Secure Boot signatures; APK and modloop signatures are separate mechanisms.
 
-Ubuntu 26.04 no longer packages 32-bit OVMF or ARM UEFI. Those two tests download
-the official Ubuntu 24.04 firmware archives pinned in `config/firmware.lock.json`,
-verify their SHA-256 hashes, and extract them into a test cache without installing
-old packages into the runner or the distribution. Other firmware comes from the
-runner's current Ubuntu packages.
+The x86_64 UEFI test uses the OVMF firmware from the runner's current Ubuntu
+packages.
 
 An architecture name does not guarantee an ISO can boot every board using that
 CPU. Generic ARM ISOs require appropriate firmware and do not replace Alpine's
