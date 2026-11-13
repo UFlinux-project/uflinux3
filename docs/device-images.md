@@ -112,21 +112,21 @@ be a Zstandard frame.
 
 While an image is built, its rootfs reads packages from the signed repository that
 the `sign` stage just produced, copied into the rootfs as `/repo`, together with
-Alpine and (for `qcs6490` only) the pinned Nura suite. The published Pages URL is
-not used at build time, because it only lists an architecture after a release has
-been published. That copy is a build artefact and is excluded from the image; the
-shipped `/etc/apk/repositories` lists the published UFLinux repository and Alpine,
-so `apk update` on the board works as soon as the release is public. apk appends
-the architecture to every entry itself, so the Nura line ends at the branch name.
+Alpine. The published Pages URL is not used at build time, because it only lists an
+architecture after a release has been published. That copy is a build artefact and
+is excluded from the image; the shipped `/etc/apk/repositories` lists the published
+UFLinux repository and Alpine, so `apk update` on the board works as soon as the
+release is public.
 
-Installed packages come only from Alpine and the signed UFLinux repository. Nura
-packages are fetched with `apk fetch --stdout` (which resolves the file from the
-pinned index without consulting the solver) and unpacked with `tar` at their
-package paths. Installing them instead would let apk see Nura's
-`postmarketos-mkinitfs` and Alpine's `mkinitfs` — mutually conflicting providers
-of `cmd:mkinitfs` — and refuse to select any package set that pulls in a kernel.
-The unpacked files are ordinary rootfs content, so they land in the image without
-a Nura entry in the installed database.
+The pinned Nura suite is never listed in `/etc/apk/repositories`, not even while
+building. apk solves against every repository in that file, and Nura's
+`postmarketos-mkinitfs` and Alpine's `mkinitfs` are mutually conflicting providers
+of `cmd:mkinitfs` — with both visible, apk refuses to select any package set that
+pulls in a kernel. So Nura packages (`dtbloader` for `qcs6490`) are fetched with
+`apk fetch --stdout --repository <nura>` — the URL arrives as `UFLINUX_NURA_REPOSITORY`
+and apk resolves the file from the pinned index without a solver run — and unpacked
+with `tar` at their package paths. The unpacked files are ordinary rootfs content,
+so they land in the image without a Nura entry in the installed database.
 
 ## First boot
 

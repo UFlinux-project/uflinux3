@@ -10,9 +10,9 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import builder
-from builder import (DEVICES, device_environment, device_image_name, device_partitions,
-                     device_partition_script, device_packages, device_repositories,
-                     device_target, device_uuids, device_verify_image)
+from builder import (DEVICES, device_environment, device_image_name, device_nura_repository,
+                     device_partitions, device_partition_script, device_packages,
+                     device_repositories, device_target, device_uuids, device_verify_image)
 
 
 class DeviceLayoutTests(unittest.TestCase):
@@ -77,10 +77,16 @@ class DeviceRootfsTests(unittest.TestCase):
         self.assertTrue(all(line.startswith("https://") for line in lines), lines)
         self.assertEqual(len(lines), 3, lines)
 
-    def test_nura_suite_carries_no_architecture(self):
-        nura = {"mirror": "https://mirror.nura.eco/postmarketos", "branch": "v26.06"}
-        lines = device_repositories("/repo", "aarch64", nura).split()
-        self.assertEqual(lines[-1], "https://mirror.nura.eco/postmarketos/v26.06")
+    def test_nura_suite_stays_out_of_the_repositories_file(self):
+        # A visible Nura line makes apk's solver unresolvable for any install
+        # that pulls in a kernel (postmarketos-mkinitfs vs mkinitfs), so the
+        # file only ever lists the UFLinux repo and Alpine. The profile reaches
+        # Nura through apk fetch --repository instead.
+        lines = device_repositories("/repo", "aarch64").split()
+        self.assertEqual(len(lines), 3, lines)
+        self.assertNotIn("nura", " ".join(lines))
+        self.assertEqual(device_nura_repository(),
+                         "https://mirror.nura.eco/postmarketos/v26.06")
 
     def test_shared_desktop_and_boot_tools_are_installed(self):
         packages = device_packages(DEVICES["vm"], "x86_64")
@@ -119,6 +125,7 @@ class DeviceRootfsTests(unittest.TestCase):
         qcom = device_environment("qcs6490", DEVICES["qcs6490"], "aarch64", "0.1.0",
                                   "01234567-89AB-4CDE-8F01-23456789ABCD", "/device-esp")
         self.assertEqual(qcom["UFLINUX_NURA_PACKAGES"], "dtbloader")
+        self.assertEqual(qcom["UFLINUX_NURA_REPOSITORY"], device_nura_repository())
         self.assertEqual(qcom["UFLINUX_DTBLOADER"], "/usr/share/dtbloader/dtbloader.efi")
         k1 = device_environment("spacemit-k1", DEVICES["spacemit-k1"], "riscv64", "0.1.0",
                                 "01234567-89AB-4CDE-8F01-23456789ABCD", "/device-esp")

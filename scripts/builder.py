@@ -90,19 +90,26 @@ def device_partition_script(layout, uuids):
     )
 
 
-def device_repositories(source, arch, nura=None):
-    """Package sources for a device rootfs: UFLinux repo, Alpine, then optional Nura.
+def device_repositories(source, arch):
+    """Package sources for a device rootfs: the UFLinux repo, then Alpine.
 
     *source* is the UFLinux repository line: the path of the copied signed
-    repository while building, or the published URL in a shipped image. apk
-    appends the architecture to every line itself, so the Nura suite has none.
+    repository while building, or the published URL in a shipped image. The
+    pinned Nura suite is deliberately not listed here: apk solves against every
+    repository in the file, and Nura's postmarketos-mkinitfs conflicts with the
+    Alpine mkinitfs that uflinux-initramfs requires, so a visible Nura line
+    makes any install that pulls in a kernel unresolvable. The profile reaches
+    Nura through `apk fetch --repository` instead (device_nura_repository).
     """
     alpine = LOCK["alpine"]
-    lines = [source, f"{alpine['mirror']}/{alpine['branch']}/main",
-             f"{alpine['mirror']}/{alpine['branch']}/community"]
-    if nura:
-        lines.append(f"{nura['mirror']}/{nura['branch']}")
-    return "\n".join(lines) + "\n"
+    return "\n".join((source, f"{alpine['mirror']}/{alpine['branch']}/main",
+                      f"{alpine['mirror']}/{alpine['branch']}/community")) + "\n"
+
+
+def device_nura_repository():
+    """The pinned Nura suite URL. apk appends the architecture itself."""
+    nura = DEVICE_LOCK["nura"]
+    return f"{nura['mirror']}/{nura['branch']}"
 
 
 def device_packages(device, arch):
@@ -134,6 +141,7 @@ def device_environment(name, device, arch, version, root_partuuid, esp):
            "UFLINUX_PACKAGES": " ".join(device_packages(device, arch))}
     if device["nura"]:
         env["UFLINUX_NURA_PACKAGES"] = " ".join(device["nura_packages"])
+        env["UFLINUX_NURA_REPOSITORY"] = device_nura_repository()
         # The Nura dtbloader EFI driver installs a board DTB that the Alpine kernel
         # does not ship (the Dragon Q6A among them), so the ESP has to carry the tree.
         env["UFLINUX_DTBLOADER"] = "/usr/share/dtbloader/dtbloader.efi"
@@ -162,7 +170,11 @@ def device_extract(image, destination, esp_start=ESP_START):
     """Read the ESP of an assembled disk image without mounting anything."""
     destination.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, MTOOLS_SKIP_CHECK="1")
-    run(["mcopy", "-s", "-n", "-i", f"{image}@@{esp_start}s::", str(destination) + "/"], env=env)
+    # mtools parses a trailing "::" on the -i operand as a drive spec and then
+    # fails with "non DOS media", so the offset form carries no colons and the
+    # source is given as its own operand.
+    run(["mcopy", "-s", "-n", "-i", f"{image}@@{esp_start}s", "::/", str(destination) + "/"],
+        env=env)
     return destination
 
 
@@ -983,7 +995,7 @@ class Builder:
         if repo.exists():
             shutil.rmtree(repo)
         shutil.copytree(final, repo)
-        self.put("etc/apk/repositories", device_repositories("/repo", arch, nura))
+        self.put("etc/apk/repositories", device_repositories("/repo", arch))
         for name in DEVICE_PROJECT_DIRS:
             destination = root / "project" / name
             shutil.rmtree(destination, ignore_errors=True)
@@ -1041,9 +1053,9 @@ class Builder:
         run(["mkfs.vfat", "-n", "UFLINUX", "-i", uuids["serial"], "-F", "32", "-S", "512",
              "--offset", str(layout["esp_start"]), str(disk), str(layout["esp_size"] // 2)],
             stderr=subprocess.DEVNULL)
-        mcopy = ["mcopy", "-s", "-n", "-i", f"{disk}@@{layout['esp_start']}s::"]
+        mcopy = ["mcopy", "-s", "-n", "-i", f"{disk}@@{layout['esp_start']}s"]
         mcopy += sorted(str(path) for path in esp.iterdir())
-        run(mcopy + ["::"], env=dict(os.environ, MTOOLS_SKIP_CHECK="1"))
+        run(mcopy + ["::/"], env=dict(os.environ, MTOOLS_SKIP_CHECK="1"))
         rootfs = device.get("rootfs", "ext4")
         if rootfs == "ext4":
             run(["mke2fs", "-q", "-Fn", "-t", "ext4", "-d", staging, "-L", "UFLINUX_ROOT",

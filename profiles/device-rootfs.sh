@@ -8,8 +8,8 @@
 #
 # Required environment: UFLINUX_DEVICE UFLINUX_ARCH UFLINUX_BOOT
 # UFLINUX_SERIAL UFLINUX_CMDLINE UFLINUX_ROOT_PARTUUID UFLINUX_PACKAGES
-# UFLINUX_ESP UFLINUX_VERSION UFLINUX_ROOTFS. Optional: UFLINUX_NURA_PACKAGES,
-# UFLINUX_DTB, UFLINUX_DTBLOADER.
+# UFLINUX_ESP UFLINUX_VERSION UFLINUX_ROOTFS. Optional: UFLINUX_NURA_PACKAGES
+# (with UFLINUX_NURA_REPOSITORY), UFLINUX_DTB, UFLINUX_DTBLOADER.
 set -eu
 
 device="$UFLINUX_DEVICE"
@@ -48,7 +48,8 @@ write_mkinitfs_conf
 apk add --no-progress $UFLINUX_PACKAGES
 
 # Optional extras that only exist in the pinned Nura repository. They are
-# unpacked rather than installed: Nura carries its own mkinitfs replacement
+# unpacked rather than installed, and fetched with an explicit --repository so
+# that no solver run ever sees Nura: it carries its own mkinitfs replacement
 # (postmarketos-mkinitfs) which conflicts with the Alpine one that
 # uflinux-initramfs requires, so any solver run that sees both repositories
 # refuses to select packages. apk fetch resolves the file directly from the
@@ -56,7 +57,8 @@ apk add --no-progress $UFLINUX_PACKAGES
 if [ -n "${UFLINUX_NURA_PACKAGES:-}" ]; then
 	# shellcheck disable=SC2086
 	for package in $UFLINUX_NURA_PACKAGES; do
-		apk fetch --quiet --stdout "$package" | tar -C / -xz
+		apk fetch --quiet --stdout --repository "$UFLINUX_NURA_REPOSITORY" "$package" |
+			tar -C / -xz
 	done
 fi
 
