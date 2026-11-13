@@ -93,7 +93,9 @@ EOF
 # OpenRC does not enable services on install, so the boot order is written
 # out here. It matches the ISO profile minus the live-session plumbing
 # (modloop, splash handoff, uflinux-live) plus the device resize service.
-enable() {
+# Not called "enable": ShellCheck reserves that name for the bash builtin and
+# reports SC3044 in a POSIX sh script.
+enable_service() {
 	runlevel="$1"
 	shift
 	mkdir -p "/etc/runlevels/$runlevel"
@@ -103,10 +105,10 @@ enable() {
 	done
 }
 
-enable sysinit devfs dmesg udev udev-trigger udev-settle hwdrivers
-enable boot hwclock modules sysctl hostname bootmisc syslog uflinux-device
-enable default dbus elogind iwd connman tlp uflinux-acpid uflinux-routes greetd
-enable shutdown killprocs mount-ro
+enable_service sysinit devfs dmesg udev udev-trigger udev-settle hwdrivers
+enable_service boot hwclock modules sysctl hostname bootmisc syslog uflinux-device
+enable_service default dbus elogind iwd connman tlp uflinux-acpid uflinux-routes greetd
+enable_service shutdown killprocs mount-ro
 
 # The initramfs is built by hand rather than through update-kernel: the
 # --media option that update-kernel always passes is what produces the
