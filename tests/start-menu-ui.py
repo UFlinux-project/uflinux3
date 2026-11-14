@@ -161,7 +161,11 @@ try:
     command('wtype', '-k', 'Down')
     command('wtype', '-k', 'Return')
     wait(lambda: marker.exists(), 'GIO did not launch the desktop file')
-    assert marker.read_text() == 'argument with spaces\n', 'Exec arguments or %U expansion changed'
+    # The helper truncates the marker before writing every argument, so on a slow
+    # machine the file can exist while it is still half-written. Wait for the
+    # content instead of asserting on whatever the first read happened to see.
+    wait(lambda: marker.read_text() == 'argument with spaces\n',
+         'Exec arguments or %U expansion changed')
     wait(lambda: not menu(), 'Launching an application did not close Start')
     open_menu(); search('UFLinux Fixture')
     wait(lambda: find('UFLinux Fixture Straße'), 'Visible desktop entry disappeared')

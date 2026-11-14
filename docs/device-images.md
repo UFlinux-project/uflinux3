@@ -124,6 +124,16 @@ live ISO's squashfs modloop. Passing the version is also what lets the Alpine
 symlink to the merged-usr `/usr/lib/modules` created in the profile. It is
 verified to be a Zstandard frame.
 
+mkinitfs collects firmware by scanning the `.ko` files it copies into the
+initramfs, so firmware needed by a driver that is **built into** the kernel has
+no `.ko` to declare it and would be left out. `qcs6490` hits exactly that: its
+QUP I2C driver (`i2c-qcom-geni`) is built in, probes while the initramfs is
+still the running system, and asks for `qcom/qcm6490/qupv3fw.elf` before the
+root filesystem is mounted — without it the I2C bus feeding the HDMI bridge
+never appears and HDMI stays black. A board therefore lists such files in
+`initramfs_files` in `config/devices.json`; the profile passes them to mkinitfs
+as `custom_files` and fails the build when a listed file is not installed.
+
 ## Package sources
 
 While an image is built, its rootfs reads packages from the signed repository that

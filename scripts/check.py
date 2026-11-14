@@ -41,6 +41,11 @@ for device_id, device in devices.items():
     assert isinstance(device["img_size_mib"], int) and device["img_size_mib"] > 512, f"{device_id} needs a usable image size"
     assert re.fullmatch(r"tty[A-Z]*[0-9]+", device["serial"]), f"{device_id} needs a serial console device"
     assert isinstance(device["nura"], bool), f"{device_id} must state whether the Nura repository is used"
+    # mkinitfs copies custom_files verbatim from the rootfs root, so the paths are
+    # root-relative and must not be able to escape it.
+    assert all(re.fullmatch(r"(usr/)?(lib|share)/[a-z0-9][a-z0-9._/-]*", path)
+               for path in device.get("initramfs_files", [])), \
+        f"{device_id} lists an initramfs file that is not a root-relative library path"
     assert device["nura_packages"] == [] or device["nura"], f"{device_id} lists Nura packages without enabling the repository"
 nura = device_lock["nura"]
 assert re.fullmatch(r"v[0-9]{2}\.[0-9]{2}|main", nura["branch"]), "Nura must be pinned to a release branch"

@@ -128,6 +128,7 @@ class DeviceRootfsTests(unittest.TestCase):
         self.assertEqual(env["UFLINUX_ROOTFS"], "f2fs")
         self.assertNotIn("UFLINUX_DTB", env)
         self.assertNotIn("UFLINUX_NURA_PACKAGES", env)
+        self.assertNotIn("UFLINUX_INITRAMFS_FILES", env)
         qcom = device_environment("qcs6490", DEVICES["qcs6490"], "aarch64", "0.1.0",
                                   "01234567-89AB-4CDE-8F01-23456789ABCD", "/device-esp")
         self.assertEqual(qcom["UFLINUX_NURA_PACKAGES"],
@@ -138,6 +139,10 @@ class DeviceRootfsTests(unittest.TestCase):
         # that the extlinux-only FDT path stays untouched.
         self.assertEqual(qcom["UFLINUX_DEVICETREE"], DEVICES["qcs6490"]["dtb"])
         self.assertNotIn("UFLINUX_DTB", qcom)
+        # The QUP I2C driver is built into the Nura kernel, so its firmware has
+        # no .ko for mkinitfs to find and must be named for custom_files.
+        self.assertEqual(qcom["UFLINUX_INITRAMFS_FILES"],
+                         " ".join(DEVICES["qcs6490"]["initramfs_files"]))
         k1 = device_environment("spacemit-k1", DEVICES["spacemit-k1"], "riscv64", "0.1.0",
                                 "01234567-89AB-4CDE-8F01-23456789ABCD", "/device-esp")
         self.assertEqual(k1["UFLINUX_DTB"], DEVICES["spacemit-k1"]["dtb"])

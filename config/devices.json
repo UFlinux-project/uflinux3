@@ -7,10 +7,11 @@
     "rootfs": "f2fs",
     "status": "experimental",
     "serial": "ttyMSM0",
-    "cmdline": "quiet",
+    "cmdline": "loglevel=7",
     "img_size_mib": 6144,
     "nura": true,
     "dtb": "qcom/qcs6490-radxa-dragon-q6a.dtb",
+    "initramfs_files": ["lib/firmware/qcom/qcm6490/qupv3fw.elf.zst"],
     "packages": ["linux-firmware-qcom", "mesa-vulkan-freedreno", "alsa-ucm-conf", "systemd-boot", "efibootmgr"],
     "nura_packages": ["linux-postmarketos-qcom-sc7280", "dtbloader"]
   },

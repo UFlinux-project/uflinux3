@@ -148,6 +148,12 @@ def device_environment(name, device, arch, version, root_partuuid, esp):
         # need before the kernel runs, so the ESP carries it as a systemd-boot
         # driver. The board DTB itself comes from the kernel package.
         env["UFLINUX_DTBLOADER"] = "/usr/share/dtbloader/dtbloader.efi"
+    # Firmware a built-in driver needs before the root is mounted has to be
+    # named explicitly: mkinitfs collects firmware from the .ko files it copies
+    # and a built-in driver has none. The profile fails the build if a listed
+    # file is not installed, so a firmware repackaging cannot pass silently.
+    if device.get("initramfs_files"):
+        env["UFLINUX_INITRAMFS_FILES"] = " ".join(device["initramfs_files"])
     if device["boot"] == "extlinux":
         env["UFLINUX_DTB"] = device["dtb"]
     elif device.get("dtb"):
