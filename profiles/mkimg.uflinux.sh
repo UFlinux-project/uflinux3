@@ -128,6 +128,6 @@ create_image_iso() {
 	else
 		# xorriso option variables intentionally expand as multiple arguments.
 		# shellcheck disable=SC2086
-		xorrisofs -quiet -output "$ISO" -full-iso9660-filenames -joliet -rational-rock -sysid LINUX -volid "$(gen_volid)" $_isolinux $_efiboot -follow-links ${iso_opts} "$DESTDIR"
+		xorrisofs -quiet -output "$ISO" -full-iso9660-filenames -joliet -rational-rock -sysid LINUX -volid "$(gen_volid)" $_isolinux $_efiboot -follow-links "$DESTDIR"
 	fi
 }
