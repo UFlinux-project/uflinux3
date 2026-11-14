@@ -80,6 +80,17 @@ class ApkTests(unittest.TestCase):
         with self.assertRaises((ValueError, EOFError)):
             list(builder.gzip_members(gzip.compress(b"payload")[:-6]))
 
+    def test_default_repository_url_uses_custom_domain(self):
+        expected = "https://repo.uflinux.org/apk/" + builder.LOCK["alpine"]["branch"] + "/uflinux"
+        with patch.dict(os.environ, {"GITHUB_REPOSITORY": "UFlinux-project/uflinux3"}):
+            self.assertEqual(builder.repository_url(""), expected)
+        with patch.dict(os.environ, {"GITHUB_REPOSITORY": "someone-else/uflinux3"}):
+            self.assertEqual(builder.repository_url(""),
+                             "https://someone-else.github.io/uflinux3/apk/" + builder.LOCK["alpine"]["branch"] + "/uflinux")
+        with patch.dict(os.environ, {"GITHUB_REPOSITORY": "someone-else/someone-else.github.io"}):
+            self.assertEqual(builder.repository_url(""),
+                             "https://someone-else.github.io/apk/" + builder.LOCK["alpine"]["branch"] + "/uflinux")
+
     def test_repository_input_does_not_accept_shell_or_http(self):
         for value in ["http://example.org/apk", "https://example.org/apk\nother", "https://user@example.org/apk", "https://:token@example.org/apk", "https://example.org/$(id)"]:
             with self.subTest(value=value), self.assertRaises(ValueError):

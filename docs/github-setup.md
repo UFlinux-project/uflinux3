@@ -2,9 +2,12 @@
 
 Repository: https://github.com/UFlinux-project/uflinux3
 
-The build infers this APK URL from `GITHUB_REPOSITORY`:
-`https://uflinux-project.github.io/uflinux3/apk/v3.24/uflinux`.
-An `APK_REPOSITORY_URL` Actions variable can override it.
+The build points images at the custom Pages domain by default:
+`https://repo.uflinux.org/apk/v3.24/uflinux`. Point the `repo` DNS record at
+GitHub Pages and set the same custom domain in Settings → Pages. Forks and
+other repositories fall back to `https://OWNER.github.io/REPO/apk/v3.24/uflinux`
+inferred from `GITHUB_REPOSITORY`, and an `APK_REPOSITORY_URL` Actions variable
+can override either default.
 
 A persistent EC P-256 signing keypair is prepared locally in
 `$HOME/.config/uflinux3-signing/uflinux.ec` and

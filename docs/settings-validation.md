@@ -151,7 +151,7 @@ Clean-build comparisons cover unsigned APK control/data payloads, not byte-ident
 whole ISOs or signing streams.
 
 This development image uses an ephemeral development key and the configured URL
-`https://uflinux-project.github.io/uflinux3/apk/v3.24/uflinux`. It must not be
+`https://repo.uflinux.org/apk/v3.24/uflinux`. It must not be
 used as a persistent-key release or to validate public updates. The repository's
 release workflow uses the configured persistent signing secrets after a version
 tag passes every architecture gate. See [GitHub setup](github-setup.md) and

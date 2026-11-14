@@ -13,9 +13,13 @@ The [startup animation](docs/bootsplash.md) reuses the original UFLinux leaf log
 
 ```sh
 python3 scripts/check.py
-sudo env APK_REPOSITORY_URL=https://OWNER.github.io/REPO/apk/v3.24/uflinux \
+sudo env APK_REPOSITORY_URL=https://repo.uflinux.org/apk/v3.24/uflinux \
   bash scripts/build.sh --arch x86_64 --version 0.1.0 --outdir out
 ```
+
+`APK_REPOSITORY_URL` is optional: builds default to the custom Pages domain
+`https://repo.uflinux.org/apk/v3.24/uflinux` for this repository (forks derive
+a `github.io` URL from `GITHUB_REPOSITORY`).
 
 Run privileged builds on a disposable Linux host. Other architectures require
 QEMU binfmt registration. Local builds use development signing keys unless

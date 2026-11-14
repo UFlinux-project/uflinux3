@@ -21,9 +21,13 @@ stable branch so security revisions can be incorporated. Their resolved package
 versions and hashes are recorded; a pinned minirootfs does not freeze those repos.
 
 ```sh
-export APK_REPOSITORY_URL=https://OWNER.github.io/REPO/apk/v3.24/uflinux
+export APK_REPOSITORY_URL=https://repo.uflinux.org/apk/v3.24/uflinux
 sudo --preserve-env=APK_REPOSITORY_URL bash scripts/build.sh --arch x86_64
 ```
+
+`APK_REPOSITORY_URL` is optional: builds from the distribution repository
+default to `https://repo.uflinux.org/apk/v3.24/uflinux`, and other repositories
+derive `https://OWNER.github.io/REPO/apk/v3.24/uflinux` from `GITHUB_REPOSITORY`.
 
 `--stage` accepts `bootstrap`, `packages`, `sign`, `image`, `device`, `verify`, or `all`.
 With `--device BOARD`, `device` (or `all`) assembles an installed board disk image

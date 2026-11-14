@@ -552,15 +552,21 @@ def signature_names(path):
     return names
 
 
+# The distribution repository is published on GitHub Pages with a custom
+# domain; unless APK_REPOSITORY_URL overrides it (e.g. a fork on github.io),
+# images point here by default.
+DEFAULT_REPOSITORY_HOST = "repo.uflinux.org"
+
+
 def repository_url(value):
     if not value:
         repo = os.environ.get("GITHUB_REPOSITORY", "")
-        if repo:
+        if repo and repo.split("/", 1)[0].lower() != "uflinux-project":
             owner, name = repo.split("/", 1)
             suffix = "" if name.lower() == owner.lower() + ".github.io" else "/" + name
             value = f"https://{owner.lower()}.github.io{suffix}/apk/{LOCK['alpine']['branch']}/uflinux"
         else:
-            raise ValueError("Set APK_REPOSITORY_URL to the final HTTPS APK repository URL")
+            value = f"https://{DEFAULT_REPOSITORY_HOST}/apk/{LOCK['alpine']['branch']}/uflinux"
     parsed = urllib.parse.urlsplit(value)
     if parsed.scheme != "https" or not parsed.netloc or parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment:
         raise ValueError("APK_REPOSITORY_URL must be an HTTPS directory URL")

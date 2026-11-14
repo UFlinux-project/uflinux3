@@ -17,9 +17,12 @@
 
 5. Add two Actions secrets containing the **PEM file contents**, not paths or
    base64: `APK_SIGNING_PRIVATE_KEY` and `APK_SIGNING_PUBLIC_KEY`.
-6. Optionally set repository variable `APK_REPOSITORY_URL` for a custom Pages
-   domain. Otherwise the workflow derives
+6. For the distribution repository, set the custom Pages domain
+   `repo.uflinux.org` (DNS `CNAME` record `repo` → the `github.io` site) in
+   Settings → Pages; builds then use `https://repo.uflinux.org/apk/v3.24/uflinux`
+   by default. Otherwise the workflow derives
    `https://OWNER.github.io/REPO/apk/v3.24/uflinux` (and handles account-site repos).
+   Repository variable `APK_REPOSITORY_URL` overrides both.
 7. Run the workflow manually to inspect development artifacts. Then tag a release:
 
    ```sh

@@ -56,7 +56,7 @@ ever installed.
 ## Building one locally
 
 ```sh
-sudo env APK_REPOSITORY_URL=https://OWNER.github.io/REPO/apk/v3.24/uflinux \
+sudo env APK_REPOSITORY_URL=https://repo.uflinux.org/apk/v3.24/uflinux \
   bash scripts/build.sh --arch aarch64 --version 0.1.0 --device rpi --stage all
 ```
 
