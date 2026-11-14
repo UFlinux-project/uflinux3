@@ -134,6 +134,18 @@ never appears and HDMI stays black. A board therefore lists such files in
 `initramfs_files` in `config/devices.json`; the profile passes them to mkinitfs
 as `custom_files` and fails the build when a listed file is not installed.
 
+The same `custom_files` mechanism also carries the boot files of the splash
+wrapper. The profile builds the initramfs with `-i aports/uflinux/uflinux-initramfs-init`,
+and mkinitfs only *replaces* `/init` with it — it does not copy Alpine's
+`/usr/share/mkinitfs/initramfs-init`, which is what the wrapper execs. On the ISO
+and the installed system that file arrives through the `uflinux-plymouth` feature,
+but a device image deliberately leaves that feature out, so without help the
+generated `/init` execs a path that is not in the archive, init exits, and the
+kernel panics before the display shows anything. The profile therefore always
+appends `usr/share/mkinitfs/initramfs-init` and the two `/usr/libexec/uflinux-*`
+helpers the wrapper calls to `custom_files`, and checks that all three are
+installed before running mkinitfs.
+
 ## Package sources
 
 While an image is built, its rootfs reads packages from the signed repository that
