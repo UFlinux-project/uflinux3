@@ -306,8 +306,8 @@ def device_verify_image(image, device, arch, uuids, layout):
 # apk v2 has no ECDSA signature: apk-tools 3.0.9 knows only the stream names
 # RSA512, RSA256, RSA and DSA, and resolves a trusted key by its filename from a
 # plain public-key PEM (an X.509 certificate is not accepted). UFLinux therefore
-# signs with an EC P-256 key carried in the SHA-256 stream, whose name is fixed
-# by that format limitation rather than by the algorithm actually used.
+# signs with an EC P-256 or P-384 key carried in the SHA-256 stream, whose name
+# is fixed by that format limitation rather than by the algorithm actually used.
 SIGN_STREAM = "RSA256"
 SIGNING_KEY = "uflinux.ec"
 SIGNING_PRIVATE = "/var/lib/uflinux/keys/" + SIGNING_KEY
@@ -696,11 +696,12 @@ class Builder:
             if actual != expected:
                 raise RuntimeError("Release public and private signing keys do not match")
             # apk resolves a trusted key by filename alone, so a key published as
-            # uflinux.ec.pub has to be the algorithm that name advertises.
+            # uflinux.ec.pub has to be the algorithm that name advertises. Both
+            # NIST prime curves are carried unchanged in the SHA-256 stream.
             described = self.chroot("openssl", "pkey", "-in", SIGNING_PRIVATE,
-                                    "-text_pub", "-noout", stdout=subprocess.PIPE)
-            if "ASN1 OID: prime256v1" not in described.stdout.decode():
-                raise RuntimeError("The release signing key is not an EC P-256 key")
+                                    "-text_pub", "-noout", stdout=subprocess.PIPE).stdout.decode()
+            if "ASN1 OID: prime256v1" not in described and "ASN1 OID: secp384r1" not in described:
+                raise RuntimeError("The release signing key is not an EC P-256 or P-384 key")
             public.write_text(expected + "\n")
         elif not private.exists():
             self.chroot("openssl", "genpkey", "-algorithm", "EC",
@@ -727,6 +728,15 @@ class Builder:
                         directory + "abuild", extra_env=env)
         finally:
             self.chroot("sh", "-ec", directory + "abuild -F undeps", extra_env=dependency_env)
+
+    def build_origins(self, selected, env):
+        try:
+            for origin in selected:
+                self.build_origin(origin, env)
+        finally:
+            # abuild writes the shared caches as uid 1000 with mode 640, so the host
+            # runner cannot read them back when Actions saves or copies the cache.
+            self.chroot("sh", "-ec", "chmod -R a+rX /cache/cargo /cache/target")
 
     def package(self):
         self.tools("git", "shadow", "sudo", "alpine-sdk")
@@ -771,8 +781,7 @@ class Builder:
             (self.cache / "downloads" / (settings_digest + ".tar")).write_bytes(settings_source)
         env = {"CARGO_HOME": "/cache/cargo", "CARGO_TARGET_DIR": "/cache/target",
                "CARGO_BUILD_JOBS": os.environ.get("CARGO_BUILD_JOBS", "1")}
-        for package in selected:
-            self.build_origin(package, env)
+        self.build_origins(selected, env)
         from sbom import apk_metadata
         versions = {}
         for origin, version in (("uflinux-regreet", LOCK["uflinux-regreet"]["version"]), ("connman",LOCK["connman"]["version"]), ("gpu-screen-recorder", LOCK["gpu-screen-recorder"]["version"]), ("uflinux-settings", LOCK["settings"]["version"]), ("uflinux", self.args.version)):

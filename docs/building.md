@@ -35,6 +35,9 @@ instead of an ISO; see [device images](device-images.md).
 Stages share `--workdir` (default `.state`) and `--outdir` (default `out`). Download,
 APK, Cargo, and compiler caches use `--cache` (default `.cache/build`). A lockfile
 change requires a fresh work directory, but verified downloads can be reused.
+After each compile the Cargo and compiler caches are made world-readable: abuild
+leaves them owned by uid 1000 with mode 640, and the host user that archives or
+restores a cache directory cannot read those files otherwise.
 
 GitHub compiles five independent origins per architecture: `connman`,
 `gpu-screen-recorder`, `uflinux-regreet`, `uflinux-settings` and `uflinux`. PR/main builds schedule

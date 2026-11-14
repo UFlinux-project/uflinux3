@@ -50,7 +50,7 @@ Never commit it or upload `.state`; that directory contains development keys and
 temporarily contains the release key during signing. Published metadata includes
 only public keys and key paths, not private PEM contents.
 
-UFLinux signs with an **EC P-256** key. apk v2 has no ECDSA signature: apk-tools
+UFLinux signs with an **EC P-256 or P-384** key. apk v2 has no ECDSA signature: apk-tools
 3.0.9 recognises only the stream names `RSA512`, `RSA256`, `RSA` and `DSA`, and
 selects a trusted key by its **filename** from a plain public-key PEM, so an
 X.509 certificate is not accepted as a key. The EC signature is therefore carried

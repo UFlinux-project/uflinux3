@@ -4,7 +4,7 @@
 2. Enable Actions and choose **GitHub Actions** as the Pages source.
 3. Configure the `github-pages` environment to allow deployment from version tags
    such as `v*`; its default branch restrictions may otherwise reject tag builds.
-4. Generate a persistent EC signing key outside this repository:
+4. Generate a persistent EC signing key outside this repository (P-256 or P-384):
 
    ```sh
    install -d -m 700 "$HOME/.config/uflinux"

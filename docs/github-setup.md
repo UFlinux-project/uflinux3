@@ -9,7 +9,7 @@ other repositories fall back to `https://OWNER.github.io/REPO/apk/v3.24/uflinux`
 inferred from `GITHUB_REPOSITORY`, and an `APK_REPOSITORY_URL` Actions variable
 can override either default.
 
-A persistent EC P-256 signing keypair is prepared locally in
+A persistent EC P-256 or P-384 signing keypair is prepared locally in
 `$HOME/.config/uflinux3-signing/uflinux.ec` and
 `$HOME/.config/uflinux3-signing/uflinux.ec.pub`, following the commands in
 [github.md](github.md). apk v2 has no ECDSA signature type, so the key is carried

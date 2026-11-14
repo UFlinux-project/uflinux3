@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import builder
@@ -144,3 +144,21 @@ class EmulatedDependencyTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'compiler failed'):
             instance.build_origin('uflinux-settings', {})
         self.assertTrue(instance.chroot.call_args_list[-1].args[-1].endswith('abuild -F undeps'))
+
+    def test_shared_caches_stay_readable_to_the_host_runner(self):
+        # Actions saves the restored cache as the host user, but abuild leaves the
+        # files owned by uid 1000 with mode 640, which makes that save fail.
+        for failed in (False, True):
+            with self.subTest(failed=failed), patch.object(builder.Builder, 'build_origin') as build:
+                instance = object.__new__(builder.Builder)
+                instance.chroot = Mock()
+                if failed:
+                    build.side_effect = RuntimeError('compiler failed')
+                    with self.assertRaisesRegex(RuntimeError, 'compiler failed'):
+                        instance.build_origins(('uflinux-regreet',), {})
+                else:
+                    instance.build_origins(('uflinux-regreet', 'connman'), {})
+                    self.assertEqual([call.args[0] for call in build.call_args_list],
+                                     ['uflinux-regreet', 'connman'])
+                self.assertEqual(instance.chroot.call_args.args,
+                                 ('sh', '-ec', 'chmod -R a+rX /cache/cargo /cache/target'))
