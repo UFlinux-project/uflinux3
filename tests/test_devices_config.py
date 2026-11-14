@@ -25,6 +25,25 @@ class DevicesConfigTests(unittest.TestCase):
             if device["boot"] == "extlinux":
                 self.assertEqual(device["arches"], ["riscv64"], device_id)
 
+    def test_a_nura_kernel_is_fetched_rather_than_installed(self):
+        # A postmarketos-* flavour is not in any Alpine repository, so its
+        # package has to be part of the set the profile fetches and unpacks.
+        # Flavours are named after the linux-* package, as elsewhere.
+        for device_id, device in devices.items():
+            if device["kernel"].startswith("postmarketos-"):
+                self.assertIn("linux-" + device["kernel"], device["nura_packages"], device_id)
+                self.assertTrue(device["nura"], device_id)
+                self.assertNotIn("linux-" + device["kernel"], device["packages"], device_id)
+
+    def test_boards_needing_a_device_tree_declare_one(self):
+        # extlinux loads the tree by path from extlinux.conf, and the qcs6490
+        # entry names it for systemd-boot, so both need the path in the config.
+        # The Raspberry Pi firmware picks its own tree, so it needs none.
+        for device_id, device in devices.items():
+            if device["boot"] == "extlinux":
+                self.assertTrue(device.get("dtb"), device_id)
+        self.assertEqual(devices["qcs6490"]["dtb"], "qcom/qcs6490-radxa-dragon-q6a.dtb")
+
     def test_serial_console_matches_the_architecture(self):
         for device_id, device in devices.items():
             for arch in device["arches"]:

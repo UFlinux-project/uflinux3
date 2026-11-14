@@ -9,7 +9,9 @@
 # Required environment: UFLINUX_DEVICE UFLINUX_ARCH UFLINUX_BOOT
 # UFLINUX_SERIAL UFLINUX_CMDLINE UFLINUX_ROOT_PARTUUID UFLINUX_PACKAGES
 # UFLINUX_ESP UFLINUX_VERSION UFLINUX_ROOTFS. Optional: UFLINUX_NURA_PACKAGES
-# (with UFLINUX_NURA_REPOSITORY), UFLINUX_DTB, UFLINUX_DTBLOADER.
+# (with UFLINUX_NURA_REPOSITORY), UFLINUX_DTBLOADER, and the device tree the
+# boot loader is told about: UFLINUX_DTB for extlinux, UFLINUX_DEVICETREE for
+# systemd-boot.
 set -eu
 
 device="$UFLINUX_DEVICE"
@@ -53,7 +55,12 @@ apk add --no-progress $UFLINUX_PACKAGES
 # (postmarketos-mkinitfs) which conflicts with the Alpine one that
 # uflinux-initramfs requires, so any solver run that sees both repositories
 # refuses to select packages. apk fetch resolves the file directly from the
-# pinned index and tar lays it down at the package's own paths.
+# pinned index and tar lays it down at the package's own paths. On qcs6490 the
+# kernel itself comes this way, which is why the boot partition below is
+# assembled from whatever ended up in /boot: no update-kernel hook runs for a
+# package apk knows nothing about. Alpine's mkinitfs only ever looks at
+# /lib/modules/$version and its modules.dep, so it builds an initramfs for the
+# Nura kernel like it does for an Alpine one.
 if [ -n "${UFLINUX_NURA_PACKAGES:-}" ]; then
 	# shellcheck disable=SC2086
 	for package in $UFLINUX_NURA_PACKAGES; do
@@ -130,10 +137,19 @@ rm -f "/boot/initramfs-$kflavor"
 	-o "/boot/initramfs-$kflavor" "$kversion"
 
 # The boot partition is staged as a plain directory so that the image
-# assembly step stays independent of the boot scheme.
+# assembly step stays independent of the boot scheme. The kernel image is
+# looked up under the names the kernels in use ship: the Alpine flavours are
+# suffixed with the version or flavour, the Nura one is a flat /boot/vmlinuz.
+# EFI boards take the EFI stub when the kernel ships one, because systemd-boot
+# can only load a PE/COFF executable and a bare arm64 Image is not one.
 mkdir -p "$esp/boot"
-kernel_image="/boot/vmlinuz-$kversion"
+kernel_image=""
+if [ "$boot" = efi ] && [ -f /boot/linux.efi ]; then
+	kernel_image=/boot/linux.efi
+fi
+[ -n "$kernel_image" ] || kernel_image="/boot/vmlinuz-$kversion"
 [ -f "$kernel_image" ] || kernel_image="/boot/vmlinuz-$kflavor"
+[ -f "$kernel_image" ] || kernel_image=/boot/vmlinuz
 [ -f "$kernel_image" ] || {
 	echo "device-rootfs: no kernel image for $device" >&2
 	exit 1
@@ -142,12 +158,15 @@ cp -a "$kernel_image" "$esp/boot/vmlinuz"
 cp -a "/boot/initramfs-$kflavor" "$esp/boot/initramfs"
 
 # Board device trees travel with the kernel package. The generic kernel keeps
-# them in vendor subdirectories, the Raspberry Pi kernel ships them next to
-# the kernel image together with the overlays the firmware expects.
-if [ -d /boot/dtbs-lts ]; then
-	mkdir -p "$esp/dtbs"
-	cp -a /boot/dtbs-lts/. "$esp/dtbs/"
-fi
+# them in vendor subdirectories under dtbs-lts, the Nura one under dtbs, and
+# the Raspberry Pi kernel ships them next to the kernel image together with
+# the overlays the firmware expects.
+for dtb_dir in /boot/dtbs-lts /boot/dtbs; do
+	if [ -d "$dtb_dir" ]; then
+		mkdir -p "$esp/dtbs"
+		cp -a "$dtb_dir/." "$esp/dtbs/"
+	fi
+done
 if [ -d /boot/overlays ]; then
 	mkdir -p "$esp/overlays"
 	cp -a /boot/overlays/. "$esp/overlays/"
@@ -187,13 +206,24 @@ efi)
 		printf 'title\tUFLinux %s (%s)\n' "$version" "$device"
 		printf 'linux\t/boot/vmlinuz\n'
 		printf 'initrd\t/boot/initramfs\n'
+		# Qualcomm boards get no usable device tree from their firmware, so
+		# the entry names the one from the kernel package explicitly. Passing
+		# it here rather than relying on the dtbloader driver alone means the
+		# board boots even when no ESP driver is picked up.
+		if [ -n "${UFLINUX_DEVICETREE:-}" ]; then
+			[ -f "$esp/dtbs/$UFLINUX_DEVICETREE" ] || {
+				echo "device-rootfs: $esp/dtbs/$UFLINUX_DEVICETREE is missing" >&2
+				exit 1
+			}
+			printf 'devicetree\t/dtbs/%s\n' "$UFLINUX_DEVICETREE"
+		fi
 		printf 'options\t%s%s %s\n' "$cmdline" "$consoleargs" "$rootargs"
 	} > "$esp/loader/entries/uflinux.conf"
 
-	# QCOM boards have no firmware-provided device tree on some models, so
-	# the Nura dtbloader EFI driver installs one from this partition before
-	# the boot entry runs. The builder points at the file only for boards
-	# that ship the driver, so that the path is not guessed here.
+	# The Nura dtbloader EFI driver applies the DT fixups that Qualcomm
+	# boards need and can supply a tree of its own for models whose kernel
+	# ships none. The builder points at the file only for boards that ship
+	# the driver, so that the path is not guessed here.
 	if [ -n "${UFLINUX_DTBLOADER:-}" ]; then
 		[ -f "$UFLINUX_DTBLOADER" ] || {
 			echo "device-rootfs: dtbloader $UFLINUX_DTBLOADER is missing" >&2

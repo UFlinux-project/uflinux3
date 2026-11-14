@@ -96,9 +96,15 @@ class DeviceRootfsTests(unittest.TestCase):
             self.assertIn(required, packages)
         self.assertNotIn("uflinux-live", packages)
         self.assertEqual(packages.count("efibootmgr"), 1)
-        # dtbloader reaches the image through UFLINUX_NURA_PACKAGES (fetched and
-        # unpacked by the profile), never through the installed package set.
-        self.assertNotIn("dtbloader", device_packages(DEVICES["qcs6490"], "aarch64"))
+        # dtbloader and the Nura kernel reach the image through
+        # UFLINUX_NURA_PACKAGES (fetched and unpacked by the profile), never
+        # through the installed package set.
+        qcom_packages = device_packages(DEVICES["qcs6490"], "aarch64")
+        self.assertNotIn("dtbloader", qcom_packages)
+        self.assertNotIn("linux-postmarketos-qcom-sc7280", qcom_packages)
+        # ... and no Alpine kernel either, so the unpacked Nura modules tree is
+        # the only one the profile's exactly-one-kernel check sees.
+        self.assertNotIn("linux-lts", qcom_packages)
         self.assertNotIn("efibootmgr", device_packages(DEVICES["spacemit-k1"], "riscv64"))
 
     def test_only_f2fs_devices_pull_in_the_f2fs_tools(self):
@@ -124,9 +130,14 @@ class DeviceRootfsTests(unittest.TestCase):
         self.assertNotIn("UFLINUX_NURA_PACKAGES", env)
         qcom = device_environment("qcs6490", DEVICES["qcs6490"], "aarch64", "0.1.0",
                                   "01234567-89AB-4CDE-8F01-23456789ABCD", "/device-esp")
-        self.assertEqual(qcom["UFLINUX_NURA_PACKAGES"], "dtbloader")
+        self.assertEqual(qcom["UFLINUX_NURA_PACKAGES"],
+                         "linux-postmarketos-qcom-sc7280 dtbloader")
         self.assertEqual(qcom["UFLINUX_NURA_REPOSITORY"], device_nura_repository())
         self.assertEqual(qcom["UFLINUX_DTBLOADER"], "/usr/share/dtbloader/dtbloader.efi")
+        # systemd-boot is told about the board tree through its own variable, so
+        # that the extlinux-only FDT path stays untouched.
+        self.assertEqual(qcom["UFLINUX_DEVICETREE"], DEVICES["qcs6490"]["dtb"])
+        self.assertNotIn("UFLINUX_DTB", qcom)
         k1 = device_environment("spacemit-k1", DEVICES["spacemit-k1"], "riscv64", "0.1.0",
                                 "01234567-89AB-4CDE-8F01-23456789ABCD", "/device-esp")
         self.assertEqual(k1["UFLINUX_DTB"], DEVICES["spacemit-k1"]["dtb"])

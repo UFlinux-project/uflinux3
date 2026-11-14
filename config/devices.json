@@ -2,16 +2,17 @@
   "qcs6490": {
     "label": "Arrow Dragon Q6A and similar QCS6490 boards",
     "arches": ["aarch64"],
-    "kernel": "lts",
+    "kernel": "postmarketos-qcom-sc7280",
     "boot": "efi",
     "rootfs": "f2fs",
     "status": "experimental",
     "serial": "ttyMSM0",
-    "cmdline": "quiet console=ttyMSM0,115200n8",
+    "cmdline": "quiet",
     "img_size_mib": 6144,
     "nura": true,
-    "packages": ["linux-lts", "linux-firmware-qcom", "mesa-vulkan-freedreno", "alsa-ucm-conf", "systemd-boot", "efibootmgr"],
-    "nura_packages": ["dtbloader"]
+    "dtb": "qcom/qcs6490-radxa-dragon-q6a.dtb",
+    "packages": ["linux-firmware-qcom", "mesa-vulkan-freedreno", "alsa-ucm-conf", "systemd-boot", "efibootmgr"],
+    "nura_packages": ["linux-postmarketos-qcom-sc7280", "dtbloader"]
   },
   "rpi": {
     "label": "Raspberry Pi 3, 4 and 5",

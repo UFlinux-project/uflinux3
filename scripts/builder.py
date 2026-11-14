@@ -125,7 +125,9 @@ def device_packages(device, arch):
         packages.append("f2fs-tools")
     # Nura packages are not installed: the profile fetches and unpacks them, so
     # they stay out of the solver (Nura's postmarketos-mkinitfs conflicts with
-    # Alpine's mkinitfs, which uflinux-initramfs requires).
+    # Alpine's mkinitfs, which uflinux-initramfs requires). That set includes the
+    # qcs6490 kernel, so the unpacked /lib/modules tree is the only kernel the
+    # device rootfs has and no Alpine kernel package is pulled in for it.
     if arch in ("x86_64", "aarch64") and "efibootmgr" not in packages:
         packages.append("efibootmgr")
     return sorted(set(packages))
@@ -142,11 +144,14 @@ def device_environment(name, device, arch, version, root_partuuid, esp):
     if device["nura"]:
         env["UFLINUX_NURA_PACKAGES"] = " ".join(device["nura_packages"])
         env["UFLINUX_NURA_REPOSITORY"] = device_nura_repository()
-        # The Nura dtbloader EFI driver installs a board DTB that the Alpine kernel
-        # does not ship (the Dragon Q6A among them), so the ESP has to carry the tree.
+        # The Nura dtbloader EFI driver applies DT fixups that Qualcomm boards
+        # need before the kernel runs, so the ESP carries it as a systemd-boot
+        # driver. The board DTB itself comes from the kernel package.
         env["UFLINUX_DTBLOADER"] = "/usr/share/dtbloader/dtbloader.efi"
     if device["boot"] == "extlinux":
         env["UFLINUX_DTB"] = device["dtb"]
+    elif device.get("dtb"):
+        env["UFLINUX_DEVICETREE"] = device["dtb"]
     return env
 
 

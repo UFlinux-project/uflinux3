@@ -23,11 +23,17 @@ for device_id, device in devices.items():
     assert re.fullmatch(r"[a-z0-9][a-z0-9-]*", device_id), f"Device id must be a lowercase slug: {device_id}"
     assert device["label"], f"{device_id} needs a label"
     assert device["arches"] and set(device["arches"]) <= set(arches), f"{device_id} lists an unknown architecture"
-    assert device["kernel"] in {"lts", "rpi", "virt"}, f"{device_id} must use a known kernel flavour"
+    # Alpine flavours are installed; a "postmarketos-*" flavour comes from the
+    # pinned Nura suite and is fetched and unpacked by the device profile.
+    assert device["kernel"] in {"lts", "rpi", "virt"} or device["kernel"].startswith("postmarketos-"), \
+        f"{device_id} must use a known kernel flavour"
     assert device["boot"] in {"efi", "rpi", "extlinux"}, f"{device_id} must use a known boot mode"
     if device["boot"] == "extlinux":
         assert re.fullmatch(r"[a-z0-9][a-z0-9._/-]*\.dtb", device.get("dtb", "")), \
             f"{device_id} boots with extlinux and needs the dtb path it loads"
+    if device.get("dtb"):
+        assert re.fullmatch(r"[a-z0-9][a-z0-9._/-]*\.dtb", device["dtb"]), \
+            f"{device_id} needs a device tree path relative to the boot partition's dtbs directory"
     assert device["status"] in {"supported", "experimental"}, f"{device_id} must declare a release status"
     assert device["rootfs"] in {"f2fs", "xfs"}, f"{device_id} must use a root filesystem the device stage can build"
     assert device["packages"] and all(re.fullmatch(r"[a-z0-9][a-z0-9+.-]*", p) for p in device["packages"]), \
