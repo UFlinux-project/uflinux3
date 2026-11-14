@@ -272,9 +272,16 @@ def device_verify_image(image, device, arch, uuids, layout):
         magic = handle.read(4)
     if magic != b"\x28\xb5\x2f\xfd":
         raise ValueError(f"{image}: the initramfs is not a Zstandard frame")
-    bootloader = {"efi": "EFI/boot/boot" + EFI_SUFFIX[arch] + ".efi",
-                  "rpi": "cmdline.txt",
-                  "extlinux": "extlinux/extlinux.conf"}[device["boot"]]
+    # The dict literal form would look up EFI_SUFFIX even for boards that do
+    # not boot through EFI, and riscv64 has no EFI binary name at all.
+    if device["boot"] == "efi":
+        bootloader = "EFI/boot/boot" + EFI_SUFFIX[arch] + ".efi"
+    elif device["boot"] == "rpi":
+        bootloader = "cmdline.txt"
+    elif device["boot"] == "extlinux":
+        bootloader = "extlinux/extlinux.conf"
+    else:
+        raise ValueError(f"{image}: unsupported boot mode {device['boot']}")
     if not (stage / bootloader).is_file():
         raise ValueError(f"{image}: the ESP has no {bootloader}")
     remove_tree(stage)

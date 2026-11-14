@@ -138,7 +138,7 @@ class DeviceRootfsTests(unittest.TestCase):
 
 class DeviceImageCheckTests(unittest.TestCase):
     def report(self, boot, esp_files, initramfs=b"\x28\xb5\x2f\xfd" + b"initramfs",
-               rootfs="f2fs"):
+               rootfs="f2fs", arch="aarch64"):
         """Run the checker against a synthetic disk whose ESP is faked."""
         uuids = device_uuids("0.1.0:check:" + boot)
         layout = device_partitions(1024)
@@ -168,7 +168,7 @@ class DeviceImageCheckTests(unittest.TestCase):
             builder.device_layout, builder.device_extract = geometry, extract
             try:
                 report = device_verify_image(image, {"boot": boot, "rootfs": rootfs},
-                                             "aarch64", uuids, layout)
+                                             arch, uuids, layout)
             finally:
                 builder.device_layout, builder.device_extract = saved_layout, saved_extract
             self.assertFalse(stage.exists(), "the ESP extraction must be cleaned up")
@@ -183,6 +183,16 @@ class DeviceImageCheckTests(unittest.TestCase):
         self.assertEqual(report["partitions"]["root"]["uuid"],
                          device_uuids("0.1.0:check:efi")["root"])
         self.assertEqual(report["vmlinuz_bytes"], len(b"kernel"))
+
+    def test_extlinux_riscv64_verifies_without_an_efi_binary(self):
+        # riscv64 has no entry in EFI_SUFFIX; the extlinux boot path must not
+        # look it up (the spacemit-k1 job crashed on exactly that).
+        report = self.report("extlinux", {"boot/vmlinuz": b"kernel",
+                                          "boot/initramfs": b"\x28\xb5\x2f\xfd" + b"x",
+                                          "extlinux/extlinux.conf": b"LABEL linux\n"},
+                             arch="riscv64")
+        self.assertEqual(report["boot"], "extlinux")
+        self.assertEqual(report["arch"], "riscv64")
 
     def test_a_gzip_initramfs_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "Zstandard"):
