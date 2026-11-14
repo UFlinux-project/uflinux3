@@ -67,6 +67,16 @@ if [ -n "${UFLINUX_NURA_PACKAGES:-}" ]; then
 		apk fetch --quiet --stdout --repository "$UFLINUX_NURA_REPOSITORY" "$package" |
 			tar -C / -xz
 	done
+
+	# postmarketOS is a merged-usr distro and ships its modules under
+	# /usr/lib/modules, while Alpine keeps /lib as its own directory, so the
+	# unpack above lands the modules where nothing looks for them. Linking
+	# the two gives mkinitfs, depmod and, on the board, modprobe the
+	# /lib/modules/$version they all assume. Only needed while the kernel
+	# comes from Nura; an Alpine kernel installs into /lib/modules itself.
+	if [ -d /usr/lib/modules ] && [ ! -e /lib/modules ]; then
+		ln -s /usr/lib/modules /lib/modules
+	fi
 fi
 
 # mkinitfs owns /etc/mkinitfs/mkinitfs.conf and ships no protect entry for it,

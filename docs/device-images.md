@@ -47,8 +47,11 @@ with the Alpine one the image needs, so apk must never solve across both
 repositories at once (see "Package sources"). Because the kernel is unpacked, no
 `update-kernel` hook runs, so the profile assembles the boot files itself and
 generates the initramfs with Alpine's `mkinitfs` against the unpacked
-`/lib/modules` tree. Bootloaders and drivers other than `dtbloader` always come
-from Alpine, and no Nura `device-*` package is ever installed.
+`/lib/modules` tree — postmarketOS is a merged-usr distro and unpacks its modules
+under `/usr/lib/modules`, so the profile links `/lib/modules` there, since
+`mkinitfs`, `depmod` and `modprobe` all look under `/lib`. Bootloaders and drivers
+other than `dtbloader` always come from Alpine, and no Nura `device-*` package is
+ever installed.
 
 ## Building one locally
 
@@ -117,8 +120,9 @@ set (`base <rootfs> phy mmc usb scsi nvme ata virtio kms`, where `<rootfs>` is
 `update-kernel`, because that helper always passes `--media` and would build the
 live ISO's squashfs modloop. Passing the version is also what lets the Alpine
 `mkinitfs` build an initramfs for the unpacked Nura kernel: it only reads
-`/lib/modules/<version>` and its `modules.dep`. It is verified to be a Zstandard
-frame.
+`/lib/modules/<version>` and its `modules.dep`, which for that kernel is the
+symlink to the merged-usr `/usr/lib/modules` created in the profile. It is
+verified to be a Zstandard frame.
 
 ## Package sources
 
