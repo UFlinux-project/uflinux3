@@ -24,11 +24,6 @@
     "qemu_user": "ppc64le",
     "machine": "pseries"
   },
-  "s390x": {
-    "runner": "ubuntu-26.04",
-    "qemu_user": "s390x",
-    "machine": "s390-ccw-virtio"
-  },
   "riscv64": {
     "runner": "ubuntu-26.04",
     "qemu_user": "riscv64",

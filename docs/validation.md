@@ -4,7 +4,7 @@ This is the historical pre-Settings development ISO. Current ConnMan+iwd/GTK4
 work and its separate artifacts are recorded in [Settings validation](settings-validation.md).
 
 The initial development build was checked on 8 November 2026. These results
-describe **x86_64 only**. The other seven architectures have a configured CI
+describe **x86_64 only**. The other five architectures have a configured CI
 pipeline and dependency availability checks, but have not been compiled or
 boot-tested locally. GitHub publication and a real public repository upgrade
 have not been exercised. A full successful matrix is required before release.

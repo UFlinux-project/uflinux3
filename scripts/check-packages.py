@@ -64,7 +64,7 @@ def alpine_index(arch):
 
 def check(arch):
     found, versions = alpine_index(arch)
-    boots = {"grub-ieee1275"} if arch == "ppc64le" else {"s390-tools"} if arch == "s390x" else {"systemd-boot"}
+    boots = {"grub-ieee1275"} if arch == "ppc64le" else {"systemd-boot"}
     if arch in {"x86", "x86_64", "aarch64", "armv7", "riscv64"}:
         boots.add("efibootmgr")
     if arch in {"x86", "x86_64"}:

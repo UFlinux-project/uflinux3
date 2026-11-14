@@ -32,7 +32,6 @@ pub fn storage_layout(arch: &str, mode: &str) -> Option<(&'static [&'static str]
         ("x86" | "x86_64", "bios") =>
             Some((&["size=1G,type=L,attrs=LegacyBIOSBootable", "type=L"], 1, 2)),
         ("ppc64le", "native") => Some((&["size=8M,type=9e1a2d38-c612-4316-aa26-8b49521e5a8b", "size=1G,type=L", "type=L"], 2, 3)),
-        ("s390x", "native") => Some((&["size=1G,type=L", "type=L"], 1, 2)),
         _ => None,
     }
 }

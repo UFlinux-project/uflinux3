@@ -19,7 +19,7 @@ class MatrixTests(unittest.TestCase):
             self.assertEqual(modes,{'x86_64':{'bios','uefi'}})
     def test_manual_runs_cover_all_architectures_without_release_secrets(self):
         result=ci.configuration('workflow_dispatch','refs/heads/main',full=True)
-        self.assertEqual(len(result['matrix']['include']),7)
+        self.assertEqual(len(result['matrix']['include']),6)
         self.assertEqual(result['release'],'false')
     def test_default_manual_run_smokes_x86_64_only(self):
         result=ci.configuration('workflow_dispatch','refs/heads/main')
@@ -27,7 +27,7 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual(result['release'],'false')
     def test_only_valid_pushed_version_tags_enable_release(self):
         result=ci.configuration('push','refs/tags/v0.1.0')
-        self.assertEqual(len(result['matrix']['include']),7)
+        self.assertEqual(len(result['matrix']['include']),6)
         self.assertEqual(result['release'],'true')
         for tag in ('vlatest','v0.1.0;id','v0.1.0\nmalformed'):
             with self.assertRaises(ValueError):ci.configuration('push','refs/tags/'+tag)
@@ -66,7 +66,7 @@ class MatrixTests(unittest.TestCase):
 
     def test_each_architecture_has_four_independent_jobs(self):
         for event,ref,full,count in [('pull_request','refs/heads/main',False,5),
-                                     ('workflow_dispatch','refs/heads/main',True,35)]:
+                                     ('workflow_dispatch','refs/heads/main',True,30)]:
             result=ci.configuration(event,ref,full)
             jobs=result['packages']['include']
             self.assertEqual(len(jobs),count)

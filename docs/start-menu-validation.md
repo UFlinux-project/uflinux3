@@ -10,8 +10,8 @@ from previous development images. The earlier tested Plymouth image remains in
 - 48 Python repository tests, ShellCheck, actionlint, Rust formatting, shell/XML
   syntax and source-checksum checks pass.
 - Frozen package builds pass 24 Rust tests, including three new catalog tests.
-- Required Alpine package availability passes for all seven architectures.
-  The pipeline still has seven architectures, four independent origins per
+- Required Alpine package availability passes for all six architectures.
+  The pipeline still has six architectures, four independent origins per
   architecture and 22 custom APK outputs. Other architectures have not run locally.
 - A fresh root installs the signed packages, verifies signatures, rejects a
   damaged package, preserves modified defaults, checks ELF/library resolution,
@@ -102,4 +102,4 @@ The previous tested image remains unchanged at
 `.cache/splash-final-out/images/x86_64/uflinux-0.1.0-x86_64.iso`, SHA-256
 `c7bee52757977e453d1610a283d7d07b7d84eaad517fcb269c5ac528aa485b4c`.
 No GitHub jobs or other-architecture builds were run for this change. The other
-six architectures remain unverified, and nothing has been published.
+five architectures remain unverified, and nothing has been published.

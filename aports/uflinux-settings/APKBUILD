@@ -1,10 +1,10 @@
 # Maintainer: UFLinux contributors <noreply@example.invalid>
 pkgname=uflinux-settings
 pkgver=0.1.0
-pkgrel=0
+pkgrel=1
 pkgdesc="UFLinux Settings, quick controls and resident Start menu"
 url="${UFLINUX_PROJECT_URL:-https://github.com}"
-arch="x86 x86_64 aarch64 armv7 ppc64le s390x riscv64"
+arch="x86 x86_64 aarch64 armv7 ppc64le riscv64"
 license="GPL-3.0-only"
 depends="uflinux-desktop=$pkgver-r$pkgrel $pkgname-daemon=$pkgver-r$pkgrel $pkgname-system=$pkgver-r$pkgrel"
 makedepends="cargo cargo-auditable gtk4.0-dev gtk4-layer-shell-dev pulseaudio-dev polkit-dev
@@ -18,7 +18,7 @@ source="$pkgname-$pkgver.tar"
 export CARGO_INCREMENTAL=0
 export CARGO_PROFILE_TEST_DEBUG=0
 # abuild exports release-profile overrides; enforce the distro's chosen settings.
-export CARGO_PROFILE_RELEASE_OPT_LEVEL=3
+export CARGO_PROFILE_RELEASE_OPT_LEVEL=s
 export CARGO_PROFILE_RELEASE_LTO=fat
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=8
 export CARGO_PROFILE_RELEASE_PANIC=abort

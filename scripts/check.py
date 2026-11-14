@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 arches = json.loads((ROOT / "config/architectures.json").read_text())
 lock = json.loads((ROOT / "config/sources.lock.json").read_text())
 assert set(arches) == set(lock["rootfs"])
-assert set(arches) == {"x86", "x86_64", "aarch64", "armv7", "ppc64le", "s390x", "riscv64"}
+assert set(arches) == {"x86", "x86_64", "aarch64", "armv7", "ppc64le", "riscv64"}
 devices = json.loads((ROOT / "config/devices.json").read_text())
 device_lock = json.loads((ROOT / "config/devices.lock.json").read_text())
 assert device_lock["schema"] == 1
@@ -97,8 +97,14 @@ recipe=(ROOT / "aports/uflinux-settings/APKBUILD").read_text()
 for setting in ("codegen-units", "panic"):
     variable="CARGO_PROFILE_RELEASE_"+setting.upper().replace("-","_")
     assert f"export {variable}={profile[setting]}" in recipe, f"abuild must enforce {variable}"
-for setting in ("OPT_LEVEL", "LTO"):
-    assert re.search(rf"^export CARGO_PROFILE_RELEASE_{setting}=\S+", recipe, re.M), f"abuild must set {setting}"
+assert "export CARGO_PROFILE_RELEASE_OPT_LEVEL=s" in recipe, "Settings must build with -Os"
+assert re.search(r"^export CARGO_PROFILE_RELEASE_LTO=\S+", recipe, re.M), "abuild must set LTO"
+for origin in ("uflinux-regreet",):
+    assert "export CARGO_PROFILE_RELEASE_OPT_LEVEL=s" in (ROOT / "aports" / origin / "APKBUILD").read_text(), \
+        f"{origin} must build with -Os"
+for origin in ("connman", "gpu-screen-recorder"):
+    assert re.search(r'^\texport (C|CXX)FLAGS="\$(C|CXX)FLAGS .*-Os', (ROOT / "aports" / origin / "APKBUILD").read_text(), re.M), \
+        f"{origin} must append -Os to abuild's flags"
 assert "debug" not in profile, "Settings release profile must use Cargo's default debug level"
 for origin in ("uflinux-settings",):
     recipe = (ROOT / "aports" / origin / "APKBUILD").read_text()

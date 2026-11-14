@@ -8,7 +8,6 @@ printf '%s\n' "$hostname" > "$tmp/etc/hostname"
 case "${ARCH:?}" in
 	armv7|aarch64) serial=ttyAMA0 ;;
 	ppc64le) serial=hvc0 ;;
-	s390x) serial=ttysclp0 ;;
 	*) serial=ttyS0 ;;
 esac
 cat > "$tmp/etc/inittab" <<EOF

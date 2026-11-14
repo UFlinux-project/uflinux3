@@ -838,9 +838,7 @@ class Builder:
 
     def image(self):
         self.tools("xorriso", "mtools", "squashfs-tools", "zstd", "util-linux", "syslinux" if self.args.arch in {"x86", "x86_64"} else "util-linux")
-        if self.args.arch == "s390x":
-            self.chroot("apk", "add", "s390-tools", "file")
-        elif self.args.arch == "ppc64le":
+        if self.args.arch == "ppc64le":
             self.chroot("apk", "add", "grub", "grub-ieee1275")
         for name, digest in LOCK["image"]["patches"].items():
             if hashlib.sha512((PROJECT / "patches" / name).read_bytes()).hexdigest() != digest:
@@ -1157,7 +1155,7 @@ class Builder:
         byte_order = "<" if header[5] == 1 else ">"
         elf_type, machine = struct.unpack_from(byte_order + "HH", header, 16)
         expected = {"x86": 3, "x86_64": 62, "armv7": 40, "aarch64": 183,
-                    "ppc64le": 21, "s390x": 22, "riscv64": 243}[self.args.arch]
+                    "ppc64le": 21, "riscv64": 243}[self.args.arch]
         if machine != expected or elf_type != 3:
             raise RuntimeError("Desktop must be a position-independent executable for the target architecture")
         settings_binaries = {}

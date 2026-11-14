@@ -92,8 +92,6 @@ def storage_plan(arch, mode):
         return ['size=1G,type=L,attrs=LegacyBIOSBootable', 'type=L'], 1, 2
     if mode == 'native' and arch == 'ppc64le':
         return ['size=8M,type=9e1a2d38-c612-4316-aa26-8b49521e5a8b', 'size=1G,type=L', 'type=L'], 2, 3
-    if mode == 'native' and arch == 's390x':
-        return ['size=1G,type=L', 'type=L'], 1, 2
     raise cli.InstallError('Unsupported architecture or firmware mode')
 
 

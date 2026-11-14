@@ -1,10 +1,10 @@
 # Maintainer: UFLinux contributors <noreply@example.invalid>
 pkgname=uflinux-regreet
 pkgver=0.2.0
-pkgrel=0
+pkgrel=1
 pkgdesc="ReGreet login greeter configured for UFLinux"
 url="https://github.com/rharish101/ReGreet"
-arch="x86 x86_64 aarch64 armv7 ppc64le s390x riscv64"
+arch="x86 x86_64 aarch64 armv7 ppc64le riscv64"
 license="GPL-3.0-or-later"
 depends="greetd"
 makedepends="cargo cargo-auditable gtk4.0-dev"
@@ -12,6 +12,8 @@ source="$pkgname-$pkgver.tar.gz::https://codeload.github.com/rharish101/ReGreet/
 	fixed-session.patch"
 builddir="$srcdir/ReGreet-$pkgver"
 options="net"
+# Size-optimized release build; without this Cargo's release profile uses -O3.
+export CARGO_PROFILE_RELEASE_OPT_LEVEL=s
 
 prepare() {
 	default_prepare

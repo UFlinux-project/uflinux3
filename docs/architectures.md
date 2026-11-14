@@ -7,11 +7,10 @@
 | aarch64 | native ARM64 runner | none |
 | armv7 | ARM64 runner, qemu-arm | none |
 | ppc64le | qemu-ppc64le | none |
-| s390x | qemu-s390x | none |
 | riscv64 | qemu-riscv64 | none |
 
 Only the x86_64 ISO is boot-tested, on every commit, pull request, tag and
-full-matrix run. The other six architectures are built and their packages and
+full-matrix run. The other five architectures are built and their packages and
 ISOs are published, but no VM is started for them.
 
 ## Device image targets

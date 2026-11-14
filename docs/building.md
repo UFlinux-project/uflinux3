@@ -151,7 +151,7 @@ and gzip without timestamps. GitHub uses the source commit time. These controls
 help reproducibility; byte-for-byte reproducibility is not claimed until two
 clean builds with identical resolved packages have been compared.
 
-Ironbar and Settings use `opt-level=3`, fat LTO, eight codegen units,
+Ironbar and Settings use `opt-level=s`, fat LTO, eight codegen units,
 abort-on-panic, and dynamically linked Alpine libraries. Their release builds use
 Cargo's default Rust debug-info level; Alpine still splits any available debug
 symbols into the debug APKs. There is no `target-cpu=native` or host instruction-set tuning.
@@ -181,7 +181,7 @@ Settings requires Alpine's GTK4/layer-shell, PulseAudio client, polkit-agent,
 elogind, Vulkan/EGL and GLib development packages listed in its APKBUILD.
 
 The Power panel uses Alpine's TLP 1.10 series, with the three-profile interface
-introduced in 1.9. Power packages are checked for all seven architectures. Tests
+introduced in 1.9. Power packages are checked for all six architectures. Tests
 run the actual BusyBox ACPI parser in a private chroot with synthetic input events;
 the installed x86_64 VM verifies real TLP transitions, shared Ironbar status and
 physical-key Do nothing/Shut down behavior. TLP is never executed on the build

@@ -108,7 +108,7 @@ this tested revision so an unrelated official package cannot silently drop the f
 The x86_64 BIOS VM job exercises simulated Wi-Fi and ConnMan SNTP before disk
 installation. Both x86_64 firmware modes reboot the installed desktop with
 512 MiB and no swap. Publication requires these results for the exact ISO hash,
-in addition to the seven package/desktop build reports. Only the x86_64 ISO is
+in addition to the six package/desktop build reports. Only the x86_64 ISO is
 boot-tested; the other architectures are published without a boot report.
 Review PSS, idle CPU, mapped-frame latency, binary/ISO size and physical hardware
 coverage separately. The original development ISO's historical record is not a

@@ -56,7 +56,7 @@ Compression evidence is in `.cache/zstd-out/checks/x86_64/compression.json`;
 VM reports and consoles are in `.cache/zstd-vm/x86_64/{native,uefi}/`.
 Other architecture images have not been rebuilt or boot-tested locally.
 
-All seven supported architectures have both required Zstandard capabilities in
+All six supported architectures have both required Zstandard capabilities in
 Alpine's `linux-lts-6.18.62-r0` kernel APKs. The architecture set was narrowed after
 these x86_64 image tests; their recorded ISO hashes and inventories remain
 historical evidence, and the next build records the revised source lock.

@@ -2,10 +2,10 @@
 # Upstream 6.1.7 plus the UFLinux patch series (V4L2 mem2mem encoder, WebP screenshots).
 pkgname=gpu-screen-recorder
 pkgver=6.1.7
-pkgrel=0
+pkgrel=1
 pkgdesc="GPU screen capture backend for uflinux-screencapture"
 url="https://git.dec05eba.com/gpu-screen-recorder/about/"
-arch="x86 x86_64 aarch64 armv7 ppc64le s390x riscv64"
+arch="x86 x86_64 aarch64 armv7 ppc64le riscv64"
 license="GPL-3.0-only"
 depends="dbus-libs ffmpeg-libs libcap2 libdrm libpulse libturbojpeg libwebp
 	libx11 libxcomposite libxdamage libxfixes libxrandr mesa-egl mesa-gbm mesa-gl
@@ -37,7 +37,11 @@ prepare() {
 
 build() {
 	# -Db_lto=true matches the patched repo's Alpine CI build (LTO verified on
-	# x86_64 and aarch64 there); abuild-meson already uses --buildtype=release.
+	# x86_64 and aarch64 there). abuild-meson uses --buildtype=plain, so the
+	# optimization level comes from abuild's CFLAGS; the trailing -Os replaces
+	# the default -O2.
+	export CFLAGS="$CFLAGS -Os"
+	export CXXFLAGS="$CXXFLAGS -Os"
 	abuild-meson build \
 		-Db_lto=true \
 		-Dsystemd=false -Dcapabilities=false -Dnvidia_suspend_fix=false \

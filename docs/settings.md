@@ -68,7 +68,7 @@ available for administration.
 
 ## Networking and clocks
 
-The small ConnMan 2.0-r2 package retains Alpine’s musl/D-Bus fixes and adds a
+The small ConnMan 2.0-r3 package retains Alpine’s musl/D-Bus fixes and adds a
 checksum-pinned iwd credential-delegation patch. ConnMan 2.0 otherwise rejects
 iwd-managed enterprise connections when no duplicate ConnMan EAP configuration
 exists. Only the iwd driver enables this internal flag; iwd still enforces its

@@ -46,10 +46,6 @@ profile_uflinux() {
 			kernel_cmdline="$kernel_cmdline console=tty0 console=ttyS0,115200"
 			;;
 		ppc64le) apks="$(printf '%s' "$apks" | sed 's/systemd-boot//g') grub-ieee1275" ;;
-		s390x)
-			apks="$(printf '%s' "$apks" | sed 's/systemd-boot//g') s390-tools"
-			kernel_cmdline="$kernel_cmdline console=ttysclp0"
-			;;
 		aarch64|armv7) kernel_cmdline="$kernel_cmdline console=tty0 console=ttyAMA0,115200" ;;
 		riscv64) kernel_cmdline="$kernel_cmdline console=tty0 console=ttyS0,115200" ;;
 	esac
@@ -130,13 +126,6 @@ create_image_iso() {
 		apk fetch --root "$APKROOT" --quiet --stdout grub-ieee1275 | tar -C "$WORKDIR" -zx usr/lib/grub
 		grub-mkrescue --output "$ISO" "$DESTDIR" -follow-links --directory="$WORKDIR/usr/lib/grub/powerpc-ieee1275" -sysid LINUX -volid "$(gen_volid)"
 	else
-		if [ "$ARCH" = s390x ]; then
-			printf %s "$initfs_cmdline $kernel_cmdline " > "$WORKDIR/parmfile"
-			for _f in $flavors; do
-				mk-s390image -p "$WORKDIR/parmfile" -r "$DESTDIR/boot/initramfs-$_f" "$DESTDIR/boot/vmlinuz-$_f" "$DESTDIR/boot/merged.img" || return 1
-			done
-			iso_opts="$iso_opts -no-emul-boot -eltorito-boot boot/merged.img"
-		fi
 		# xorriso option variables intentionally expand as multiple arguments.
 		# shellcheck disable=SC2086
 		xorrisofs -quiet -output "$ISO" -full-iso9660-filenames -joliet -rational-rock -sysid LINUX -volid "$(gen_volid)" $_isolinux $_efiboot -follow-links ${iso_opts} "$DESTDIR"

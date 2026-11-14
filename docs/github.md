@@ -28,7 +28,7 @@
    ```
 
 Pull requests and main pushes build x86_64; manual runs and version tags use all
-seven architectures.
+six architectures.
 Device disk images are built for version tags and for manual runs where the
 **Build device images** option is enabled. They are supplementary: an experimental
 board target may fail without failing the release, and the images are uploaded to

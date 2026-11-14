@@ -1,7 +1,7 @@
 # Maintainer: UFLinux contributors <noreply@example.invalid>
 pkgname=uflinux
 pkgver=0.1.0
-pkgrel=0
+pkgrel=1
 pkgdesc="Minimal Alpine desktop with labwc"
 url="${UFLINUX_PROJECT_URL:-https://github.com}"
 arch="noarch"
@@ -160,8 +160,8 @@ desktop() {
 		xdg-desktop-portal xdg-desktop-portal-wlr foot nemo mako swaybg
 		transmission-gtk celluloid gnome-disk-utility file-roller
 		eudev eudev-openrc elogind elogind-openrc dbus dbus-openrc dbus-x11
-		greetd greetd-openrc uflinux-regreet=0.2.0-r0 cage polkit-elogind
-		connman=2.0-r2 connman-openrc=2.0-r2 iwd iwd-openrc busybox-openrc tzdata
+		greetd greetd-openrc uflinux-regreet=0.2.0-r1 cage polkit-elogind
+		connman=2.0-r3 connman-openrc=2.0-r3 iwd iwd-openrc busybox-openrc tzdata
 		pipewire pipewire-pulse wireplumber upower font-ubuntu-nerd font-ubuntu-mono-nerd font-noto font-noto-cjk papirus-icon-theme adwaita-icon-theme
 		mesa-dri-gallium mesa-va-gallium libva-utils doas"
 	# Hardware video encoding for gpu-screen-recorder needs a VA-API driver for
@@ -245,8 +245,8 @@ e7547d393b9489bfaf96ea7f1f580099e8d01487e7a59cc897001032e0f0f424b68d77d21e92ac38
 1e5eedf741904d0ebbab6f34aa3424683a87724d92d3e9dfbd2edc5e99645bd207185890807b6374ca02390cbe8dba64f32b609ac445e8f71a29edfef8939eec  uflinux-compositor
 1d974b858af0c586108515062a832ad31baed68761931396d295b7709b7c70670a99ae58b22a146a72b3323d4199d2f9b531f268a78c7a12213b292ad34a0ae4  uflinux-autostart
 0c37806c49629bb84275ed096c735d37d879483bdf4e1320fdc7ab0a0755bf376544c023227ed1d2321997c27a26128139e1865d6caac291aaf09a145a62c367  uflinux-theme-sync
-34da57a896516e9c19e12954b35a373c3d7847bc31dd98125ee6eb5e01960f0c4cf7f2e67dec800d3d5c75c1306a420a65b707681117b6465ac84bf31d0aa9aa  uflinux-install
-44df7b48d307198bc768a0224ef6f2422ca285ae5edc21c33b074fd1d3527ead4eddd1439602ceb3b54b4d0d9b8c988467771ef333bb37e9f9641681ede907a1  uflinux-install-gui-backend
+b300d0e1ae60ac41403b83be38d1a774eeaac80bde61e95f9ed218448485464e2279c9631ad1feb46dee608b3c553e36ff84a5a2f7e01f495cb0821694f85e09  uflinux-install
+35c122aeebee0d0b1dc0a8156d63745fce0bf66d293900a7d478e8361fe959d686b012bd7caaa0b8ac22ff254e537f009585c0983f504d9c4ed37ce952e323ca  uflinux-install-gui-backend
 153f498b540da75c6398e7eb271d360ee2ced012d2cd5c77d11d8833c48bcd12fc51f2e46169f7351b38a8e8e7faa24c790776fe5d6537d78b6dafa497eec49f  uflinux-live.initd
 8607fa0d7de0314915f3150b55192b21e503026cec08a494e626fdfd3d8424026705df558366663df41d94582bbe7f54a21434756fa1ed4a9a4d2eb8c9f5dfa4  uflinux-device.initd
 e6df4f4a610b45f3426de64299f2fcc0e53691cf4f62a571cc9a3a0c168628042f31ea328e202bcec79d0aa62204e370265b38ea131772c8c548a5b1a19a9d11  uflinux.desktop

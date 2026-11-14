@@ -46,9 +46,10 @@ class InstallerGuiTests(unittest.TestCase):
                 self.assertEqual((boot, root), (1, 2))
         self.assertIn('LegacyBIOSBootable', backend.storage_plan('x86_64', 'bios')[0][0])
         self.assertEqual(backend.storage_plan('ppc64le', 'native')[1:], (2, 3))
-        self.assertEqual(backend.storage_plan('s390x', 'native')[1:], (1, 2))
         with self.assertRaises(backend.cli.InstallError):
             backend.storage_plan('armv7', 'native')
+        with self.assertRaises(backend.cli.InstallError):
+            backend.storage_plan('mips64', 'native')
 
     def test_mount_on_child_excludes_the_whole_disk(self):
         self.disk['maj:min'] = '8:0'

@@ -154,7 +154,7 @@ def preflight(args):
     esp = None
     efi_target = None
     if mode == "uefi":
-        if arch in {"ppc64le", "s390x"}:
+        if arch == "ppc64le":
             raise InstallError(f"UEFI is not supported for {arch}")
         esp = boot
         if output("blkid", "--probe", "-s", "VERSION", "-o", "value", esp["source"]) != "FAT32":
@@ -165,8 +165,6 @@ def preflight(args):
         loader = "grub" if arch == "ppc64le" else "syslinux"
         if not args.boot_disk:
             raise InstallError("--boot-disk is required for BIOS and PowerPC installations")
-    elif arch == "s390x":
-        loader = "zipl"
     else:
         raise InstallError(f"Boot the {arch} ISO through UEFI; board-specific U-Boot installation is outside this installer")
     mbr_code = None
@@ -210,7 +208,7 @@ def make_overlay(directory, args, repositories=None, uefi=False):
     write(directory, "etc/apk/world", "alpine-base\nuflinux\nxfsprogs\nlinux-firmware\n" + ("firefox\nublock-origin\n" if args.arch in {"x86", "x86_64", "aarch64", "armv7", "ppc64le", "riscv64"} else "") + ("systemd-boot\n" if uefi else "") + ("musl-locales\nmusl-locales-lang\nglib-lang\ngtk4.0-lang\nlabwc-lang\n" if getattr(args, "gui_locale", False) else ""))
     write(directory, "etc/shadow", "root:!:19000:0:99999:7:::\n", 0o600)
     write(directory, "etc/network/interfaces", "auto lo\niface lo inet loopback\n")
-    serial = {"aarch64": "ttyAMA0", "armv7": "ttyAMA0", "ppc64le": "hvc0", "s390x": "ttysclp0"}.get(args.arch, "ttyS0")
+    serial = {"aarch64": "ttyAMA0", "armv7": "ttyAMA0", "ppc64le": "hvc0"}.get(args.arch, "ttyS0")
     write(directory, "etc/inittab", "::sysinit:/sbin/openrc sysinit\n::sysinit:/sbin/openrc boot\n"
           "::wait:/sbin/openrc default\ntty2::respawn:/sbin/getty 38400 tty2\n"
           f"{serial}::respawn:/sbin/getty -L 115200 {serial} vt100\n"
@@ -301,8 +299,6 @@ def install(args, plan, password):
             command.extend(["-b", plan["boot_disk"]])
         command.append(str(target))
         env = dict(os.environ, ROOTFS="xfs", BOOTFS="ext4")
-        if plan["arch"] == "s390x":
-            env["KERNELOPTS"] = "console=ttysclp0"
         if plan["mode"] == "uefi":
             env["USE_EFI"] = "1"
         with temporary_repositories(source_repositories, install_repositories):

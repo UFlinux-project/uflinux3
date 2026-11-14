@@ -37,12 +37,11 @@ Required layout:
 
 - `/mnt`: a writable, empty XFS filesystem, normally at least 8 GiB for use.
 - UEFI: a FAT32 EFI system partition mounted at `/mnt/boot`; 1 GiB is a practical default.
-- BIOS, PowerPC, and s390x: a separate ext4 filesystem at `/mnt/boot`; 1 GiB is a practical default.
+- BIOS and PowerPC: a separate ext4 filesystem at `/mnt/boot`; 1 GiB is a practical default.
 - BIOS on GPT: set the `LegacyBIOSBootable` attribute on the `/boot` partition.
 - BIOS on MBR: use a primary partition for `/boot` and set its bootable (active) flag.
   It must be the only partition with that flag.
 - PowerPC: an existing PReP boot partition in addition to root and `/boot`.
-- s390x: storage and boot configuration suitable for zipl.
 
 The installer accepts only an empty root, apart from `boot` and `lost+found`.
 Existing boot files may be replaced, and BIOS/PReP boot sectors are written on the
@@ -60,7 +59,7 @@ After checking the displayed devices, run the corresponding command without
 `--dry-run`. Type the confirmation containing the root filesystem UUID, then
 choose and repeat a password of at least eight characters. Optional flags:
 `--hostname NAME`, and `--boot-mode uefi|bios|native|auto`. Use `bios` for
-x86 legacy BIOS and `native` for PowerPC or s390x firmware.
+x86 legacy BIOS and `native` for PowerPC firmware.
 
 While installing from media, the installer temporarily selects its package
 repositories and restores the live repository file on success or failure. The

@@ -81,7 +81,7 @@ def main():
                         raise ValueError("The ISO does not contain the current custom package: " + package.name)
                 if names != ALLOWED:
                     raise ValueError("Incomplete or unexpected custom package set for " + arch)
-                modes = ["bios", "uefi"] if arch in {"x86", "x86_64"} else ["native" if arch in {"ppc64le", "s390x"} else "uefi"]
+                modes = ["bios", "uefi"] if arch in {"x86", "x86_64"} else ["native" if arch == "ppc64le" else "uefi"]
                 for mode in modes:
                     result = json.loads((out / "vm" / arch / mode / "verified.json").read_text())
                     iso = out / "images" / arch / f"uflinux-{args.version}-{arch}.iso"
